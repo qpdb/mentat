@@ -18,7 +18,7 @@ failure_derive = "0.1.1"
 uuid = "0.5"
 
 [dependencies.rusqlite]
-version = "0.13"
+version = "0.19"
 features = ["limits"]
 
 [dependencies.edn]

@@ -34,7 +34,7 @@ termion = "1"
 time = "0.1"
 
 [dependencies.rusqlite]
-version = "0.13"
+version = "0.19"
 features = ["limits"]
 
 [dependencies.mentat]

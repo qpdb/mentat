@@ -36,7 +36,7 @@ log = "0.4"
 uuid = { version = "0.5", features = ["v4", "serde"] }
 
 [dependencies.rusqlite]
-version = "0.13"
+version = "0.19"
 # System sqlite might be very old.
 features = ["limits"]
 
