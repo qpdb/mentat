@@ -98,7 +98,7 @@ impl SyncMetadata {
             PartitionsTable::Tolstoy => {
                 let mut stmt: ::rusqlite::Statement = tx.prepare("SELECT part, start, end, idx, allow_excision FROM tolstoy_parts")?;
                 let m: Result<PartitionMap> = stmt.query_and_then(&[], |row| -> Result<(String, Partition)> {
-                    Ok((row.get_checked(0)?, Partition::new(row.get_checked(1)?, row.get_checked(2)?, row.get_checked(3)?, row.get_checked(4)?)))
+                    Ok((row.get(0)?, Partition::new(row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)))
                 })?.collect();
                 m
             }
@@ -108,7 +108,7 @@ impl SyncMetadata {
     pub fn root_and_head_tx(tx: &rusqlite::Transaction) -> Result<(Entid, Entid)> {
         let mut stmt: ::rusqlite::Statement = tx.prepare("SELECT tx FROM timelined_transactions WHERE timeline = 0 GROUP BY tx ORDER BY tx")?;
         let txs: Vec<_> = stmt.query_and_then(&[], |row| -> Result<Entid> {
-            Ok(row.get_checked(0)?)
+            Ok(row.get(0)?)
         })?.collect();
 
         let mut txs = txs.into_iter();
@@ -131,7 +131,7 @@ impl SyncMetadata {
         };
         let mut stmt: ::rusqlite::Statement = db_tx.prepare(&format!("SELECT tx FROM timelined_transactions {} GROUP BY tx ORDER BY tx", after_clause))?;
         let txs: Vec<_> = stmt.query_and_then(&[], |row| -> Result<Entid> {
-            Ok(row.get_checked(0)?)
+            Ok(row.get(0)?)
         })?.collect();
 
         let mut all = Vec::with_capacity(txs.len());
@@ -144,14 +144,14 @@ impl SyncMetadata {
 
     pub fn is_tx_empty(db_tx: &rusqlite::Transaction, tx_id: Entid) -> Result<bool> {
         let count = db_tx.query_row("SELECT count(rowid) FROM timelined_transactions WHERE timeline = 0 AND tx = ? AND e != ?", &[&tx_id, &tx_id], |row| -> Result<i64> {
-            Ok(row.get_checked(0)?)
+            Ok(row.get(0)?)
         })?;
         Ok(count? == 0)
     }
 
     pub fn has_entity_assertions_in_tx(db_tx: &rusqlite::Transaction, e: Entid, tx_id: Entid) -> Result<bool> {
         let count = db_tx.query_row("SELECT count(rowid) FROM timelined_transactions WHERE timeline = 0 AND tx = ? AND e = ?", &[&tx_id, &e], |row| -> Result<i64> {
-            Ok(row.get_checked(0)?)
+            Ok(row.get(0)?)
         })?;
         Ok(count? > 0)
     }

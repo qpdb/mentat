@@ -205,15 +205,15 @@ pub fn datoms_after<S: Borrow<Schema>>(conn: &rusqlite::Connection, schema: &S, 
     let mut stmt: rusqlite::Statement = conn.prepare("SELECT e, a, v, value_type_tag, tx FROM datoms WHERE tx > ? ORDER BY e ASC, a ASC, value_type_tag ASC, v ASC, tx ASC")?;
 
     let r: Result<Vec<_>> = stmt.query_and_then(&[&tx], |row| {
-        let e: i64 = row.get_checked(0)?;
-        let a: i64 = row.get_checked(1)?;
+        let e: i64 = row.get(0)?;
+        let a: i64 = row.get(1)?;
 
         if a == entids::DB_TX_INSTANT {
             return Ok(None);
         }
 
-        let v: rusqlite::types::Value = row.get_checked(2)?;
-        let value_type_tag: i32 = row.get_checked(3)?;
+        let v: rusqlite::types::Value = row.get(2)?;
+        let value_type_tag: i32 = row.get(3)?;
 
         let attribute = borrowed_schema.require_attribute_for_entid(a)?;
         let value_type_tag = if !attribute.fulltext { value_type_tag } else { ValueType::Long.value_type_tag() };
@@ -221,7 +221,7 @@ pub fn datoms_after<S: Borrow<Schema>>(conn: &rusqlite::Connection, schema: &S, 
         let typed_value = TypedValue::from_sql_value_pair(v, value_type_tag)?.map_ident(borrowed_schema);
         let (value, _) = typed_value.to_edn_value_pair();
 
-        let tx: i64 = row.get_checked(4)?;
+        let tx: i64 = row.get(4)?;
 
         Ok(Some(Datom {
             e: EntidOrIdent::Entid(e),
@@ -245,11 +245,11 @@ pub fn transactions_after<S: Borrow<Schema>>(conn: &rusqlite::Connection, schema
     let mut stmt: rusqlite::Statement = conn.prepare("SELECT e, a, v, value_type_tag, tx, added FROM transactions WHERE tx > ? ORDER BY tx ASC, e ASC, a ASC, value_type_tag ASC, v ASC, added ASC")?;
 
     let r: Result<Vec<_>> = stmt.query_and_then(&[&tx], |row| {
-        let e: i64 = row.get_checked(0)?;
-        let a: i64 = row.get_checked(1)?;
+        let e: i64 = row.get(0)?;
+        let a: i64 = row.get(1)?;
 
-        let v: rusqlite::types::Value = row.get_checked(2)?;
-        let value_type_tag: i32 = row.get_checked(3)?;
+        let v: rusqlite::types::Value = row.get(2)?;
+        let value_type_tag: i32 = row.get(3)?;
 
         let attribute = borrowed_schema.require_attribute_for_entid(a)?;
         let value_type_tag = if !attribute.fulltext { value_type_tag } else { ValueType::Long.value_type_tag() };
@@ -257,8 +257,8 @@ pub fn transactions_after<S: Borrow<Schema>>(conn: &rusqlite::Connection, schema
         let typed_value = TypedValue::from_sql_value_pair(v, value_type_tag)?.map_ident(borrowed_schema);
         let (value, _) = typed_value.to_edn_value_pair();
 
-        let tx: i64 = row.get_checked(4)?;
-        let added: bool = row.get_checked(5)?;
+        let tx: i64 = row.get(4)?;
+        let added: bool = row.get(5)?;
 
         Ok(Datom {
             e: EntidOrIdent::Entid(e),
@@ -279,8 +279,8 @@ pub fn fulltext_values(conn: &rusqlite::Connection) -> Result<FulltextValues> {
     let mut stmt: rusqlite::Statement = conn.prepare("SELECT rowid, text FROM fulltext_values ORDER BY rowid")?;
 
     let r: Result<Vec<_>> = stmt.query_and_then(&[], |row| {
-        let rowid: i64 = row.get_checked(0)?;
-        let text: String = row.get_checked(1)?;
+        let rowid: i64 = row.get(0)?;
+        let text: String = row.get(1)?;
         Ok((rowid, text))
     })?.collect();
 
@@ -305,7 +305,7 @@ pub fn dump_sql_query(conn: &rusqlite::Connection, sql: &str, params: &[&ToSql])
 
     let r: Result<Vec<_>> = stmt.query_and_then(params, |row| {
         for i in 0..row.column_count() {
-            let value: rusqlite::types::Value = row.get_checked(i)?;
+            let value: rusqlite::types::Value = row.get(i)?;
             write!(&mut tw, "{:?}\t", value).unwrap();
         }
         write!(&mut tw, "\n").unwrap();

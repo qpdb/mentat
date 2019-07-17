@@ -118,11 +118,11 @@ where T: Sized + Iterator<Item=Result<TxPart>> + 't {
 fn to_tx_part(row: &rusqlite::Row) -> Result<TxPart> {
     Ok(TxPart {
         partitions: None,
-        e: row.get_checked(0)?,
-        a: row.get_checked(1)?,
-        v: TypedValue::from_sql_value_pair(row.get_checked(2)?, row.get_checked(3)?)?,
-        tx: row.get_checked(4)?,
-        added: row.get_checked(5)?,
+        e: row.get(0)?,
+        a: row.get(1)?,
+        v: TypedValue::from_sql_value_pair(row.get(2)?, row.get(3)?)?,
+        tx: row.get(4)?,
+        added: row.get(5)?,
     })
 }
 

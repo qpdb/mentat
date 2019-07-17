@@ -61,7 +61,7 @@ use watcher::{
 fn collect_ordered_txs_to_move(conn: &rusqlite::Connection, txs_from: RangeFrom<Entid>, timeline: Entid) -> Result<Vec<Entid>> {
     let mut stmt = conn.prepare("SELECT tx, timeline FROM timelined_transactions WHERE tx >= ? AND timeline = ? GROUP BY tx ORDER BY tx DESC")?;
     let mut rows = stmt.query_and_then(&[&txs_from.start, &timeline], |row: &rusqlite::Row| -> Result<(Entid, Entid)>{
-        Ok((row.get_checked(0)?, row.get_checked(1)?))
+        Ok((row.get(0)?, row.get(1)?))
     })?;
 
     let mut txs = vec![];
@@ -106,7 +106,7 @@ fn remove_tx_from_datoms(conn: &rusqlite::Connection, tx_id: Entid) -> Result<()
 fn is_timeline_empty(conn: &rusqlite::Connection, timeline: Entid) -> Result<bool> {
     let mut stmt = conn.prepare("SELECT timeline FROM timelined_transactions WHERE timeline = ? GROUP BY timeline")?;
     let rows = stmt.query_and_then(&[&timeline], |row| -> Result<i64> {
-        Ok(row.get_checked(0)?)
+        Ok(row.get(0)?)
     })?;
     Ok(rows.count() == 0)
 }
@@ -115,15 +115,15 @@ fn is_timeline_empty(conn: &rusqlite::Connection, timeline: Entid) -> Result<boo
 fn reversed_terms_for(conn: &rusqlite::Connection, tx_id: Entid) -> Result<Vec<TermWithoutTempIds>> {
     let mut stmt = conn.prepare("SELECT e, a, v, value_type_tag, tx, added FROM timelined_transactions WHERE tx = ? AND timeline = ? ORDER BY tx DESC")?;
     let mut rows = stmt.query_and_then(&[&tx_id, &::TIMELINE_MAIN], |row| -> Result<TermWithoutTempIds> {
-        let op = match row.get_checked(5)? {
+        let op = match row.get(5)? {
             true => OpType::Retract,
             false => OpType::Add
         };
         Ok(Term::AddOrRetract(
             op,
-            KnownEntid(row.get_checked(0)?),
-            row.get_checked(1)?,
-            TypedValue::from_sql_value_pair(row.get_checked(2)?, row.get_checked(3)?)?,
+            KnownEntid(row.get(0)?),
+            row.get(1)?,
+            TypedValue::from_sql_value_pair(row.get(2)?, row.get(3)?)?,
         ))
     })?;
 
