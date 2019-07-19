@@ -277,8 +277,9 @@ pub fn transactions_after<S: Borrow<Schema>>(conn: &rusqlite::Connection, schema
 /// Return the set of fulltext values in the store, ordered by rowid.
 pub fn fulltext_values(conn: &rusqlite::Connection) -> Result<FulltextValues> {
     let mut stmt: rusqlite::Statement = conn.prepare("SELECT rowid, text FROM fulltext_values ORDER BY rowid")?;
+    let params: &[i32; 0] = &[];
 
-    let r: Result<Vec<_>> = stmt.query_and_then(&[], |row| {
+    let r: Result<Vec<_>> = stmt.query_and_then(params, |row| {
         let rowid: i64 = row.get(0)?;
         let text: String = row.get(1)?;
         Ok((rowid, text))
