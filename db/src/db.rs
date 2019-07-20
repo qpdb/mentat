@@ -456,23 +456,15 @@ impl TypedSQLValue for TypedValue {
     /// Return the corresponding SQLite `value` and `value_type_tag` pair.
     fn to_sql_value_pair<'a>(&'a self) -> (ToSqlOutput<'a>, i32) {
         match self {
-            &TypedValue::Ref(x) => (rusqlite::types::Value::Integer(x).into(), 0),
-            &TypedValue::Boolean(x) => (
-                rusqlite::types::Value::Integer(if x { 1 } else { 0 }).into(),
-                1,
-            ),
-            &TypedValue::Instant(x) => (rusqlite::types::Value::Integer(x.to_micros()).into(), 4),
+            &TypedValue::Ref(x) => (x.into(), 0),
+            &TypedValue::Boolean(x) => ((if x { 1 } else { 0 }).into(), 1),
+            &TypedValue::Instant(x) => (x.to_micros().into(), 4),
             // SQLite distinguishes integral from decimal types, allowing long and double to share a tag.
-            &TypedValue::Long(x) => (rusqlite::types::Value::Integer(x).into(), 5),
-            &TypedValue::Double(x) => (rusqlite::types::Value::Real(x.into_inner()).into(), 5),
-            &TypedValue::String(ref x) => (rusqlite::types::ValueRef::Text(x.as_str()).into(), 10),
-            &TypedValue::Uuid(ref u) => (
-                rusqlite::types::Value::Blob(u.as_bytes().to_vec()).into(),
-                11,
-            ),
-            &TypedValue::Keyword(ref x) => {
-                (rusqlite::types::ValueRef::Text(&x.to_string()).into(), 13)
-            }
+            &TypedValue::Long(x) => (x.into(), 5),
+            &TypedValue::Double(x) => (x.into_inner().into(), 5),
+            &TypedValue::String(ref x) => (x.as_str().into(), 10),
+            &TypedValue::Uuid(ref u) => (u.as_bytes().to_vec().into(), 11),
+            &TypedValue::Keyword(ref x) => (x.to_string().into(), 13),
         }
     }
 

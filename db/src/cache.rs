@@ -215,7 +215,7 @@ pub struct AevRows<'conn, F> {
 /// for now it's convenient to avoid error handling.
 impl<'conn, F> Iterator for AevRows<'conn, F>
 where
-    F: FnMut(&rusqlite::Row) -> Aev,
+    F: FnMut(&rusqlite::Row) -> Result<Aev>,
 {
     type Item = Aev;
     fn next(&mut self) -> Option<Aev> {
@@ -1075,7 +1075,7 @@ impl AttributeCaches {
         replacing: bool,
     ) -> Result<()> {
         let mut aev_factory = AevFactory::new();
-        let rows = statement.query_map(&args, |row| aev_factory.row_to_aev(row))?;
+        let rows = statement.query_map(&args, |row| Ok(aev_factory.row_to_aev(row)))?;
         let aevs = AevRows { rows: rows };
         self.accumulate_into_cache(
             None,
