@@ -364,7 +364,7 @@ impl TypedIndex {
     ///
     /// This function will return a runtime error if the type tag is unknown, or the value is
     /// otherwise not convertible by the DB layer.
-    fn lookup<'a, 'stmt>(&self, row: &Row<'a, 'stmt>) -> Result<Binding> {
+    fn lookup<'a>(&self, row: &Row<'a>) -> Result<Binding> {
         use TypedIndex::*;
 
         match self {
