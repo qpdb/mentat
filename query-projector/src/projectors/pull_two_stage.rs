@@ -80,9 +80,9 @@ impl Projector for ScalarTwoStagePullProjector {
     fn project<'stmt, 's>(&self, schema: &Schema, sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
         // Scalar is pretty straightforward -- zero or one entity, do the pull directly.
         let results =
-            if let Some(r) = rows.next() {
-                let row = r?;
-                let entity: Entid = row.get(0);          // This will always be 0 and a ref.
+            if let Some(r) = rows.next().unwrap() {
+                let row = r;
+                let entity: Entid = row.get(0).unwrap();          // This will always be 0 and a ref.
                 let bindings = self.puller.pull(schema, sqlite, once(entity))?;
                 let m = Binding::Map(bindings.get(&entity).cloned().unwrap_or_else(Default::default));
                 QueryResults::Scalar(Some(m))
@@ -120,14 +120,14 @@ impl TupleTwoStagePullProjector {
     }
 
     // This is exactly the same as for rel.
-    fn collect_bindings<'a>(&self, row: Row<'a>) -> Result<Vec<Binding>> {
+    fn collect_bindings<'a>(&self, row: &Row<'a>) -> Result<Vec<Binding>> {
         // There will be at least as many SQL columns as Datalog columns.
         // gte 'cos we might be querying extra columns for ordering.
         // The templates will take care of ignoring columns.
         assert!(row.column_count() >= self.len);
         self.templates
             .iter()
-            .map(|ti| ti.lookup(&row))
+            .map(|ti| ti.lookup(row))
             .collect::<Result<Vec<Binding>>>()
     }
 
@@ -141,8 +141,8 @@ impl TupleTwoStagePullProjector {
 impl Projector for TupleTwoStagePullProjector {
     fn project<'stmt, 's>(&self, schema: &Schema, sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
         let results =
-            if let Some(r) = rows.next() {
-                let row = r?;
+            if let Some(r) = rows.next().unwrap() {
+                let row = r;
 
                 // Keeping the compiler happy.
                 let pull_consumers: Result<Vec<PullConsumer>> = self.pulls
@@ -152,14 +152,14 @@ impl Projector for TupleTwoStagePullProjector {
                 let mut pull_consumers = pull_consumers?;
 
                 // Collect the usual bindings and accumulate entity IDs for pull.
-                for mut p in pull_consumers.iter_mut() {
+                for p in pull_consumers.iter_mut() {
                     p.collect_entity(&row);
                 }
 
                 let mut bindings = self.collect_bindings(row)?;
 
                 // Run the pull expressions for the collected IDs.
-                for mut p in pull_consumers.iter_mut() {
+                for p in pull_consumers.iter_mut() {
                     p.pull(sqlite)?;
                 }
 
@@ -204,7 +204,7 @@ impl RelTwoStagePullProjector {
         }
     }
 
-    fn collect_bindings_into<'a>(&self, row: Row<'a>, out: &mut Vec<Binding>) -> Result<()> {
+    fn collect_bindings_into<'a>(&self, row: &Row<'a>, out: &mut Vec<Binding>) -> Result<()> {
         // There will be at least as many SQL columns as Datalog columns.
         // gte 'cos we might be querying extra columns for ordering.
         // The templates will take care of ignoring columns.
@@ -249,16 +249,16 @@ impl Projector for RelTwoStagePullProjector {
         let mut pull_consumers = pull_consumers?;
 
         // Collect the usual bindings and accumulate entity IDs for pull.
-        while let Some(r) = rows.next() {
-            let row = r?;
-            for mut p in pull_consumers.iter_mut() {
+        while let Some(r) = rows.next().unwrap() {
+            let row = r;
+            for p in pull_consumers.iter_mut() {
                 p.collect_entity(&row);
             }
             self.collect_bindings_into(row, &mut values)?;
         }
 
         // Run the pull expressions for the collected IDs.
-        for mut p in pull_consumers.iter_mut() {
+        for p in pull_consumers.iter_mut() {
             p.pull(sqlite)?;
         }
 
@@ -311,8 +311,8 @@ impl Projector for CollTwoStagePullProjector {
     fn project<'stmt, 's>(&self, schema: &Schema, sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
         let mut pull_consumer = PullConsumer::for_operation(schema, &self.pull)?;
 
-        while let Some(r) = rows.next() {
-            let row = r?;
+        while let Some(r) = rows.next().unwrap() {
+            let row = r;
             pull_consumer.collect_entity(&row);
         }
 

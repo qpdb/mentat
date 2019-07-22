@@ -58,8 +58,8 @@ impl ScalarProjector {
 impl Projector for ScalarProjector {
     fn project<'stmt, 's>(&self, _schema: &Schema, _sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
         let results =
-            if let Some(r) = rows.next() {
-                let row = r?;
+            if let Some(r) = rows.next().unwrap() {
+                let row = r;
                 let binding = self.template.lookup(&row)?;
                 QueryResults::Scalar(Some(binding))
             } else {
@@ -93,7 +93,7 @@ impl TupleProjector {
     }
 
     // This is just like we do for `rel`, but into a vec of its own.
-    fn collect_bindings<'a>(&self, row: Row<'a>) -> Result<Vec<Binding>> {
+    fn collect_bindings<'a>(&self, row: &Row<'a>) -> Result<Vec<Binding>> {
         // There will be at least as many SQL columns as Datalog columns.
         // gte 'cos we might be querying extra columns for ordering.
         // The templates will take care of ignoring columns.
@@ -114,8 +114,8 @@ impl TupleProjector {
 impl Projector for TupleProjector {
     fn project<'stmt, 's>(&self, _schema: &Schema, _sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
         let results =
-            if let Some(r) = rows.next() {
-                let row = r?;
+            if let Some(r) = rows.next().unwrap() {
+                let row = r;
                 let bindings = self.collect_bindings(row)?;
                 QueryResults::Tuple(Some(bindings))
             } else {
@@ -151,7 +151,7 @@ impl RelProjector {
         }
     }
 
-    fn collect_bindings_into<'a>(&self, row: Row<'a>, out: &mut Vec<Binding>) -> Result<()> {
+    fn collect_bindings_into<'a>(&self, row: &Row<'a>, out: &mut Vec<Binding>) -> Result<()> {
         // There will be at least as many SQL columns as Datalog columns.
         // gte 'cos we might be querying extra columns for ordering.
         // The templates will take care of ignoring columns.
@@ -188,8 +188,8 @@ impl Projector for RelProjector {
         let width = self.len;
         let mut values: Vec<_> = Vec::with_capacity(5 * width);
 
-        while let Some(r) = rows.next() {
-            let row = r?;
+        while let Some(r) = rows.next().unwrap() {
+            let row = r;
             self.collect_bindings_into(row, &mut values)?;
         }
 
@@ -236,8 +236,8 @@ impl CollProjector {
 impl Projector for CollProjector {
     fn project<'stmt, 's>(&self, _schema: &Schema, _sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
         let mut out: Vec<_> = vec![];
-        while let Some(r) = rows.next() {
-            let row = r?;
+        while let Some(r) = rows.next().unwrap() {
+            let row = r;
             let binding = self.template.lookup(&row)?;
             out.push(binding);
         }
