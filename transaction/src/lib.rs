@@ -322,17 +322,17 @@ impl<'a, 'c> InProgress<'a, 'c> {
     }
 
     pub fn savepoint(&self, name: &str) -> Result<()> {
-        self.transaction.execute(&format!("SAVEPOINT {}", name), &[])?;
+        self.transaction.execute(&format!("SAVEPOINT {}", name), rusqlite::params![])?;
         Ok(())
     }
 
     pub fn rollback_savepoint(&self, name: &str) -> Result<()> {
-        self.transaction.execute(&format!("ROLLBACK TO {}", name), &[])?;
+        self.transaction.execute(&format!("ROLLBACK TO {}", name), rusqlite::params![])?;
         Ok(())
     }
 
     pub fn release_savepoint(&self, name: &str) -> Result<()> {
-        self.transaction.execute(&format!("RELEASE {}", name), &[])?;
+        self.transaction.execute(&format!("RELEASE {}", name), rusqlite::params![])?;
         Ok(())
     }
 }
