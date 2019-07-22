@@ -83,7 +83,7 @@ impl TxMapper {
         )?;
 
         let results = stmt.query_and_then(&[&tx], |r| -> Result<Uuid>{
-            let bytes: Vec<u8> = r.get(0);
+            let bytes: Vec<u8> = r.get(0).unwrap();
             Uuid::from_bytes(bytes.as_slice()).map_err(|e| e.into())
         })?;
 

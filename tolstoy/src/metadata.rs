@@ -67,7 +67,7 @@ impl SyncMetadata {
         tx.query_row(
             "SELECT value FROM tolstoy_metadata WHERE key = ?",
             &[&schema::REMOTE_HEAD_KEY], |r| {
-                let bytes: Vec<u8> = r.get(0);
+                let bytes: Vec<u8> = r.get(0).unwrap();
                 Uuid::from_bytes(bytes.as_slice())
             }
         )?.map_err(|e| e.into())
