@@ -343,7 +343,7 @@ impl QueryResults {
     }
 }
 
-type Index = i32;            // See rusqlite::RowIndex.
+type Index = usize;            // See rusqlite::RowIndex.
 enum TypedIndex {
     Known(Index, ValueTypeTag),
     Unknown(Index, Index),

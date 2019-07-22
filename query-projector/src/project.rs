@@ -192,7 +192,7 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
     // We'll expand them later.
     let mut outer_projection: Vec<Either<Name, ProjectedColumn>> = Vec::with_capacity(count + 2);
 
-    let mut i: i32 = 0;
+    let mut i: usize = 0;
     let mut min_max_count: usize = 0;
     let mut templates = vec![];
     let mut pulls: Vec<PullTemplate> = vec![];

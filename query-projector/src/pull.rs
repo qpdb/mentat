@@ -94,7 +94,7 @@ impl<'schema> PullConsumer<'schema> {
     }
 
     pub(crate) fn collect_entity<'a>(&mut self, row: &rusqlite::Row<'a>) -> Entid {
-        let entity = row.get(self.indices.sql_index);
+        let entity = row.get(self.indices.sql_index).unwrap();
         self.entities.insert(entity);
         entity
     }
