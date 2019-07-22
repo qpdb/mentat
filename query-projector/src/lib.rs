@@ -369,14 +369,14 @@ impl TypedIndex {
 
         match self {
             &Known(value_index, value_type) => {
-                let v: rusqlite::types::Value = row.get(value_index);
+                let v: rusqlite::types::Value = row.get(value_index).unwrap();
                 TypedValue::from_sql_value_pair(v, value_type)
                     .map(|v| v.into())
                     .map_err(|e| e.into())
             },
             &Unknown(value_index, type_index) => {
-                let v: rusqlite::types::Value = row.get(value_index);
-                let value_type_tag: i32 = row.get(type_index);
+                let v: rusqlite::types::Value = row.get(value_index).unwrap();
+                let value_type_tag: i32 = row.get(type_index).unwrap();
                 TypedValue::from_sql_value_pair(v, value_type_tag)
                     .map(|v| v.into())
                     .map_err(|e| e.into())
