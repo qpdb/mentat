@@ -256,7 +256,7 @@ lazy_static! {
 /// Mentat manages its own SQL schema version using the user version.  See the [SQLite
 /// documentation](https://www.sqlite.org/pragma.html#pragma_user_version).
 fn set_user_version(conn: &rusqlite::Connection, version: i32) -> Result<()> {
-    conn.execute(&format!("PRAGMA user_version = {}", version), &[])
+    conn.execute(&format!("PRAGMA user_version = {}", version), rusqlite::params![])
         .context(DbErrorKind::CouldNotSetVersionPragma)?;
     Ok(())
 }
@@ -267,7 +267,7 @@ fn set_user_version(conn: &rusqlite::Connection, version: i32) -> Result<()> {
 /// documentation](https://www.sqlite.org/pragma.html#pragma_user_version).
 fn get_user_version(conn: &rusqlite::Connection) -> Result<i32> {
     let v = conn
-        .query_row("PRAGMA user_version", &[], |row| row.get(0))
+        .query_row("PRAGMA user_version", rusqlite::params![], |row| row.get(0))
         .context(DbErrorKind::CouldNotGetVersionPragma)?;
     Ok(v)
 }
@@ -279,7 +279,7 @@ pub fn create_empty_current_version(
     let tx = conn.transaction_with_behavior(TransactionBehavior::Exclusive)?;
 
     for statement in (&V1_STATEMENTS).iter() {
-        tx.execute(statement, &[])?;
+        tx.execute(statement, rusqlite::params![])?;
     }
 
     set_user_version(&tx, CURRENT_VERSION)?;
@@ -295,7 +295,7 @@ pub fn create_empty_current_version(
 fn create_current_partition_view(conn: &rusqlite::Connection) -> Result<()> {
     let mut stmt = conn.prepare("SELECT part, end FROM known_parts ORDER BY end ASC")?;
     let known_parts: Result<Vec<(String, i64)>> = stmt
-        .query_and_then(&[], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .query_and_then(rusqlite::params![], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect();
 
     let mut case = vec![];
@@ -314,7 +314,7 @@ fn create_current_partition_view(conn: &rusqlite::Connection) -> Result<()> {
         ::TIMELINE_MAIN
     );
 
-    conn.execute(&view_stmt, &[])?;
+    conn.execute(&view_stmt, rusqlite::params![])?;
     Ok(())
 }
 
@@ -491,7 +491,7 @@ pub(crate) fn read_materialized_view(
 ) -> Result<Vec<(Entid, Entid, TypedValue)>> {
     let mut stmt: rusqlite::Statement =
         conn.prepare(format!("SELECT e, a, v, value_type_tag FROM {}", table).as_str())?;
-    let m: Result<Vec<_>> = stmt.query_and_then(&[], row_to_datom_assertion)?.collect();
+    let m: Result<Vec<_>> = stmt.query_and_then(rusqlite::params![], row_to_datom_assertion)?.collect();
     m
 }
 
@@ -532,7 +532,7 @@ pub fn read_partition_map(conn: &rusqlite::Connection) -> Result<PartitionMap> {
             part NOT IN (SELECT part FROM parts)",
     )?;
     let m = stmt
-        .query_and_then(&[], |row| -> Result<(String, Partition)> {
+        .query_and_then(rusqlite::params![], |row| -> Result<(String, Partition)> {
             Ok((
                 row.get(0)?,
                 Partition::new(row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?),
@@ -660,7 +660,7 @@ fn search(conn: &rusqlite::Connection) -> Result<()> {
          t.a0 = d.a"#;
 
     let mut stmt = conn.prepare_cached(s)?;
-    stmt.execute(&[]).context(DbErrorKind::CouldNotSearch)?;
+    stmt.execute(rusqlite::params![]).context(DbErrorKind::CouldNotSearch)?;
     Ok(())
 }
 
@@ -718,7 +718,7 @@ fn update_datoms(conn: &rusqlite::Connection, tx: Entid) -> Result<()> {
         DELETE FROM datoms WHERE rowid IN ids"#;
 
     let mut stmt = conn.prepare_cached(s)?;
-    stmt.execute(&[])
+    stmt.execute(rusqlite::params![])
         .context(DbErrorKind::DatomsUpdateFailedToRetract)?;
 
     // Insert datoms that were added and not already present. We also must expand our bitfield into
@@ -873,7 +873,7 @@ impl MentatStoring for rusqlite::Connection {
 
         for statement in &statements {
             let mut stmt = self.prepare_cached(statement)?;
-            stmt.execute(&[])
+            stmt.execute(rusqlite::params![])
                 .context(DbErrorKind::FailedToCreateTempTables)?;
         }
 
@@ -1073,7 +1073,7 @@ impl MentatStoring for rusqlite::Connection {
         let mut stmt = self.prepare_cached(
             "UPDATE fulltext_values SET searchid = NULL WHERE searchid IS NOT NULL",
         )?;
-        stmt.execute(&[])
+        stmt.execute(rusqlite::params![])
             .context(DbErrorKind::FtsFailedToDropSearchIds)?;
         results.map(|_| ())
     }
@@ -1114,7 +1114,7 @@ impl MentatStoring for rusqlite::Connection {
 
         let mut stmt = self.prepare_cached(&sql_stmt)?;
         let m: Result<Vec<_>> = stmt
-            .query_and_then(&[], row_to_transaction_assertion)?
+            .query_and_then(rusqlite::params![], row_to_transaction_assertion)?
             .collect();
         m
     }
@@ -1178,14 +1178,14 @@ pub fn update_metadata(
     // TODO: use concat! to avoid creating String instances.
     if !metadata_report.idents_altered.is_empty() {
         // Idents is the materialized view of the [entid :db/ident ident] slice of datoms.
-        conn.execute(format!("DELETE FROM idents").as_str(), &[])?;
+        conn.execute(format!("DELETE FROM idents").as_str(), rusqlite::params![])?;
         conn.execute(
             format!(
                 "INSERT INTO idents SELECT e, a, v, value_type_tag FROM datoms WHERE a IN {}",
                 entids::IDENTS_SQL_LIST.as_str()
             )
             .as_str(),
-            &[],
+            rusqlite::params![],
         )?;
     }
 
@@ -1200,7 +1200,7 @@ pub fn update_metadata(
         || !metadata_report.attributes_altered.is_empty()
         || !metadata_report.idents_altered.is_empty()
     {
-        conn.execute(format!("DELETE FROM schema").as_str(), &[])?;
+        conn.execute(format!("DELETE FROM schema").as_str(), rusqlite::params![])?;
         // NB: we're using :db/valueType as a placeholder for the entire schema-defining set.
         let s = format!(
             r#"
@@ -1213,7 +1213,7 @@ pub fn update_metadata(
             entids::DB_VALUE_TYPE,
             entids::SCHEMA_SQL_LIST.as_str()
         );
-        conn.execute(&s, &[])?;
+        conn.execute(&s, rusqlite::params![])?;
     }
 
     let mut index_stmt = conn.prepare("UPDATE datoms SET index_avet = ? WHERE a = ?")?;
@@ -3317,7 +3317,7 @@ mod tests {
         let sqlite = new_connection_with_key("../fixtures/v1encrypted.db", secret_key)
             .expect("Failed to find test DB");
         sqlite
-            .query_row("SELECT COUNT(*) FROM sqlite_master", &[], |row| {
+            .query_row("SELECT COUNT(*) FROM sqlite_master", rusqlite::params![], |row| {
                 row.get::<_, i64>(0)
             })
             .expect("Failed to execute sql query on encrypted DB");

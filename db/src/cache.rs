@@ -215,7 +215,7 @@ pub struct AevRows<'conn, F> {
 /// for now it's convenient to avoid error handling.
 impl<'conn, F> Iterator for AevRows<'conn, F>
 where
-    F: FnMut(&rusqlite::Row) -> Result<Aev>,
+    F: FnMut(&rusqlite::Row) -> rusqlite::Result<Aev>,
 {
     type Item = Aev;
     fn next(&mut self) -> Option<Aev> {
