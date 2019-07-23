@@ -42,7 +42,7 @@ pub fn ensure_current_version(tx: &mut rusqlite::Transaction) -> Result<()> {
 
     // Initial partition information is what we'd see at bootstrap, and is used during first sync.
     for (name, start, end, index, allow_excision) in BOOTSTRAP_PARTITIONS.iter() {
-        tx.execute("INSERT OR IGNORE INTO tolstoy_parts VALUES (?, ?, ?, ?, ?)", &[&name.to_string(), start, end, index, allow_excision])?;
+        tx.execute("INSERT OR IGNORE INTO tolstoy_parts VALUES (?, ?, ?, ?, ?)", rusqlite::params![&name.to_string(), start, end, index, allow_excision])?;
     }
 
     tx.execute("INSERT OR IGNORE INTO tolstoy_metadata (key, value) VALUES (?, zeroblob(16))", &[&REMOTE_HEAD_KEY])?;

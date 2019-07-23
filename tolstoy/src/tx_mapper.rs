@@ -37,7 +37,7 @@ impl TxMapper {
         )?;
         for mapping in mappings.iter() {
             let uuid_bytes = mapping.remote.as_bytes().to_vec();
-            stmt.execute(&[&mapping.local, &uuid_bytes])?;
+            stmt.execute(rusqlite::params![&mapping.local, &uuid_bytes])?;
         }
         Ok(())
     }
@@ -53,7 +53,7 @@ impl TxMapper {
             None => {
                 let uuid = Uuid::new_v4();
                 let uuid_bytes = uuid.as_bytes().to_vec();
-                db_tx.execute("INSERT INTO tolstoy_tu (tx, uuid) VALUES (?, ?)", &[&tx, &uuid_bytes])?;
+                db_tx.execute("INSERT INTO tolstoy_tu (tx, uuid) VALUES (?, ?)", rusqlite::params![&tx, &uuid_bytes])?;
                 return Ok(uuid);
             }
         }

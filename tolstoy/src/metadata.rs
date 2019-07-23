@@ -76,7 +76,7 @@ impl SyncMetadata {
     pub fn set_remote_head(tx: &rusqlite::Transaction, uuid: &Uuid) -> Result<()> {
         let uuid_bytes = uuid.as_bytes().to_vec();
         let updated = tx.execute("UPDATE tolstoy_metadata SET value = ? WHERE key = ?",
-            &[&uuid_bytes, &schema::REMOTE_HEAD_KEY])?;
+            rusqlite::params![&uuid_bytes, &schema::REMOTE_HEAD_KEY])?;
         if updated != 1 {
             bail!(TolstoyError::DuplicateMetadata(schema::REMOTE_HEAD_KEY.into()));
         }
