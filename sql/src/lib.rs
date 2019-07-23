@@ -37,8 +37,6 @@ use mentat_core::{
     ValueRc,
 };
 
-pub use rusqlite::types::Value;
-
 /// We want to accumulate values that will later be substituted into a SQL statement execution.
 /// This struct encapsulates the generated string and the _initial_ argument list.
 /// Additional user-supplied argument bindings, with their placeholders accumulated via
