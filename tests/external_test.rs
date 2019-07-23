@@ -27,7 +27,7 @@ fn can_import_sqlite() {
                   name            TEXT NOT NULL,
                   data            BLOB
                   )",
-                 &[])
+                 rusqlite::params![])
         .unwrap();
     let me = Person {
         id: 1,
@@ -36,16 +36,16 @@ fn can_import_sqlite() {
     };
     conn.execute("INSERT INTO person (name, data)
                   VALUES (?1, ?2)",
-                 &[&me.name, &me.data])
+                 rusqlite::params![&me.name, &me.data])
         .unwrap();
 
     let mut stmt = conn.prepare("SELECT id, name, data FROM person").unwrap();
-    let person_iter = stmt.query_map(&[], |row| {
-            Person {
-                id: row.get(0),
-                name: row.get(1),
-                data: row.get(2),
-            }
+    let person_iter = stmt.query_map(rusqlite::params![], |row| {
+            Ok(Person {
+                id: row.get(0).unwrap(),
+                name: row.get(1).unwrap(),
+                data: row.get(2).unwrap(),
+            })
         })
         .unwrap();
 
