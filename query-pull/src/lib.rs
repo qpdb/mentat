@@ -248,9 +248,9 @@ impl Puller {
         // Collect :db/id if requested.
         if let Some(ref alias) = self.db_id_alias {
             for e in entities.iter() {
-                let mut r = maps.entry(*e)
+                let r = maps.entry(*e)
                                 .or_insert(ValueRc::new(StructuredMap::default()));
-                let mut m = ValueRc::get_mut(r).unwrap();
+                let m = ValueRc::get_mut(r).unwrap();
                 m.insert(alias.clone(), Binding::Scalar(TypedValue::Ref(*e)));
             }
         }
@@ -261,12 +261,12 @@ impl Puller {
 
             for e in entities.iter() {
                 if let Some(binding) = cache.binding_for_e(*e) {
-                    let mut r = maps.entry(*e)
+                    let r = maps.entry(*e)
                                     .or_insert(ValueRc::new(StructuredMap::default()));
 
                     // Get into the inner map so we can accumulate a value.
                     // We can unwrap here because we created all of these maps…
-                    let mut m = ValueRc::get_mut(r).unwrap();
+                    let m = ValueRc::get_mut(r).unwrap();
 
                     m.insert(name.clone(), binding);
                 }

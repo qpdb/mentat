@@ -32,7 +32,6 @@ use edn::entities::{
 use mentat_db::{
     CORE_SCHEMA_VERSION,
     timelines,
-    debug,
     entids,
     PartitionMap,
 };

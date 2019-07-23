@@ -774,7 +774,7 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                 tx_might_update_metadata = true;
             }
 
-            let mut queue = match (attribute.fulltext, attribute.multival) {
+            let queue = match (attribute.fulltext, attribute.multival) {
                 (false, true) => &mut non_fts_many,
                 (false, false) => &mut non_fts_one,
                 (true, false) => &mut fts_one,

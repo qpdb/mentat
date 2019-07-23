@@ -81,7 +81,7 @@ impl From<serde_json::Error> for TolstoyError {
 
 impl From<rusqlite::Error> for TolstoyError {
     fn from(error: rusqlite::Error) -> TolstoyError {
-        let cause = match error.cause() {
+        let cause = match error.source() {
             Some(e) => e.to_string(),
             None => "".to_string()
         };

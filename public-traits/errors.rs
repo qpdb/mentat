@@ -154,7 +154,7 @@ impl From<std::io::Error> for MentatError {
 
 impl From<rusqlite::Error> for MentatError {
     fn from(error: rusqlite::Error) -> MentatError {
-        let cause = match error.cause() {
+        let cause = match error.source() {
             Some(e) => e.to_string(),
             None => "".to_string()
         };
