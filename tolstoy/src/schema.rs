@@ -12,9 +12,7 @@ use rusqlite;
 
 use mentat_db::V1_PARTS as BOOTSTRAP_PARTITIONS;
 
-use public_traits::errors::{
-    Result,
-};
+use public_traits::errors::Result;
 
 pub static REMOTE_HEAD_KEY: &str = r"remote_head";
 pub static PARTITION_DB: &str = r":db.part/db";
@@ -42,10 +40,16 @@ pub fn ensure_current_version(tx: &mut rusqlite::Transaction) -> Result<()> {
 
     // Initial partition information is what we'd see at bootstrap, and is used during first sync.
     for (name, start, end, index, allow_excision) in BOOTSTRAP_PARTITIONS.iter() {
-        tx.execute("INSERT OR IGNORE INTO tolstoy_parts VALUES (?, ?, ?, ?, ?)", rusqlite::params![&name.to_string(), start, end, index, allow_excision])?;
+        tx.execute(
+            "INSERT OR IGNORE INTO tolstoy_parts VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params![&name.to_string(), start, end, index, allow_excision],
+        )?;
     }
 
-    tx.execute("INSERT OR IGNORE INTO tolstoy_metadata (key, value) VALUES (?, zeroblob(16))", rusqlite::params![&REMOTE_HEAD_KEY])?;
+    tx.execute(
+        "INSERT OR IGNORE INTO tolstoy_metadata (key, value) VALUES (?, zeroblob(16))",
+        rusqlite::params![&REMOTE_HEAD_KEY],
+    )?;
     Ok(())
 }
 
@@ -54,23 +58,23 @@ pub mod tests {
     use super::*;
     use uuid::Uuid;
 
-    use metadata::{
-        PartitionsTable,
-        SyncMetadata,
-    };
+    use metadata::{PartitionsTable, SyncMetadata};
 
     use mentat_db::USER0;
 
     pub fn setup_conn_bare() -> rusqlite::Connection {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
 
-        conn.execute_batch("
+        conn.execute_batch(
+            "
             PRAGMA page_size=32768;
             PRAGMA journal_mode=wal;
             PRAGMA wal_autocheckpoint=32;
             PRAGMA journal_size_limit=3145728;
             PRAGMA foreign_keys=ON;
-        ").expect("success");
+        ",
+        )
+        .expect("success");
 
         conn
     }
@@ -92,16 +96,22 @@ pub mod tests {
 
         assert!(ensure_current_version(&mut tx).is_ok());
 
-        let mut stmt = tx.prepare("SELECT key FROM tolstoy_metadata WHERE value = zeroblob(16)").unwrap();
-        let mut keys_iter = stmt.query_map(rusqlite::params![], |r| r.get(0)).expect("query works");
+        let mut stmt = tx
+            .prepare("SELECT key FROM tolstoy_metadata WHERE value = zeroblob(16)")
+            .unwrap();
+        let mut keys_iter = stmt
+            .query_map(rusqlite::params![], |r| r.get(0))
+            .expect("query works");
 
         let first: Result<String> = keys_iter.next().unwrap().map_err(|e| e.into());
         let second: Option<_> = keys_iter.next();
         match (first, second) {
             (Ok(key), None) => {
                 assert_eq!(key, REMOTE_HEAD_KEY);
-            },
-            (_, _) => { panic!("Wrong number of results."); },
+            }
+            (_, _) => {
+                panic!("Wrong number of results.");
+            }
         }
 
         let partitions = SyncMetadata::get_partitions(&tx, PartitionsTable::Tolstoy).unwrap();
@@ -127,34 +137,44 @@ pub mod tests {
         let test_uuid = Uuid::new_v4();
         {
             let uuid_bytes = test_uuid.as_bytes().to_vec();
-            match tx.execute("UPDATE tolstoy_metadata SET value = ? WHERE key = ?", rusqlite::params![&uuid_bytes, &REMOTE_HEAD_KEY]) {
+            match tx.execute(
+                "UPDATE tolstoy_metadata SET value = ? WHERE key = ?",
+                rusqlite::params![&uuid_bytes, &REMOTE_HEAD_KEY],
+            ) {
                 Err(e) => panic!("Error running an update: {}", e),
-                _ => ()
+                _ => (),
             }
         }
 
         let new_idx = USER0 + 1;
-        match tx.execute("UPDATE tolstoy_parts SET idx = ? WHERE part = ?", rusqlite::params![&new_idx, &PARTITION_USER]) {
+        match tx.execute(
+            "UPDATE tolstoy_parts SET idx = ? WHERE part = ?",
+            rusqlite::params![&new_idx, &PARTITION_USER],
+        ) {
             Err(e) => panic!("Error running an update: {}", e),
-            _ => ()
+            _ => (),
         }
 
         assert!(ensure_current_version(&mut tx).is_ok());
 
         // Check that running ensure_current_version on an initialized conn doesn't change anything.
         let mut stmt = tx.prepare("SELECT value FROM tolstoy_metadata").unwrap();
-        let mut values_iter = stmt.query_map(rusqlite::params![], |r| {
-            let raw_uuid: Vec<u8> = r.get(0);
-            Uuid::from_bytes(raw_uuid.as_slice()).unwrap()
-        }).expect("query works");
+        let mut values_iter = stmt
+            .query_map(rusqlite::params![], |r| {
+                let raw_uuid: Vec<u8> = r.get(0).unwrap();
+                Ok(Uuid::from_bytes(raw_uuid.as_slice()))
+            })
+            .expect("query works");
 
-        let first: Result<Uuid> = values_iter.next().unwrap().map_err(|e| e.into());
+        let first: Result<Uuid> = values_iter.next().unwrap().unwrap().map_err(|e| e.into());
         let second: Option<_> = values_iter.next();
         match (first, second) {
             (Ok(uuid), None) => {
                 assert_eq!(test_uuid, uuid);
-            },
-            (_, _) => { panic!("Wrong number of results."); },
+            }
+            (_, _) => {
+                panic!("Wrong number of results.");
+            }
         }
 
         let partitions = SyncMetadata::get_partitions(&tx, PartitionsTable::Tolstoy).unwrap();
