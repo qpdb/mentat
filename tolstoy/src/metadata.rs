@@ -97,7 +97,7 @@ impl SyncMetadata {
             },
             PartitionsTable::Tolstoy => {
                 let mut stmt: ::rusqlite::Statement = tx.prepare("SELECT part, start, end, idx, allow_excision FROM tolstoy_parts")?;
-                let m: Result<PartitionMap> = stmt.query_and_then(&[], |row| -> Result<(String, Partition)> {
+                let m: Result<PartitionMap> = stmt.query_and_then(rusqlite::params![], |row| -> Result<(String, Partition)> {
                     Ok((row.get(0)?, Partition::new(row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)))
                 })?.collect();
                 m
@@ -107,7 +107,7 @@ impl SyncMetadata {
 
     pub fn root_and_head_tx(tx: &rusqlite::Transaction) -> Result<(Entid, Entid)> {
         let mut stmt: ::rusqlite::Statement = tx.prepare("SELECT tx FROM timelined_transactions WHERE timeline = 0 GROUP BY tx ORDER BY tx")?;
-        let txs: Vec<_> = stmt.query_and_then(&[], |row| -> Result<Entid> {
+        let txs: Vec<_> = stmt.query_and_then(rusqlite::params![], |row| -> Result<Entid> {
             Ok(row.get(0)?)
         })?.collect();
 
@@ -130,7 +130,7 @@ impl SyncMetadata {
             None => format!("WHERE timeline = 0")
         };
         let mut stmt: ::rusqlite::Statement = db_tx.prepare(&format!("SELECT tx FROM timelined_transactions {} GROUP BY tx ORDER BY tx", after_clause))?;
-        let txs: Vec<_> = stmt.query_and_then(&[], |row| -> Result<Entid> {
+        let txs: Vec<_> = stmt.query_and_then(rusqlite::params![], |row| -> Result<Entid> {
             Ok(row.get(0)?)
         })?.collect();
 
@@ -143,14 +143,14 @@ impl SyncMetadata {
     }
 
     pub fn is_tx_empty(db_tx: &rusqlite::Transaction, tx_id: Entid) -> Result<bool> {
-        let count: i64 = db_tx.query_row("SELECT count(rowid) FROM timelined_transactions WHERE timeline = 0 AND tx = ? AND e != ?", &[&tx_id, &tx_id], |row| {
+        let count: i64 = db_tx.query_row("SELECT count(rowid) FROM timelined_transactions WHERE timeline = 0 AND tx = ? AND e != ?", rusqlite::params![&tx_id, &tx_id], |row| {
             Ok(row.get(0)?)
         })?;
         Ok(count == 0)
     }
 
     pub fn has_entity_assertions_in_tx(db_tx: &rusqlite::Transaction, e: Entid, tx_id: Entid) -> Result<bool> {
-        let count: i64 = db_tx.query_row("SELECT count(rowid) FROM timelined_transactions WHERE timeline = 0 AND tx = ? AND e = ?", &[&tx_id, &e], |row| {
+        let count: i64 = db_tx.query_row("SELECT count(rowid) FROM timelined_transactions WHERE timeline = 0 AND tx = ? AND e = ?", rusqlite::params![&tx_id, &e], |row| {
             Ok(row.get(0)?)
         })?;
         Ok(count > 0)
@@ -203,11 +203,11 @@ mod tests {
 
         // last attribute is the timeline (0).
 
-        db_tx.execute("INSERT INTO timelined_transactions VALUES (?, ?, ?, ?, ?, ?, ?)", &[&268435457, &3, &1529971773701734_i64, &268435457, &1, &4, &0]).expect("inserted");
-        db_tx.execute("INSERT INTO timelined_transactions VALUES (?, ?, ?, ?, ?, ?, ?)", &[&65536, &1, &":person/name", &268435457, &1, &13, &0]).expect("inserted");
-        db_tx.execute("INSERT INTO timelined_transactions VALUES (?, ?, ?, ?, ?, ?, ?)", &[&65536, &7, &27, &268435457, &1, &0, &0]).expect("inserted");
-        db_tx.execute("INSERT INTO timelined_transactions VALUES (?, ?, ?, ?, ?, ?, ?)", &[&65536, &9, &36, &268435457, &1, &0, &0]).expect("inserted");
-        db_tx.execute("INSERT INTO timelined_transactions VALUES (?, ?, ?, ?, ?, ?, ?)", &[&65536, &11, &1, &268435457, &1, &1, &0]).expect("inserted");
+        db_tx.execute("INSERT INTO timelined_transactions VALUES (?, ?, ?, ?, ?, ?, ?)", rusqlite::params![&268435457, &3, &1529971773701734_i64, &268435457, &1, &4, &0]).expect("inserted");
+        db_tx.execute("INSERT INTO timelined_transactions VALUES (?, ?, ?, ?, ?, ?, ?)", rusqlite::params![&65536, &1, &":person/name", &268435457, &1, &13, &0]).expect("inserted");
+        db_tx.execute("INSERT INTO timelined_transactions VALUES (?, ?, ?, ?, ?, ?, ?)", rusqlite::params![&65536, &7, &27, &268435457, &1, &0, &0]).expect("inserted");
+        db_tx.execute("INSERT INTO timelined_transactions VALUES (?, ?, ?, ?, ?, ?, ?)", rusqlite::params![&65536, &9, &36, &268435457, &1, &0, &0]).expect("inserted");
+        db_tx.execute("INSERT INTO timelined_transactions VALUES (?, ?, ?, ?, ?, ?, ?)", rusqlite::params![&65536, &11, &1, &268435457, &1, &1, &0]).expect("inserted");
 
         let (root_tx, last_tx) = SyncMetadata::root_and_head_tx(&db_tx).expect("last tx");
         assert_eq!(268435456, root_tx);

@@ -37,7 +37,7 @@ lazy_static! {
 
 pub fn ensure_current_version(tx: &mut rusqlite::Transaction) -> Result<()> {
     for statement in (&SCHEMA_STATEMENTS).iter() {
-        tx.execute(statement, &[])?;
+        tx.execute(statement, rusqlite::params![])?;
     }
 
     // Initial partition information is what we'd see at bootstrap, and is used during first sync.
@@ -45,7 +45,7 @@ pub fn ensure_current_version(tx: &mut rusqlite::Transaction) -> Result<()> {
         tx.execute("INSERT OR IGNORE INTO tolstoy_parts VALUES (?, ?, ?, ?, ?)", rusqlite::params![&name.to_string(), start, end, index, allow_excision])?;
     }
 
-    tx.execute("INSERT OR IGNORE INTO tolstoy_metadata (key, value) VALUES (?, zeroblob(16))", &[&REMOTE_HEAD_KEY])?;
+    tx.execute("INSERT OR IGNORE INTO tolstoy_metadata (key, value) VALUES (?, zeroblob(16))", rusqlite::params![&REMOTE_HEAD_KEY])?;
     Ok(())
 }
 
@@ -93,7 +93,7 @@ pub mod tests {
         assert!(ensure_current_version(&mut tx).is_ok());
 
         let mut stmt = tx.prepare("SELECT key FROM tolstoy_metadata WHERE value = zeroblob(16)").unwrap();
-        let mut keys_iter = stmt.query_map(&[], |r| r.get(0)).expect("query works");
+        let mut keys_iter = stmt.query_map(rusqlite::params![], |r| r.get(0)).expect("query works");
 
         let first: Result<String> = keys_iter.next().unwrap().map_err(|e| e.into());
         let second: Option<_> = keys_iter.next();
@@ -127,14 +127,14 @@ pub mod tests {
         let test_uuid = Uuid::new_v4();
         {
             let uuid_bytes = test_uuid.as_bytes().to_vec();
-            match tx.execute("UPDATE tolstoy_metadata SET value = ? WHERE key = ?", &[&uuid_bytes, &REMOTE_HEAD_KEY]) {
+            match tx.execute("UPDATE tolstoy_metadata SET value = ? WHERE key = ?", rusqlite::params![&uuid_bytes, &REMOTE_HEAD_KEY]) {
                 Err(e) => panic!("Error running an update: {}", e),
                 _ => ()
             }
         }
 
         let new_idx = USER0 + 1;
-        match tx.execute("UPDATE tolstoy_parts SET idx = ? WHERE part = ?", &[&new_idx, &PARTITION_USER]) {
+        match tx.execute("UPDATE tolstoy_parts SET idx = ? WHERE part = ?", rusqlite::params![&new_idx, &PARTITION_USER]) {
             Err(e) => panic!("Error running an update: {}", e),
             _ => ()
         }
@@ -143,7 +143,7 @@ pub mod tests {
 
         // Check that running ensure_current_version on an initialized conn doesn't change anything.
         let mut stmt = tx.prepare("SELECT value FROM tolstoy_metadata").unwrap();
-        let mut values_iter = stmt.query_map(&[], |r| {
+        let mut values_iter = stmt.query_map(rusqlite::params![], |r| {
             let raw_uuid: Vec<u8> = r.get(0);
             Uuid::from_bytes(raw_uuid.as_slice()).unwrap()
         }).expect("query works");

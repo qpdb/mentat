@@ -137,7 +137,7 @@ impl Processor {
         let select_query = format!("SELECT e, a, v, value_type_tag, tx, added FROM timelined_transactions {} ORDER BY tx", tx_filter);
         let mut stmt = sqlite.prepare(&select_query)?;
 
-        let mut rows = stmt.query_and_then(&[], to_tx_part)?.peekable();
+        let mut rows = stmt.query_and_then(rusqlite::params![], to_tx_part)?.peekable();
 
         // Walk the transaction table, keeping track of the current "tx".
         // Whenever "tx" changes, construct a datoms iterator and pass it to the receiver.
