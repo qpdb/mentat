@@ -52,35 +52,18 @@
 //
 // We probably need both, but this file provides the latter.
 
-use edn::{
-    InternSet,
-    PlainSymbol,
-    ValueRc,
-};
 use edn::entities::{
-    AttributePlace,
-    Entity,
-    EntityPlace,
-    LookupRef,
-    OpType,
-    TempId,
-    TxFunction,
-    ValuePlace,
+    AttributePlace, Entity, EntityPlace, LookupRef, OpType, TempId, TxFunction, ValuePlace,
 };
+use edn::{InternSet, PlainSymbol, ValueRc};
 
-use core_traits::{
-    TypedValue,
-};
+use core_traits::TypedValue;
 
-use mentat_core::{
-    TxReport,
-};
+use mentat_core::TxReport;
 
-use ::InProgress;
+use InProgress;
 
-use public_traits::errors::{
-    Result,
-};
+use public_traits::errors::Result;
 
 pub type Terms = (Vec<Entity<TypedValue>>, InternSet<TempId>);
 
@@ -95,22 +78,34 @@ pub struct EntityBuilder<T: BuildTerms + Sized> {
     entity: EntityPlace<TypedValue>,
 }
 
-pub trait BuildTerms where Self: Sized {
-    fn named_tempid<I>(&mut self, name: I) -> ValueRc<TempId> where I: Into<String>;
+pub trait BuildTerms
+where
+    Self: Sized,
+{
+    fn named_tempid<I>(&mut self, name: I) -> ValueRc<TempId>
+    where
+        I: Into<String>;
     fn describe_tempid(self, name: &str) -> EntityBuilder<Self>;
-    fn describe<E>(self, entity: E) -> EntityBuilder<Self> where E: Into<EntityPlace<TypedValue>>;
+    fn describe<E>(self, entity: E) -> EntityBuilder<Self>
+    where
+        E: Into<EntityPlace<TypedValue>>;
     fn add<E, A, V>(&mut self, e: E, a: A, v: V) -> Result<()>
-    where E: Into<EntityPlace<TypedValue>>,
-          A: Into<AttributePlace>,
-          V: Into<ValuePlace<TypedValue>>;
+    where
+        E: Into<EntityPlace<TypedValue>>,
+        A: Into<AttributePlace>,
+        V: Into<ValuePlace<TypedValue>>;
     fn retract<E, A, V>(&mut self, e: E, a: A, v: V) -> Result<()>
-    where E: Into<EntityPlace<TypedValue>>,
-          A: Into<AttributePlace>,
-          V: Into<ValuePlace<TypedValue>>;
+    where
+        E: Into<EntityPlace<TypedValue>>,
+        A: Into<AttributePlace>,
+        V: Into<ValuePlace<TypedValue>>;
 }
 
 impl BuildTerms for TermBuilder {
-    fn named_tempid<I>(&mut self, name: I) -> ValueRc<TempId> where I: Into<String> {
+    fn named_tempid<I>(&mut self, name: I) -> ValueRc<TempId>
+    where
+        I: Into<String>,
+    {
         self.tempids.intern(TempId::External(name.into()))
     }
 
@@ -119,7 +114,10 @@ impl BuildTerms for TermBuilder {
         self.describe(e)
     }
 
-    fn describe<E>(self, entity: E) -> EntityBuilder<Self> where E: Into<EntityPlace<TypedValue>> {
+    fn describe<E>(self, entity: E) -> EntityBuilder<Self>
+    where
+        E: Into<EntityPlace<TypedValue>>,
+    {
         EntityBuilder {
             builder: self,
             entity: entity.into(),
@@ -127,18 +125,32 @@ impl BuildTerms for TermBuilder {
     }
 
     fn add<E, A, V>(&mut self, e: E, a: A, v: V) -> Result<()>
-    where E: Into<EntityPlace<TypedValue>>,
-          A: Into<AttributePlace>,
-          V: Into<ValuePlace<TypedValue>> {
-        self.terms.push(Entity::AddOrRetract { op: OpType::Add, e: e.into(), a: a.into(), v: v.into() });
+    where
+        E: Into<EntityPlace<TypedValue>>,
+        A: Into<AttributePlace>,
+        V: Into<ValuePlace<TypedValue>>,
+    {
+        self.terms.push(Entity::AddOrRetract {
+            op: OpType::Add,
+            e: e.into(),
+            a: a.into(),
+            v: v.into(),
+        });
         Ok(())
     }
 
     fn retract<E, A, V>(&mut self, e: E, a: A, v: V) -> Result<()>
-    where E: Into<EntityPlace<TypedValue>>,
-          A: Into<AttributePlace>,
-          V: Into<ValuePlace<TypedValue>> {
-        self.terms.push(Entity::AddOrRetract { op: OpType::Retract, e: e.into(), a: a.into(), v: v.into() });
+    where
+        E: Into<EntityPlace<TypedValue>>,
+        A: Into<AttributePlace>,
+        V: Into<ValuePlace<TypedValue>>,
+    {
+        self.terms.push(Entity::AddOrRetract {
+            op: OpType::Retract,
+            e: e.into(),
+            a: a.into(),
+            v: v.into(),
+        });
         Ok(())
     }
 }
@@ -165,30 +177,44 @@ impl TermBuilder {
     }
 
     pub fn lookup_ref<A, V>(a: A, v: V) -> LookupRef<TypedValue>
-    where A: Into<AttributePlace>,
-          V: Into<TypedValue> {
-        LookupRef { a: a.into(), v: v.into() }
+    where
+        A: Into<AttributePlace>,
+        V: Into<TypedValue>,
+    {
+        LookupRef {
+            a: a.into(),
+            v: v.into(),
+        }
     }
 
     pub fn tx_function(op: &str) -> TxFunction {
-        TxFunction { op: PlainSymbol::plain(op) }
+        TxFunction {
+            op: PlainSymbol::plain(op),
+        }
     }
 }
 
-impl<T> EntityBuilder<T> where T: BuildTerms {
+impl<T> EntityBuilder<T>
+where
+    T: BuildTerms,
+{
     pub fn finish(self) -> (T, EntityPlace<TypedValue>) {
         (self.builder, self.entity)
     }
 
     pub fn add<A, V>(&mut self, a: A, v: V) -> Result<()>
-    where A: Into<AttributePlace>,
-          V: Into<ValuePlace<TypedValue>> {
+    where
+        A: Into<AttributePlace>,
+        V: Into<ValuePlace<TypedValue>>,
+    {
         self.builder.add(self.entity.clone(), a, v)
     }
 
     pub fn retract<A, V>(&mut self, a: A, v: V) -> Result<()>
-    where A: Into<AttributePlace>,
-          V: Into<ValuePlace<TypedValue>> {
+    where
+        A: Into<AttributePlace>,
+        V: Into<ValuePlace<TypedValue>>,
+    {
         self.builder.retract(self.entity.clone(), a, v)
     }
 }
@@ -209,13 +235,12 @@ impl<'a, 'c> InProgressBuilder<'a, 'c> {
     /// Build the terms from this builder and transact them against the current
     /// `InProgress`. This method _always_ returns the `InProgress` -- failure doesn't
     /// imply an automatic rollback.
-    pub fn transact(self) -> (InProgress<'a, 'c>, Result<TxReport>)  {
+    pub fn transact(self) -> (InProgress<'a, 'c>, Result<TxReport>) {
         let mut in_progress = self.in_progress;
-        let result = self.builder
-                         .build()
-                         .and_then(|(terms, _tempid_set)| {
-                             in_progress.transact_entities(terms)
-                         });
+        let result = self
+            .builder
+            .build()
+            .and_then(|(terms, _tempid_set)| in_progress.transact_entities(terms));
         (in_progress, result)
     }
 
@@ -223,16 +248,20 @@ impl<'a, 'c> InProgressBuilder<'a, 'c> {
     /// step fails, roll back. Return the `TxReport`.
     pub fn commit(self) -> Result<TxReport> {
         let mut in_progress = self.in_progress;
-        in_progress.transact_builder(self.builder)
-                   .and_then(|report| {
-                        in_progress.commit()?;
-                        Ok(report)
-                   })
+        in_progress
+            .transact_builder(self.builder)
+            .and_then(|report| {
+                in_progress.commit()?;
+                Ok(report)
+            })
     }
 }
 
 impl<'a, 'c> BuildTerms for InProgressBuilder<'a, 'c> {
-    fn named_tempid<I>(&mut self, name: I) -> ValueRc<TempId> where I: Into<String> {
+    fn named_tempid<I>(&mut self, name: I) -> ValueRc<TempId>
+    where
+        I: Into<String>,
+    {
         self.builder.named_tempid(name)
     }
 
@@ -241,7 +270,10 @@ impl<'a, 'c> BuildTerms for InProgressBuilder<'a, 'c> {
         self.describe(e)
     }
 
-    fn describe<E>(self, entity: E) -> EntityBuilder<InProgressBuilder<'a, 'c>> where E: Into<EntityPlace<TypedValue>> {
+    fn describe<E>(self, entity: E) -> EntityBuilder<InProgressBuilder<'a, 'c>>
+    where
+        E: Into<EntityPlace<TypedValue>>,
+    {
         EntityBuilder {
             builder: self,
             entity: entity.into(),
@@ -249,16 +281,20 @@ impl<'a, 'c> BuildTerms for InProgressBuilder<'a, 'c> {
     }
 
     fn add<E, A, V>(&mut self, e: E, a: A, v: V) -> Result<()>
-    where E: Into<EntityPlace<TypedValue>>,
-          A: Into<AttributePlace>,
-          V: Into<ValuePlace<TypedValue>> {
+    where
+        E: Into<EntityPlace<TypedValue>>,
+        A: Into<AttributePlace>,
+        V: Into<ValuePlace<TypedValue>>,
+    {
         self.builder.add(e, a, v)
     }
 
     fn retract<E, A, V>(&mut self, e: E, a: A, v: V) -> Result<()>
-    where E: Into<EntityPlace<TypedValue>>,
-          A: Into<AttributePlace>,
-          V: Into<ValuePlace<TypedValue>> {
+    where
+        E: Into<EntityPlace<TypedValue>>,
+        A: Into<AttributePlace>,
+        V: Into<ValuePlace<TypedValue>>,
+    {
         self.builder.retract(e, a, v)
     }
 }
@@ -267,7 +303,7 @@ impl<'a, 'c> EntityBuilder<InProgressBuilder<'a, 'c>> {
     /// Build the terms from this builder and transact them against the current
     /// `InProgress`. This method _always_ returns the `InProgress` -- failure doesn't
     /// imply an automatic rollback.
-    pub fn transact(self) -> (InProgress<'a, 'c>, Result<TxReport>)  {
+    pub fn transact(self) -> (InProgress<'a, 'c>, Result<TxReport>) {
         self.finish().0.transact()
     }
 

@@ -8,24 +8,13 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use std::collections::{
-    BTreeSet,
-    BTreeMap,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
-use core_traits::{
-    Entid,
-    TypedValue,
-    ValueType,
-};
+use core_traits::{Entid, TypedValue, ValueType};
 
-use db_traits::errors::{
-    CardinalityConflict,
-};
+use db_traits::errors::CardinalityConflict;
 
-use internal_types::{
-    AEVTrie,
-};
+use internal_types::AEVTrie;
 
 /// Map from found [e a v] to expected type.
 pub(crate) type TypeDisagreements = BTreeMap<(Entid, Entid, TypedValue), ValueType>;
@@ -63,7 +52,9 @@ pub(crate) fn type_disagreements<'schema>(aev_trie: &AEVTrie<'schema>) -> TypeDi
 /// We try to be maximally helpful by yielding every malformed set of datoms, rather than just the
 /// first set, or even the first conflict.  In the future, we might change this choice, or allow the
 /// consumer to specify the robustness of the cardinality checking desired.
-pub(crate) fn cardinality_conflicts<'schema>(aev_trie: &AEVTrie<'schema>) -> Vec<CardinalityConflict> {
+pub(crate) fn cardinality_conflicts<'schema>(
+    aev_trie: &AEVTrie<'schema>,
+) -> Vec<CardinalityConflict> {
     let mut errors = vec![];
 
     for (&(a, attribute), evs) in aev_trie {

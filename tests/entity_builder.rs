@@ -10,40 +10,22 @@
 
 #[macro_use]
 extern crate mentat;
-extern crate mentat_core;
-extern crate mentat_db;
-extern crate mentat_transaction;
-extern crate public_traits;
-extern crate core_traits;
-extern crate db_traits;
 
-use mentat::conn::{
-    Conn,
-};
+use db_traits;
 
-use core_traits::{
-    Entid,
-    KnownEntid,
-    TypedValue,
-};
+use mentat_db;
 
-use mentat_core::{
-    HasSchema,
-    TxReport,
-};
+use mentat::conn::Conn;
 
-use mentat_transaction::{
-    TermBuilder,
-    Queryable,
-};
+use core_traits::{Entid, KnownEntid, TypedValue};
 
-use public_traits::errors::{
-    MentatError,
-};
+use mentat_core::{HasSchema, TxReport};
 
-use mentat::entity_builder::{
-    BuildTerms,
-};
+use mentat_transaction::{Queryable, TermBuilder};
+
+use public_traits::errors::MentatError;
+
+use mentat::entity_builder::BuildTerms;
 
 // In reality we expect the store to hand these out safely.
 fn fake_known_entid(e: Entid) -> KnownEntid {
@@ -54,29 +36,41 @@ fn fake_known_entid(e: Entid) -> KnownEntid {
 fn test_entity_builder_bogus_entids() {
     let mut builder = TermBuilder::new();
     let e = builder.named_tempid("x");
-    let a1 = fake_known_entid(37);    // :db/doc
+    let a1 = fake_known_entid(37); // :db/doc
     let a2 = fake_known_entid(999);
     let v = TypedValue::typed_string("Some attribute");
     let ve = fake_known_entid(12345);
 
     builder.add(e.clone(), a1, v).expect("add succeeded");
-    builder.add(e.clone(), a2, e.clone()).expect("add succeeded, even though it's meaningless");
-    builder.add(e.clone(), a2, ve).expect("add succeeded, even though it's meaningless");
+    builder
+        .add(e.clone(), a2, e.clone())
+        .expect("add succeeded, even though it's meaningless");
+    builder
+        .add(e.clone(), a2, ve)
+        .expect("add succeeded, even though it's meaningless");
     let (terms, tempids) = builder.build().expect("build succeeded");
 
     assert_eq!(tempids.len(), 1);
-    assert_eq!(terms.len(), 3);     // TODO: check the contents?
+    assert_eq!(terms.len(), 3); // TODO: check the contents?
 
     // Now try to add them to a real store.
     let mut sqlite = mentat_db::db::new_connection("").unwrap();
     let mut conn = Conn::connect(&mut sqlite).unwrap();
-    let mut in_progress = conn.begin_transaction(&mut sqlite).expect("begun successfully");
+    let mut in_progress = conn
+        .begin_transaction(&mut sqlite)
+        .expect("begun successfully");
 
     // This should fail: unrecognized entid.
-    match in_progress.transact_entities(terms).expect_err("expected transact to fail") {
+    match in_progress
+        .transact_entities(terms)
+        .expect_err("expected transact to fail")
+    {
         MentatError::DbError(e) => {
-            assert_eq!(e.kind(), db_traits::errors::DbErrorKind::UnrecognizedEntid(999));
-        },
+            assert_eq!(
+                e.kind(),
+                db_traits::errors::DbErrorKind::UnrecognizedEntid(999)
+            );
+        }
         _ => panic!("Should have rejected the entid."),
     }
 }
@@ -87,7 +81,9 @@ fn test_in_progress_builder() {
     let mut conn = Conn::connect(&mut sqlite).unwrap();
 
     // Give ourselves a schema to work with!
-    conn.transact(&mut sqlite, r#"[
+    conn.transact(
+        &mut sqlite,
+        r#"[
         [:db/add "o" :db/ident :foo/one]
         [:db/add "o" :db/valueType :db.type/long]
         [:db/add "o" :db/cardinality :db.cardinality/one]
@@ -97,9 +93,13 @@ fn test_in_progress_builder() {
         [:db/add "r" :db/ident :foo/ref]
         [:db/add "r" :db/valueType :db.type/ref]
         [:db/add "r" :db/cardinality :db.cardinality/one]
-    ]"#).unwrap();
+    ]"#,
+    )
+    .unwrap();
 
-    let in_progress = conn.begin_transaction(&mut sqlite).expect("begun successfully");
+    let in_progress = conn
+        .begin_transaction(&mut sqlite)
+        .expect("begun successfully");
 
     // We can use this or not!
     let a_many = in_progress.get_entid(&kw!(:foo/many)).expect(":foo/many");
@@ -108,8 +108,12 @@ fn test_in_progress_builder() {
     let e_x = builder.named_tempid("x");
     let v_many_1 = TypedValue::typed_string("Some text");
     let v_many_2 = TypedValue::typed_string("Other text");
-    builder.add(e_x.clone(), kw!(:foo/many), v_many_1).expect("add succeeded");
-    builder.add(e_x.clone(), a_many, v_many_2).expect("add succeeded");
+    builder
+        .add(e_x.clone(), kw!(:foo/many), v_many_1)
+        .expect("add succeeded");
+    builder
+        .add(e_x.clone(), a_many, v_many_2)
+        .expect("add succeeded");
     builder.commit().expect("commit succeeded");
 }
 
@@ -126,7 +130,9 @@ fn test_entity_builder() {
     // Give ourselves a schema to work with!
     // Scoped borrow of conn.
     {
-        conn.transact(&mut sqlite, r#"[
+        conn.transact(
+            &mut sqlite,
+            r#"[
             [:db/add "o" :db/ident :foo/one]
             [:db/add "o" :db/valueType :db.type/long]
             [:db/add "o" :db/cardinality :db.cardinality/one]
@@ -136,9 +142,13 @@ fn test_entity_builder() {
             [:db/add "r" :db/ident :foo/ref]
             [:db/add "r" :db/valueType :db.type/ref]
             [:db/add "r" :db/cardinality :db.cardinality/one]
-        ]"#).unwrap();
+        ]"#,
+        )
+        .unwrap();
 
-        let mut in_progress = conn.begin_transaction(&mut sqlite).expect("begun successfully");
+        let mut in_progress = conn
+            .begin_transaction(&mut sqlite)
+            .expect("begun successfully");
 
         // Scoped borrow of in_progress.
         {
@@ -152,10 +162,18 @@ fn test_entity_builder() {
             let v_many_2 = TypedValue::typed_string("Other text");
             let v_long: TypedValue = 123.into();
 
-            builder.add(e_x.clone(), a_many, v_many_1).expect("add succeeded");
-            builder.add(e_x.clone(), a_many, v_many_2).expect("add succeeded");
-            builder.add(e_y.clone(), a_ref, e_x.clone()).expect("add succeeded");
-            builder.add(e_x.clone(), a_one, v_long).expect("add succeeded");
+            builder
+                .add(e_x.clone(), a_many, v_many_1)
+                .expect("add succeeded");
+            builder
+                .add(e_x.clone(), a_many, v_many_2)
+                .expect("add succeeded");
+            builder
+                .add(e_y.clone(), a_ref, e_x.clone())
+                .expect("add succeeded");
+            builder
+                .add(e_x.clone(), a_one, v_long)
+                .expect("add succeeded");
 
             let (terms, tempids) = builder.build().expect("build succeeded");
 
@@ -165,10 +183,18 @@ fn test_entity_builder() {
             report = in_progress.transact_entities(terms).expect("add succeeded");
             let x = report.tempids.get("x").expect("our tempid has an ID");
             let y = report.tempids.get("y").expect("our tempid has an ID");
-            assert_eq!(in_progress.lookup_value_for_attribute(*y, &foo_ref).expect("lookup succeeded"),
-                        Some(TypedValue::Ref(*x)));
-            assert_eq!(in_progress.lookup_value_for_attribute(*x, &foo_one).expect("lookup succeeded"),
-                        Some(TypedValue::Long(123)));
+            assert_eq!(
+                in_progress
+                    .lookup_value_for_attribute(*y, &foo_ref)
+                    .expect("lookup succeeded"),
+                Some(TypedValue::Ref(*x))
+            );
+            assert_eq!(
+                in_progress
+                    .lookup_value_for_attribute(*x, &foo_one)
+                    .expect("lookup succeeded"),
+                Some(TypedValue::Long(123))
+            );
         }
 
         in_progress.commit().expect("commit succeeded");
@@ -177,6 +203,9 @@ fn test_entity_builder() {
     // It's all still there after the commit.
     let x = report.tempids.get("x").expect("our tempid has an ID");
     let y = report.tempids.get("y").expect("our tempid has an ID");
-    assert_eq!(conn.lookup_value_for_attribute(&mut sqlite, *y, &foo_ref).expect("lookup succeeded"),
-                Some(TypedValue::Ref(*x)));
+    assert_eq!(
+        conn.lookup_value_for_attribute(&mut sqlite, *y, &foo_ref)
+            .expect("lookup succeeded"),
+        Some(TypedValue::Ref(*x))
+    );
 }

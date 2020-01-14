@@ -13,52 +13,31 @@
 //! This module implements the upsert resolution algorithm described at
 //! https://github.com/mozilla/mentat/wiki/Transacting:-upsert-resolution-algorithm.
 
-use std::collections::{
-    BTreeMap,
-    BTreeSet,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 use indexmap;
 use petgraph::unionfind;
 
-use db_traits::errors::{
-    DbErrorKind,
-    Result,
-};
-use types::{
-    AVPair,
-};
+use db_traits::errors::{DbErrorKind, Result};
 use internal_types::{
-    Population,
-    TempIdHandle,
-    TempIdMap,
-    Term,
-    TermWithoutTempIds,
-    TermWithTempIds,
-    TypedValueOr,
+    Population, TempIdHandle, TempIdMap, Term, TermWithTempIds, TermWithoutTempIds, TypedValueOr,
 };
+use types::AVPair;
 
 use mentat_core::util::Either::*;
 
-use core_traits::{
-    attribute,
-    Attribute,
-    Entid,
-    TypedValue,
-};
+use core_traits::{attribute, Attribute, Entid, TypedValue};
 
-use mentat_core::{
-    Schema,
-};
 use edn::entities::OpType;
+use mentat_core::Schema;
 use schema::SchemaBuilding;
 
 /// A "Simple upsert" that looks like [:db/add TEMPID a v], where a is :db.unique/identity.
-#[derive(Clone,Debug,Eq,Hash,Ord,PartialOrd,PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
 struct UpsertE(TempIdHandle, Entid, TypedValue);
 
 /// A "Complex upsert" that looks like [:db/add TEMPID a OTHERID], where a is :db.unique/identity
-#[derive(Clone,Debug,Eq,Hash,Ord,PartialOrd,PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
 struct UpsertEV(TempIdHandle, Entid, TempIdHandle);
 
 /// A generation collects entities into populations at a single evolutionary step in the upsert
@@ -67,7 +46,7 @@ struct UpsertEV(TempIdHandle, Entid, TempIdHandle);
 /// The upsert resolution process is only concerned with [:db/add ...] entities until the final
 /// entid allocations.  That's why we separate into special simple and complex upsert types
 /// immediately, and then collect the more general term types for final resolution.
-#[derive(Clone,Debug,Default,Eq,Hash,Ord,PartialOrd,PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub(crate) struct Generation {
     /// "Simple upserts" that look like [:db/add TEMPID a v], where a is :db.unique/identity.
     upserts_e: Vec<UpsertE>,
@@ -90,7 +69,7 @@ pub(crate) struct Generation {
     resolved: Vec<TermWithoutTempIds>,
 }
 
-#[derive(Clone,Debug,Default,Eq,Hash,Ord,PartialOrd,PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub(crate) struct FinalPopulations {
     /// Upserts that upserted.
     pub upserted: Vec<TermWithoutTempIds>,
@@ -105,7 +84,10 @@ pub(crate) struct FinalPopulations {
 impl Generation {
     /// Split entities into a generation of populations that need to evolve to have their tempids
     /// resolved or allocated, and a population of inert entities that do not reference tempids.
-    pub(crate) fn from<I>(terms: I, schema: &Schema) -> Result<(Generation, Population)> where I: IntoIterator<Item=TermWithTempIds> {
+    pub(crate) fn from<I>(terms: I, schema: &Schema) -> Result<(Generation, Population)>
+    where
+        I: IntoIterator<Item = TermWithTempIds>,
+    {
         let mut generation = Generation::default();
         let mut inert = vec![];
 
@@ -120,22 +102,28 @@ impl Generation {
                     if op == OpType::Add && is_unique(a)? {
                         generation.upserts_ev.push(UpsertEV(e, a, v));
                     } else {
-                        generation.allocations.push(Term::AddOrRetract(op, Right(e), a, Right(v)));
+                        generation
+                            .allocations
+                            .push(Term::AddOrRetract(op, Right(e), a, Right(v)));
                     }
-                },
+                }
                 Term::AddOrRetract(op, Right(e), a, Left(v)) => {
                     if op == OpType::Add && is_unique(a)? {
                         generation.upserts_e.push(UpsertE(e, a, v));
                     } else {
-                        generation.allocations.push(Term::AddOrRetract(op, Right(e), a, Left(v)));
+                        generation
+                            .allocations
+                            .push(Term::AddOrRetract(op, Right(e), a, Left(v)));
                     }
-                },
+                }
                 Term::AddOrRetract(op, Left(e), a, Right(v)) => {
-                    generation.allocations.push(Term::AddOrRetract(op, Left(e), a, Right(v)));
-                },
+                    generation
+                        .allocations
+                        .push(Term::AddOrRetract(op, Left(e), a, Right(v)));
+                }
                 Term::AddOrRetract(op, Left(e), a, Left(v)) => {
                     inert.push(Term::AddOrRetract(op, Left(e), a, Left(v)));
-                },
+                }
             }
         }
 
@@ -164,7 +152,10 @@ impl Generation {
         for UpsertE(t, a, v) in self.upserts_e {
             match temp_id_map.get(&*t) {
                 Some(&n) => next.upserted.push(Term::AddOrRetract(OpType::Add, n, a, v)),
-                None => next.allocations.push(Term::AddOrRetract(OpType::Add, Right(t), a, Left(v))),
+                None => {
+                    next.allocations
+                        .push(Term::AddOrRetract(OpType::Add, Right(t), a, Left(v)))
+                }
             }
         }
 
@@ -175,10 +166,13 @@ impl Generation {
                     // could conflict.  Moving straight to resolved doesn't give us a chance to
                     // search the store for the conflict.
                     next.upserts_e.push(UpsertE(t1, a, TypedValue::Ref(n2.0)))
-                },
+                }
                 (None, Some(&n2)) => next.upserts_e.push(UpsertE(t1, a, TypedValue::Ref(n2.0))),
-                (Some(&n1), None) => next.allocations.push(Term::AddOrRetract(OpType::Add, Left(n1), a, Right(t2))),
-                (None, None) => next.upserts_ev.push(UpsertEV(t1, a, t2))
+                (Some(&n1), None) => {
+                    next.allocations
+                        .push(Term::AddOrRetract(OpType::Add, Left(n1), a, Right(t2)))
+                }
+                (None, None) => next.upserts_ev.push(UpsertEV(t1, a, t2)),
             }
         }
 
@@ -190,23 +184,40 @@ impl Generation {
             match term {
                 Term::AddOrRetract(op, Right(t1), a, Right(t2)) => {
                     match (temp_id_map.get(&*t1), temp_id_map.get(&*t2)) {
-                        (Some(&n1), Some(&n2)) => next.resolved.push(Term::AddOrRetract(op, n1, a, TypedValue::Ref(n2.0))),
-                        (None, Some(&n2)) => next.allocations.push(Term::AddOrRetract(op, Right(t1), a, Left(TypedValue::Ref(n2.0)))),
-                        (Some(&n1), None) => next.allocations.push(Term::AddOrRetract(op, Left(n1), a, Right(t2))),
-                        (None, None) => next.allocations.push(Term::AddOrRetract(op, Right(t1), a, Right(t2))),
+                        (Some(&n1), Some(&n2)) => {
+                            next.resolved
+                                .push(Term::AddOrRetract(op, n1, a, TypedValue::Ref(n2.0)))
+                        }
+                        (None, Some(&n2)) => next.allocations.push(Term::AddOrRetract(
+                            op,
+                            Right(t1),
+                            a,
+                            Left(TypedValue::Ref(n2.0)),
+                        )),
+                        (Some(&n1), None) => {
+                            next.allocations
+                                .push(Term::AddOrRetract(op, Left(n1), a, Right(t2)))
+                        }
+                        (None, None) => {
+                            next.allocations
+                                .push(Term::AddOrRetract(op, Right(t1), a, Right(t2)))
+                        }
                     }
+                }
+                Term::AddOrRetract(op, Right(t), a, Left(v)) => match temp_id_map.get(&*t) {
+                    Some(&n) => next.resolved.push(Term::AddOrRetract(op, n, a, v)),
+                    None => next
+                        .allocations
+                        .push(Term::AddOrRetract(op, Right(t), a, Left(v))),
                 },
-                Term::AddOrRetract(op, Right(t), a, Left(v)) => {
-                    match temp_id_map.get(&*t) {
-                        Some(&n) => next.resolved.push(Term::AddOrRetract(op, n, a, v)),
-                        None => next.allocations.push(Term::AddOrRetract(op, Right(t), a, Left(v))),
+                Term::AddOrRetract(op, Left(e), a, Right(t)) => match temp_id_map.get(&*t) {
+                    Some(&n) => {
+                        next.resolved
+                            .push(Term::AddOrRetract(op, e, a, TypedValue::Ref(n.0)))
                     }
-                },
-                Term::AddOrRetract(op, Left(e), a, Right(t)) => {
-                    match temp_id_map.get(&*t) {
-                        Some(&n) => next.resolved.push(Term::AddOrRetract(op, e, a, TypedValue::Ref(n.0))),
-                        None => next.allocations.push(Term::AddOrRetract(op, Left(e), a, Right(t))),
-                    }
+                    None => next
+                        .allocations
+                        .push(Term::AddOrRetract(op, Left(e), a, Right(t))),
                 },
                 Term::AddOrRetract(_, Left(_), _, Left(_)) => unreachable!(),
             }
@@ -232,7 +243,11 @@ impl Generation {
         let mut upserts_ev = vec![];
         ::std::mem::swap(&mut self.upserts_ev, &mut upserts_ev);
 
-        self.allocations.extend(upserts_ev.into_iter().map(|UpsertEV(t1, a, t2)| Term::AddOrRetract(OpType::Add, Right(t1), a, Right(t2))));
+        self.allocations.extend(
+            upserts_ev.into_iter().map(|UpsertEV(t1, a, t2)| {
+                Term::AddOrRetract(OpType::Add, Right(t1), a, Right(t2))
+            }),
+        );
 
         Ok(())
     }
@@ -241,12 +256,16 @@ impl Generation {
     ///
     /// Some of the tempids may be identified, so we also provide a map from tempid to a dense set
     /// of contiguous integer labels.
-    pub(crate) fn temp_ids_in_allocations(&self, schema: &Schema) -> Result<BTreeMap<TempIdHandle, usize>> {
+    pub(crate) fn temp_ids_in_allocations(
+        &self,
+        schema: &Schema,
+    ) -> Result<BTreeMap<TempIdHandle, usize>> {
         assert!(self.upserts_e.is_empty(), "All upserts should have been upserted, resolved, or moved to the allocated population!");
         assert!(self.upserts_ev.is_empty(), "All upserts should have been upserted, resolved, or moved to the allocated population!");
 
         let mut temp_ids: BTreeSet<TempIdHandle> = BTreeSet::default();
-        let mut tempid_avs: BTreeMap<(Entid, TypedValueOr<TempIdHandle>), Vec<TempIdHandle>> = BTreeMap::default();
+        let mut tempid_avs: BTreeMap<(Entid, TypedValueOr<TempIdHandle>), Vec<TempIdHandle>> =
+            BTreeMap::default();
 
         for term in self.allocations.iter() {
             match term {
@@ -255,24 +274,30 @@ impl Generation {
                     temp_ids.insert(t2.clone());
                     let attribute: &Attribute = schema.require_attribute_for_entid(a)?;
                     if attribute.unique == Some(attribute::Unique::Identity) {
-                        tempid_avs.entry((a, Right(t2.clone()))).or_insert(vec![]).push(t1.clone());
+                        tempid_avs
+                            .entry((a, Right(t2.clone())))
+                            .or_insert(vec![])
+                            .push(t1.clone());
                     }
-                },
+                }
                 &Term::AddOrRetract(OpType::Add, Right(ref t), a, ref x @ Left(_)) => {
                     temp_ids.insert(t.clone());
                     let attribute: &Attribute = schema.require_attribute_for_entid(a)?;
                     if attribute.unique == Some(attribute::Unique::Identity) {
-                        tempid_avs.entry((a, x.clone())).or_insert(vec![]).push(t.clone());
+                        tempid_avs
+                            .entry((a, x.clone()))
+                            .or_insert(vec![])
+                            .push(t.clone());
                     }
-                },
+                }
                 &Term::AddOrRetract(OpType::Add, Left(_), _, Right(ref t)) => {
                     temp_ids.insert(t.clone());
-                },
+                }
                 &Term::AddOrRetract(OpType::Add, Left(_), _, Left(_)) => unreachable!(),
                 &Term::AddOrRetract(OpType::Retract, _, _, _) => {
                     // [:db/retract ...] entities never allocate entids; they have to resolve due to
                     // other upserts (or they fail the transaction).
-                },
+                }
             }
         }
 
@@ -282,16 +307,25 @@ impl Generation {
 
         // The union-find implementation from petgraph operates on contiguous indices, so we need to
         // maintain the map from our tempids to indices ourselves.
-        let temp_ids: BTreeMap<TempIdHandle, usize> = temp_ids.into_iter().enumerate().map(|(i, tempid)| (tempid, i)).collect();
+        let temp_ids: BTreeMap<TempIdHandle, usize> = temp_ids
+            .into_iter()
+            .enumerate()
+            .map(|(i, tempid)| (tempid, i))
+            .collect();
 
-        debug!("need to label tempids aggregated using tempid_avs {:?}", tempid_avs);
+        debug!(
+            "need to label tempids aggregated using tempid_avs {:?}",
+            tempid_avs
+        );
 
         for vs in tempid_avs.values() {
-            vs.first().and_then(|first| temp_ids.get(first)).map(|&first_index| {
-                for tempid in vs {
-                    temp_ids.get(tempid).map(|&i| uf.union(first_index, i));
-                }
-            });
+            vs.first()
+                .and_then(|first| temp_ids.get(first))
+                .map(|&first_index| {
+                    for tempid in vs {
+                        temp_ids.get(tempid).map(|&i| uf.union(first_index, i));
+                    }
+                });
         }
 
         debug!("union-find aggregation {:?}", uf.clone().into_labeling());
@@ -308,17 +342,26 @@ impl Generation {
         for (tempid, tempid_index) in temp_ids {
             let rep = uf.find_mut(tempid_index);
             dense_labels.insert(rep);
-            dense_labels.get_full(&rep).map(|(dense_index, _)| tempid_map.insert(tempid.clone(), dense_index));
+            dense_labels
+                .get_full(&rep)
+                .map(|(dense_index, _)| tempid_map.insert(tempid.clone(), dense_index));
         }
 
-        debug!("labeled tempids using {} labels: {:?}", dense_labels.len(), tempid_map);
+        debug!(
+            "labeled tempids using {} labels: {:?}",
+            dense_labels.len(),
+            tempid_map
+        );
 
         Ok(tempid_map)
     }
 
     /// After evolution is complete, use the provided allocated entids to segment `self` into
     /// populations, each with no references to tempids.
-    pub(crate) fn into_final_populations(self, temp_id_map: &TempIdMap) -> Result<FinalPopulations> {
+    pub(crate) fn into_final_populations(
+        self,
+        temp_id_map: &TempIdMap,
+    ) -> Result<FinalPopulations> {
         assert!(self.upserts_e.is_empty());
         assert!(self.upserts_ev.is_empty());
 
@@ -336,21 +379,27 @@ impl Generation {
                         (OpType::Add, _, _) => unreachable!(), // This is a coding error -- every tempid in a :db/add entity should resolve or be allocated.
                         (OpType::Retract, _, _) => bail!(DbErrorKind::NotYetImplemented(format!("[:db/retract ...] entity referenced tempid that did not upsert: one of {}, {}", t1, t2))),
                     }
-                },
+                }
                 Term::AddOrRetract(op, Right(t), a, Left(v)) => {
                     match (op, temp_id_map.get(&*t)) {
                         (op, Some(&n)) => Term::AddOrRetract(op, n, a, v),
                         (OpType::Add, _) => unreachable!(), // This is a coding error.
-                        (OpType::Retract, _) => bail!(DbErrorKind::NotYetImplemented(format!("[:db/retract ...] entity referenced tempid that did not upsert: {}", t))),
+                        (OpType::Retract, _) => bail!(DbErrorKind::NotYetImplemented(format!(
+                            "[:db/retract ...] entity referenced tempid that did not upsert: {}",
+                            t
+                        ))),
                     }
-                },
+                }
                 Term::AddOrRetract(op, Left(e), a, Right(t)) => {
                     match (op, temp_id_map.get(&*t)) {
                         (op, Some(&n)) => Term::AddOrRetract(op, e, a, TypedValue::Ref(n.0)),
                         (OpType::Add, _) => unreachable!(), // This is a coding error.
-                        (OpType::Retract, _) => bail!(DbErrorKind::NotYetImplemented(format!("[:db/retract ...] entity referenced tempid that did not upsert: {}", t))),
+                        (OpType::Retract, _) => bail!(DbErrorKind::NotYetImplemented(format!(
+                            "[:db/retract ...] entity referenced tempid that did not upsert: {}",
+                            t
+                        ))),
                     }
-                },
+                }
                 Term::AddOrRetract(_, Left(_), _, Left(_)) => unreachable!(), // This is a coding error -- these should not be in allocations.
             };
             populations.allocated.push(allocated);

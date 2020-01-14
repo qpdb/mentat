@@ -8,18 +8,11 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use edn::query::{
-    WhereFn,
-};
+use edn::query::WhereFn;
 
-use clauses::{
-    ConjoiningClauses,
-};
+use clauses::ConjoiningClauses;
 
-use query_algebrizer_traits::errors::{
-    AlgebrizerError,
-    Result,
-};
+use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
 use Known;
 

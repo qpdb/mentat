@@ -10,12 +10,11 @@
 
 #![allow(dead_code)]
 
+use edn::symbols;
 /// Literal `Value` instances in the the "db" namespace.
 ///
 /// Used through-out the transactor to match core DB constructs.
-
 use edn::types::Value;
-use edn::symbols;
 
 /// Declare a lazy static `ident` of type `Value::Keyword` with the given `namespace` and
 /// `name`.

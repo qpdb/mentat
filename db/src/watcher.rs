@@ -17,22 +17,13 @@
 // - When observers are registered we want to flip some flags as writes occur so that we can
 //   notifying them outside the transaction.
 
-use core_traits::{
-    Entid,
-    TypedValue,
-};
+use core_traits::{Entid, TypedValue};
 
-use mentat_core::{
-    Schema,
-};
+use mentat_core::Schema;
 
-use edn::entities::{
-    OpType,
-};
+use edn::entities::OpType;
 
-use db_traits::errors::{
-    Result,
-};
+use db_traits::errors::Result;
 
 pub trait TransactWatcher {
     fn datom(&mut self, op: OpType, e: Entid, a: Entid, v: &TypedValue);
@@ -47,8 +38,7 @@ pub trait TransactWatcher {
 pub struct NullWatcher();
 
 impl TransactWatcher for NullWatcher {
-    fn datom(&mut self, _op: OpType, _e: Entid, _a: Entid, _v: &TypedValue) {
-    }
+    fn datom(&mut self, _op: OpType, _e: Entid, _a: Entid, _v: &TypedValue) {}
 
     fn done(&mut self, _t: &Entid, _schema: &Schema) -> Result<()> {
         Ok(())

@@ -8,36 +8,22 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
+extern crate core_traits;
 extern crate edn;
 extern crate mentat_core;
-extern crate core_traits;
 extern crate mentat_query_algebrizer;
 extern crate mentat_query_projector;
 extern crate query_projector_traits;
 
-use core_traits::{
-    Attribute,
-    Entid,
-    ValueType,
-};
+use core_traits::{Attribute, Entid, ValueType};
 
-use mentat_core::{
-    Schema,
-};
+use mentat_core::Schema;
 
-use edn::query::{
-    Keyword,
-};
+use edn::query::Keyword;
 
-use mentat_query_algebrizer::{
-    Known,
-    algebrize,
-    parse_find_string,
-};
+use mentat_query_algebrizer::{algebrize, parse_find_string, Known};
 
-use mentat_query_projector::{
-    query_projection,
-};
+use mentat_query_projector::query_projection;
 
 // These are helpers that tests use to build Schema instances.
 fn associate_ident(schema: &mut Schema, i: Keyword, e: Entid) {
@@ -54,21 +40,33 @@ fn prepopulated_schema() -> Schema {
     associate_ident(&mut schema, Keyword::namespaced("foo", "name"), 65);
     associate_ident(&mut schema, Keyword::namespaced("foo", "age"), 68);
     associate_ident(&mut schema, Keyword::namespaced("foo", "height"), 69);
-    add_attribute(&mut schema, 65, Attribute {
-        value_type: ValueType::String,
-        multival: false,
-        ..Default::default()
-    });
-    add_attribute(&mut schema, 68, Attribute {
-        value_type: ValueType::Long,
-        multival: false,
-        ..Default::default()
-    });
-    add_attribute(&mut schema, 69, Attribute {
-        value_type: ValueType::Long,
-        multival: false,
-        ..Default::default()
-    });
+    add_attribute(
+        &mut schema,
+        65,
+        Attribute {
+            value_type: ValueType::String,
+            multival: false,
+            ..Default::default()
+        },
+    );
+    add_attribute(
+        &mut schema,
+        68,
+        Attribute {
+            value_type: ValueType::Long,
+            multival: false,
+            ..Default::default()
+        },
+    );
+    add_attribute(
+        &mut schema,
+        69,
+        Attribute {
+            value_type: ValueType::Long,
+            multival: false,
+            ..Default::default()
+        },
+    );
     schema
 }
 
@@ -103,13 +101,11 @@ fn test_the_without_max_or_min() {
     // … when we look at the projection list, we cannot reconcile the types.
     let projection = query_projection(&schema, &algebrized);
     assert!(projection.is_err());
-    use query_projector_traits::errors::{
-        ProjectorError,
-    };
+    use query_projector_traits::errors::ProjectorError;
     match projection.err().expect("expected failure") {
         ProjectorError::InvalidProjection(s) => {
-                assert_eq!(s.as_str(), "Warning: used `the` without `min` or `max`.");
-            },
+            assert_eq!(s.as_str(), "Warning: used `the` without `min` or `max`.");
+        }
         _ => panic!(),
     }
 }

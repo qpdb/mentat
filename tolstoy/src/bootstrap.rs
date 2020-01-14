@@ -8,32 +8,20 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use mentat_core::{
-    Keyword,
-};
+use mentat_core::Keyword;
 
-use mentat_db::{
-    CORE_SCHEMA_VERSION,
-};
+use mentat_db::CORE_SCHEMA_VERSION;
 
-use public_traits::errors::{
-    Result,
-};
+use public_traits::errors::Result;
 
-use tolstoy_traits::errors::{
-    TolstoyError,
-};
+use tolstoy_traits::errors::TolstoyError;
 
-use datoms::{
-    DatomsHelper,
-};
+use crate::datoms::DatomsHelper;
 
-use types::{
-    Tx,
-};
+use crate::types::Tx;
 
 pub struct BootstrapHelper<'a> {
-    parts: DatomsHelper<'a>
+    parts: DatomsHelper<'a>,
 }
 
 impl<'a> BootstrapHelper<'a> {
@@ -58,10 +46,14 @@ impl<'a> BootstrapHelper<'a> {
                 // TODO v is just a type tag and a Copy value, we shouldn't need to clone.
                 match v.clone().into_long() {
                     Some(v) => Ok(v),
-                    None => bail!(TolstoyError::BadRemoteState("incorrect type for core schema version".to_string()))
+                    None => bail!(TolstoyError::BadRemoteState(
+                        "incorrect type for core schema version".to_string()
+                    )),
                 }
-            },
-            None => bail!(TolstoyError::BadRemoteState("missing core schema version".to_string()))
+            }
+            None => bail!(TolstoyError::BadRemoteState(
+                "missing core schema version".to_string()
+            )),
         }
     }
 }
@@ -70,11 +62,9 @@ impl<'a> BootstrapHelper<'a> {
 mod tests {
     use super::*;
 
-    use mentat_db::debug::{
-        TestConn,
-    };
+    use mentat_db::debug::TestConn;
 
-    use debug::txs_after;
+    use crate::debug::txs_after;
 
     #[test]
     fn test_bootstrap_version() {

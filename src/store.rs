@@ -10,68 +10,34 @@
 
 #![allow(dead_code)]
 
-use std::collections::{
-    BTreeMap,
-};
+use std::collections::BTreeMap;
 
-use std::sync::{
-    Arc,
-};
+use std::sync::Arc;
 
 use rusqlite;
 
 use edn;
 
-use core_traits::{
-    Entid,
-    StructuredMap,
-    TypedValue,
-};
+use core_traits::{Entid, StructuredMap, TypedValue};
 
-use mentat_core::{
-    Keyword,
-    TxReport,
-    ValueRc,
-};
-use mentat_db::{
-    TxObserver,
-};
+use mentat_core::{Keyword, TxReport, ValueRc};
+use mentat_db::TxObserver;
 
 use mentat_transaction::{
-    CacheAction,
-    CacheDirection,
-    InProgress,
-    InProgressRead,
-    Pullable,
-    Queryable,
+    CacheAction, CacheDirection, InProgress, InProgressRead, Pullable, Queryable,
 };
 
-use conn::{
-    Conn,
-};
+use super::conn::Conn;
 
-use public_traits::errors::{
-    Result,
-};
+use public_traits::errors::Result;
 
-use mentat_transaction::query::{
-    PreparedResult,
-    QueryExplanation,
-    QueryInputs,
-    QueryOutput,
-};
+use mentat_transaction::query::{PreparedResult, QueryExplanation, QueryInputs, QueryOutput};
 
 #[cfg(feature = "syncable")]
-use mentat_tolstoy::{
-    SyncReport,
-    SyncResult,
-    SyncFollowup,
-};
+use mentat_tolstoy::{SyncFollowup, SyncReport, SyncResult};
 
 #[cfg(feature = "syncable")]
-use sync::{
-    Syncable,
-};
+use super::sync::Syncable;
 
 /// A convenience wrapper around a single SQLite connection and a Conn. This is suitable
 /// for applications that don't require complex connection management.
@@ -83,7 +49,7 @@ pub struct Store {
 impl Store {
     /// Open a store at the supplied path, ensuring that it includes the bootstrap schema.
     pub fn open(path: &str) -> Result<Store> {
-        let mut connection = ::new_connection(path)?;
+        let mut connection = crate::new_connection(path)?;
         let conn = Conn::connect(&mut connection)?;
         Ok(Store {
             conn: conn,
@@ -109,12 +75,12 @@ impl Store {
             match report {
                 SyncReport::Merge(SyncFollowup::FullSync) => {
                     reports.push(report);
-                    continue
-                },
+                    continue;
+                }
                 _ => {
                     reports.push(report);
-                    break
-                },
+                    break;
+                }
             }
         }
         if reports.len() == 1 {
@@ -156,7 +122,11 @@ impl Store {
 
     #[cfg(test)]
     pub fn is_registered_as_observer(&self, key: &String) -> bool {
-        self.conn.tx_observer_service.lock().unwrap().is_registered(key)
+        self.conn
+            .tx_observer_service
+            .lock()
+            .unwrap()
+            .is_registered(key)
     }
 }
 
@@ -179,11 +149,13 @@ impl Store {
 
     pub fn cache(&mut self, attr: &Keyword, direction: CacheDirection) -> Result<()> {
         let schema = &self.conn.current_schema();
-        self.conn.cache(&mut self.sqlite,
-                        schema,
-                        attr,
-                        direction,
-                        CacheAction::Register)
+        self.conn.cache(
+            &mut self.sqlite,
+            schema,
+            attr,
+            direction,
+            CacheAction::Register,
+        )
     }
 
     pub fn register_observer(&mut self, key: String, observer: Arc<TxObserver>) {
@@ -201,41 +173,71 @@ impl Store {
 
 impl Queryable for Store {
     fn q_once<T>(&self, query: &str, inputs: T) -> Result<QueryOutput>
-        where T: Into<Option<QueryInputs>> {
+    where
+        T: Into<Option<QueryInputs>>,
+    {
         self.conn.q_once(&self.sqlite, query, inputs)
     }
 
-    fn q_prepare<T>(&self, query: &str, inputs: T) -> PreparedResult
-        where T: Into<Option<QueryInputs>> {
+    fn q_prepare<T>(&self, query: &str, inputs: T) -> PreparedResult<'_>
+    where
+        T: Into<Option<QueryInputs>>,
+    {
         self.conn.q_prepare(&self.sqlite, query, inputs)
     }
 
     fn q_explain<T>(&self, query: &str, inputs: T) -> Result<QueryExplanation>
-        where T: Into<Option<QueryInputs>> {
+    where
+        T: Into<Option<QueryInputs>>,
+    {
         self.conn.q_explain(&self.sqlite, query, inputs)
     }
 
-    fn lookup_values_for_attribute<E>(&self, entity: E, attribute: &edn::Keyword) -> Result<Vec<TypedValue>>
-        where E: Into<Entid> {
-        self.conn.lookup_values_for_attribute(&self.sqlite, entity.into(), attribute)
+    fn lookup_values_for_attribute<E>(
+        &self,
+        entity: E,
+        attribute: &edn::Keyword,
+    ) -> Result<Vec<TypedValue>>
+    where
+        E: Into<Entid>,
+    {
+        self.conn
+            .lookup_values_for_attribute(&self.sqlite, entity.into(), attribute)
     }
 
-    fn lookup_value_for_attribute<E>(&self, entity: E, attribute: &edn::Keyword) -> Result<Option<TypedValue>>
-        where E: Into<Entid> {
-        self.conn.lookup_value_for_attribute(&self.sqlite, entity.into(), attribute)
+    fn lookup_value_for_attribute<E>(
+        &self,
+        entity: E,
+        attribute: &edn::Keyword,
+    ) -> Result<Option<TypedValue>>
+    where
+        E: Into<Entid>,
+    {
+        self.conn
+            .lookup_value_for_attribute(&self.sqlite, entity.into(), attribute)
     }
 }
 
 impl Pullable for Store {
-    fn pull_attributes_for_entities<E, A>(&self, entities: E, attributes: A) -> Result<BTreeMap<Entid, ValueRc<StructuredMap>>>
-    where E: IntoIterator<Item=Entid>,
-          A: IntoIterator<Item=Entid> {
-        self.conn.pull_attributes_for_entities(&self.sqlite, entities, attributes)
+    fn pull_attributes_for_entities<E, A>(
+        &self,
+        entities: E,
+        attributes: A,
+    ) -> Result<BTreeMap<Entid, ValueRc<StructuredMap>>>
+    where
+        E: IntoIterator<Item = Entid>,
+        A: IntoIterator<Item = Entid>,
+    {
+        self.conn
+            .pull_attributes_for_entities(&self.sqlite, entities, attributes)
     }
 
     fn pull_attributes_for_entity<A>(&self, entity: Entid, attributes: A) -> Result<StructuredMap>
-    where A: IntoIterator<Item=Entid> {
-        self.conn.pull_attributes_for_entity(&self.sqlite, entity, attributes)
+    where
+        A: IntoIterator<Item = Entid>,
+    {
+        self.conn
+            .pull_attributes_for_entity(&self.sqlite, entity, attributes)
     }
 }
 
@@ -243,60 +245,31 @@ impl Pullable for Store {
 mod tests {
     use super::*;
 
-    extern crate time;
+    use time;
 
     use uuid::Uuid;
 
-    use std::collections::{
-        BTreeSet,
-    };
-    use std::path::{
-        Path,
-        PathBuf,
-    };
+    use std::collections::BTreeSet;
+    use std::path::{Path, PathBuf};
     use std::sync::mpsc;
-    use std::sync::{
-        Mutex,
-    };
-    use std::time::{
-        Duration,
-    };
+    use std::sync::Mutex;
+    use std::time::Duration;
 
-    use mentat_db::cache::{
-        SQLiteAttributeCache,
-    };
+    use mentat_db::cache::SQLiteAttributeCache;
 
-    use core_traits::{
-        TypedValue,
-        ValueType,
-    };
+    use core_traits::{TypedValue, ValueType};
 
-    use mentat_core::{
-        CachedAttributes,
-        HasSchema,
-    };
+    use mentat_core::{CachedAttributes, HasSchema};
 
-    use mentat_transaction::entity_builder::{
-        BuildTerms,
-    };
+    use mentat_transaction::entity_builder::BuildTerms;
 
-    use mentat_transaction::query::{
-        PreparedQuery,
-    };
+    use mentat_transaction::query::PreparedQuery;
 
-    use ::{
-        QueryInputs,
-    };
+    use mentat_query_algebrizer::QueryInputs;
 
-    use ::vocabulary::{
-        AttributeBuilder,
-        Definition,
-        VersionedStore,
-    };
+    use crate::vocabulary::{AttributeBuilder, Definition, VersionedStore};
 
-    use core_traits::attribute::{
-        Unique,
-    };
+    use core_traits::attribute::Unique;
 
     fn fixture_path(rest: &str) -> PathBuf {
         let fixtures = Path::new("fixtures/");
@@ -307,11 +280,33 @@ mod tests {
     fn test_prepared_query_with_cache() {
         let mut store = Store::open("").expect("opened");
         let mut in_progress = store.begin_transaction().expect("began");
-        in_progress.import(fixture_path("cities.schema")).expect("transacted schema");
-        in_progress.import(fixture_path("all_seattle.edn")).expect("transacted data");
-        in_progress.cache(&kw!(:neighborhood/district), CacheDirection::Forward, CacheAction::Register).expect("cache done");
-        in_progress.cache(&kw!(:district/name), CacheDirection::Forward, CacheAction::Register).expect("cache done");
-        in_progress.cache(&kw!(:neighborhood/name), CacheDirection::Reverse, CacheAction::Register).expect("cache done");
+        in_progress
+            .import(fixture_path("cities.schema"))
+            .expect("transacted schema");
+        in_progress
+            .import(fixture_path("all_seattle.edn"))
+            .expect("transacted data");
+        in_progress
+            .cache(
+                &kw!(:neighborhood/district),
+                CacheDirection::Forward,
+                CacheAction::Register,
+            )
+            .expect("cache done");
+        in_progress
+            .cache(
+                &kw!(:district/name),
+                CacheDirection::Forward,
+                CacheAction::Register,
+            )
+            .expect("cache done");
+        in_progress
+            .cache(
+                &kw!(:neighborhood/name),
+                CacheDirection::Reverse,
+                CacheAction::Register,
+            )
+            .expect("cache done");
 
         let query = r#"[:find ?district
                         :in ?hood
@@ -320,21 +315,29 @@ mod tests {
                         [?neighborhood :neighborhood/district ?d]
                         [?d :district/name ?district]]"#;
         let hood = "Beacon Hill";
-        let inputs = QueryInputs::with_value_sequence(vec![(var!(?hood), TypedValue::typed_string(hood).into())]);
-        let mut prepared = in_progress.q_prepare(query, inputs)
-                                      .expect("prepared");
+        let inputs = QueryInputs::with_value_sequence(vec![(
+            var!(?hood),
+            TypedValue::typed_string(hood).into(),
+        )]);
+        let mut prepared = in_progress.q_prepare(query, inputs).expect("prepared");
         match &prepared {
-            &PreparedQuery::Constant { select: ref _select } => {},
+            &PreparedQuery::Constant {
+                select: ref _select,
+            } => {}
             _ => panic!(),
         };
 
-
-        let start = time::PreciseTime::now();
+        let start = time::Instant::now();
         let results = prepared.run(None).expect("results");
-        let end = time::PreciseTime::now();
-        println!("Prepared cache execution took {}µs", start.to(end).num_microseconds().unwrap());
-        assert_eq!(results.into_rel().expect("result"),
-                   vec![vec![TypedValue::typed_string("Greater Duwamish")]].into());
+        let end = time::Instant::now();
+        println!(
+            "Prepared cache execution took {}µs",
+            (end - start).whole_microseconds()
+        );
+        assert_eq!(
+            results.into_rel().expect("result"),
+            vec![vec![TypedValue::typed_string("Greater Duwamish")]].into()
+        );
     }
 
     trait StoreCache {
@@ -364,7 +367,9 @@ mod tests {
 
         {
             let mut in_progress = store.begin_transaction().expect("begun");
-            in_progress.transact(r#"[
+            in_progress
+                .transact(
+                    r#"[
                 {  :db/ident       :foo/bar
                    :db/cardinality :db.cardinality/one
                    :db/index       true
@@ -375,20 +380,47 @@ mod tests {
                    :db/valueType   :db.type/boolean }
                 {  :db/ident       :foo/x
                    :db/cardinality :db.cardinality/many
-                   :db/valueType   :db.type/long }]"#).expect("transact");
+                   :db/valueType   :db.type/long }]"#,
+                )
+                .expect("transact");
 
             // Cache one….
-            in_progress.cache(&kw!(:foo/bar), CacheDirection::Reverse, CacheAction::Register).expect("cache done");
+            in_progress
+                .cache(
+                    &kw!(:foo/bar),
+                    CacheDirection::Reverse,
+                    CacheAction::Register,
+                )
+                .expect("cache done");
             in_progress.commit().expect("commit");
         }
 
-        let foo_bar = store.conn.current_schema().get_entid(&kw!(:foo/bar)).expect("foo/bar").0;
-        let foo_baz = store.conn.current_schema().get_entid(&kw!(:foo/baz)).expect("foo/baz").0;
-        let foo_x = store.conn.current_schema().get_entid(&kw!(:foo/x)).expect("foo/x").0;
+        let foo_bar = store
+            .conn
+            .current_schema()
+            .get_entid(&kw!(:foo/bar))
+            .expect("foo/bar")
+            .0;
+        let foo_baz = store
+            .conn
+            .current_schema()
+            .get_entid(&kw!(:foo/baz))
+            .expect("foo/baz")
+            .0;
+        let foo_x = store
+            .conn
+            .current_schema()
+            .get_entid(&kw!(:foo/x))
+            .expect("foo/x")
+            .0;
 
         // … and cache the others via the store.
-        store.cache(&kw!(:foo/baz), CacheDirection::Both).expect("cache done");
-        store.cache(&kw!(:foo/x), CacheDirection::Forward).expect("cache done");
+        store
+            .cache(&kw!(:foo/baz), CacheDirection::Both)
+            .expect("cache done");
+        store
+            .cache(&kw!(:foo/x), CacheDirection::Forward)
+            .expect("cache done");
         {
             assert!(store.is_attribute_cached_reverse(foo_bar));
             assert!(store.is_attribute_cached_forward(foo_baz));
@@ -406,85 +438,168 @@ mod tests {
                 assert!(in_progress.cache.is_attribute_cached_reverse(foo_baz));
                 assert!(in_progress.cache.is_attribute_cached_forward(foo_x));
 
-                assert!(in_progress.cache.overlay.is_attribute_cached_reverse(foo_bar));
-                assert!(in_progress.cache.overlay.is_attribute_cached_forward(foo_baz));
-                assert!(in_progress.cache.overlay.is_attribute_cached_reverse(foo_baz));
+                assert!(in_progress
+                    .cache
+                    .overlay
+                    .is_attribute_cached_reverse(foo_bar));
+                assert!(in_progress
+                    .cache
+                    .overlay
+                    .is_attribute_cached_forward(foo_baz));
+                assert!(in_progress
+                    .cache
+                    .overlay
+                    .is_attribute_cached_reverse(foo_baz));
                 assert!(in_progress.cache.overlay.is_attribute_cached_forward(foo_x));
             }
 
-            in_progress.transact(r#"[
+            in_progress
+                .transact(
+                    r#"[
                 {:foo/bar 15, :foo/baz false, :foo/x [1, 2, 3]}
                 {:foo/bar 99, :foo/baz true}
                 {:foo/bar -2, :foo/baz true}
-                ]"#).expect("transact");
+                ]"#,
+                )
+                .expect("transact");
 
             // Data is in the cache.
-            let first = in_progress.cache.get_entid_for_value(foo_bar, &TypedValue::Long(15)).expect("id");
-            assert_eq!(in_progress.cache.get_value_for_entid(&in_progress.schema, foo_baz, first).expect("val"), &TypedValue::Boolean(false));
+            let first = in_progress
+                .cache
+                .get_entid_for_value(foo_bar, &TypedValue::Long(15))
+                .expect("id");
+            assert_eq!(
+                in_progress
+                    .cache
+                    .get_value_for_entid(&in_progress.schema, foo_baz, first)
+                    .expect("val"),
+                &TypedValue::Boolean(false)
+            );
 
             // All three values for :foo/x.
-            let all_three: BTreeSet<TypedValue> = in_progress.cache
-                                                             .get_values_for_entid(&in_progress.schema, foo_x, first)
-                                                             .expect("val")
-                                                             .iter().cloned().collect();
-            assert_eq!(all_three, vec![1, 2, 3].into_iter().map(TypedValue::Long).collect());
+            let all_three: BTreeSet<TypedValue> = in_progress
+                .cache
+                .get_values_for_entid(&in_progress.schema, foo_x, first)
+                .expect("val")
+                .iter()
+                .cloned()
+                .collect();
+            assert_eq!(
+                all_three,
+                vec![1, 2, 3].into_iter().map(TypedValue::Long).collect()
+            );
 
             in_progress.commit().expect("commit");
         }
 
         // Data is still in the cache.
         {
-            let first = store.get_entid_for_value(foo_bar, &TypedValue::Long(15)).expect("id");
+            let first = store
+                .get_entid_for_value(foo_bar, &TypedValue::Long(15))
+                .expect("id");
             let cache: SQLiteAttributeCache = store.conn.current_cache();
-            assert_eq!(cache.get_value_for_entid(&store.conn.current_schema(), foo_baz, first).expect("val"), &TypedValue::Boolean(false));
+            assert_eq!(
+                cache
+                    .get_value_for_entid(&store.conn.current_schema(), foo_baz, first)
+                    .expect("val"),
+                &TypedValue::Boolean(false)
+            );
 
-            let all_three: BTreeSet<TypedValue> = cache.get_values_for_entid(&store.conn.current_schema(), foo_x, first)
-                                                       .expect("val")
-                                                       .iter().cloned().collect();
-            assert_eq!(all_three, vec![1, 2, 3].into_iter().map(TypedValue::Long).collect());
+            let all_three: BTreeSet<TypedValue> = cache
+                .get_values_for_entid(&store.conn.current_schema(), foo_x, first)
+                .expect("val")
+                .iter()
+                .cloned()
+                .collect();
+            assert_eq!(
+                all_three,
+                vec![1, 2, 3].into_iter().map(TypedValue::Long).collect()
+            );
         }
 
         // We can remove data and the cache reflects it, immediately and after commit.
         {
             let mut in_progress = store.begin_transaction().expect("began");
-            let first = in_progress.cache.get_entid_for_value(foo_bar, &TypedValue::Long(15)).expect("id");
-            in_progress.transact(format!("[[:db/retract {} :foo/x 2]]", first).as_str()).expect("transact");
+            let first = in_progress
+                .cache
+                .get_entid_for_value(foo_bar, &TypedValue::Long(15))
+                .expect("id");
+            in_progress
+                .transact(format!("[[:db/retract {} :foo/x 2]]", first).as_str())
+                .expect("transact");
 
-            let only_two: BTreeSet<TypedValue> = in_progress.cache
-                                                            .get_values_for_entid(&in_progress.schema, foo_x, first)
-                                                            .expect("val")
-                                                            .iter().cloned().collect();
-            assert_eq!(only_two, vec![1, 3].into_iter().map(TypedValue::Long).collect());
+            let only_two: BTreeSet<TypedValue> = in_progress
+                .cache
+                .get_values_for_entid(&in_progress.schema, foo_x, first)
+                .expect("val")
+                .iter()
+                .cloned()
+                .collect();
+            assert_eq!(
+                only_two,
+                vec![1, 3].into_iter().map(TypedValue::Long).collect()
+            );
 
             // Rollback: unchanged.
         }
         {
-            let first = store.get_entid_for_value(foo_bar, &TypedValue::Long(15)).expect("id");
+            let first = store
+                .get_entid_for_value(foo_bar, &TypedValue::Long(15))
+                .expect("id");
             let cache: SQLiteAttributeCache = store.conn.current_cache();
-            assert_eq!(cache.get_value_for_entid(&store.conn.current_schema(), foo_baz, first).expect("val"), &TypedValue::Boolean(false));
+            assert_eq!(
+                cache
+                    .get_value_for_entid(&store.conn.current_schema(), foo_baz, first)
+                    .expect("val"),
+                &TypedValue::Boolean(false)
+            );
 
-            let all_three: BTreeSet<TypedValue> = cache.get_values_for_entid(&store.conn.current_schema(), foo_x, first)
-                                                       .expect("val")
-                                                       .iter().cloned().collect();
-            assert_eq!(all_three, vec![1, 2, 3].into_iter().map(TypedValue::Long).collect());
+            let all_three: BTreeSet<TypedValue> = cache
+                .get_values_for_entid(&store.conn.current_schema(), foo_x, first)
+                .expect("val")
+                .iter()
+                .cloned()
+                .collect();
+            assert_eq!(
+                all_three,
+                vec![1, 2, 3].into_iter().map(TypedValue::Long).collect()
+            );
         }
 
         // Try again, but this time commit.
         {
             let mut in_progress = store.begin_transaction().expect("began");
-            let first = in_progress.cache.get_entid_for_value(foo_bar, &TypedValue::Long(15)).expect("id");
-            in_progress.transact(format!("[[:db/retract {} :foo/x 2]]", first).as_str()).expect("transact");
+            let first = in_progress
+                .cache
+                .get_entid_for_value(foo_bar, &TypedValue::Long(15))
+                .expect("id");
+            in_progress
+                .transact(format!("[[:db/retract {} :foo/x 2]]", first).as_str())
+                .expect("transact");
             in_progress.commit().expect("committed");
         }
         {
-            let first = store.get_entid_for_value(foo_bar, &TypedValue::Long(15)).expect("id");
+            let first = store
+                .get_entid_for_value(foo_bar, &TypedValue::Long(15))
+                .expect("id");
             let cache: SQLiteAttributeCache = store.conn.current_cache();
-            assert_eq!(cache.get_value_for_entid(&store.conn.current_schema(), foo_baz, first).expect("val"), &TypedValue::Boolean(false));
+            assert_eq!(
+                cache
+                    .get_value_for_entid(&store.conn.current_schema(), foo_baz, first)
+                    .expect("val"),
+                &TypedValue::Boolean(false)
+            );
 
-            let only_two: BTreeSet<TypedValue> = cache.get_values_for_entid(&store.conn.current_schema(), foo_x, first)
-                                                      .expect("val")
-                                                      .iter().cloned().collect();
-            assert_eq!(only_two, vec![1, 3].into_iter().map(TypedValue::Long).collect());
+            let only_two: BTreeSet<TypedValue> = cache
+                .get_values_for_entid(&store.conn.current_schema(), foo_x, first)
+                .expect("val")
+                .iter()
+                .cloned()
+                .collect();
+            assert_eq!(
+                only_two,
+                vec![1, 3].into_iter().map(TypedValue::Long).collect()
+            );
         }
     }
 
@@ -517,43 +632,55 @@ mod tests {
     fn add_schema(conn: &mut Store) {
         // transact some schema
         let mut in_progress = conn.begin_transaction().expect("expected in progress");
-        in_progress.ensure_vocabulary(&Definition::new(
-            kw!(:todo/items),
-            1,
-            vec![
-                (kw!(:todo/uuid),
-                AttributeBuilder::helpful()
-                    .value_type(ValueType::Uuid)
-                    .multival(false)
-                    .unique(Unique::Value)
-                    .index(true)
-                    .build()),
-                (kw!(:todo/name),
-                AttributeBuilder::helpful()
-                    .value_type(ValueType::String)
-                    .multival(false)
-                    .fulltext(true)
-                    .build()),
-                (kw!(:todo/completion_date),
-                AttributeBuilder::helpful()
-                    .value_type(ValueType::Instant)
-                    .multival(false)
-                    .build()),
-                (kw!(:label/name),
-                AttributeBuilder::helpful()
-                    .value_type(ValueType::String)
-                    .multival(false)
-                    .unique(Unique::Value)
-                    .fulltext(true)
-                    .index(true)
-                    .build()),
-                (kw!(:label/color),
-                AttributeBuilder::helpful()
-                    .value_type(ValueType::String)
-                    .multival(false)
-                    .build()),
-            ],
-        )).expect("expected vocubulary");
+        in_progress
+            .ensure_vocabulary(&Definition::new(
+                kw!(:todo/items),
+                1,
+                vec![
+                    (
+                        kw!(:todo/uuid),
+                        AttributeBuilder::helpful()
+                            .value_type(ValueType::Uuid)
+                            .multival(false)
+                            .unique(Unique::Value)
+                            .index(true)
+                            .build(),
+                    ),
+                    (
+                        kw!(:todo/name),
+                        AttributeBuilder::helpful()
+                            .value_type(ValueType::String)
+                            .multival(false)
+                            .fulltext(true)
+                            .build(),
+                    ),
+                    (
+                        kw!(:todo/completion_date),
+                        AttributeBuilder::helpful()
+                            .value_type(ValueType::Instant)
+                            .multival(false)
+                            .build(),
+                    ),
+                    (
+                        kw!(:label/name),
+                        AttributeBuilder::helpful()
+                            .value_type(ValueType::String)
+                            .multival(false)
+                            .unique(Unique::Value)
+                            .fulltext(true)
+                            .index(true)
+                            .build(),
+                    ),
+                    (
+                        kw!(:label/color),
+                        AttributeBuilder::helpful()
+                            .value_type(ValueType::String)
+                            .multival(false)
+                            .build(),
+                    ),
+                ],
+            ))
+            .expect("expected vocubulary");
         in_progress.commit().expect("Expected vocabulary committed");
     }
 
@@ -569,8 +696,18 @@ mod tests {
         let mut conn = Store::open("").unwrap();
         add_schema(&mut conn);
 
-        let name_entid: Entid = conn.conn().current_schema().get_entid(&kw!(:todo/name)).expect("entid to exist for name").into();
-        let date_entid: Entid = conn.conn().current_schema().get_entid(&kw!(:todo/completion_date)).expect("entid to exist for completion_date").into();
+        let name_entid: Entid = conn
+            .conn()
+            .current_schema()
+            .get_entid(&kw!(:todo/name))
+            .expect("entid to exist for name")
+            .into();
+        let date_entid: Entid = conn
+            .conn()
+            .current_schema()
+            .get_entid(&kw!(:todo/completion_date))
+            .expect("entid to exist for completion_date")
+            .into();
         let mut registered_attrs = BTreeSet::new();
         registered_attrs.insert(name_entid.clone());
         registered_attrs.insert(date_entid.clone());
@@ -602,8 +739,18 @@ mod tests {
 
         let mut tx_ids = Vec::new();
         let mut changesets = Vec::new();
-        let db_tx_instant_entid: Entid = conn.conn().current_schema().get_entid(&kw!(:db/txInstant)).expect("entid to exist for :db/txInstant").into();
-        let uuid_entid: Entid = conn.conn().current_schema().get_entid(&kw!(:todo/uuid)).expect("entid to exist for name").into();
+        let db_tx_instant_entid: Entid = conn
+            .conn()
+            .current_schema()
+            .get_entid(&kw!(:db/txInstant))
+            .expect("entid to exist for :db/txInstant")
+            .into();
+        let uuid_entid: Entid = conn
+            .conn()
+            .current_schema()
+            .get_entid(&kw!(:todo/uuid))
+            .expect("entid to exist for name")
+            .into();
         {
             let mut in_progress = conn.begin_transaction().expect("expected transaction");
             for i in 0..3 {
@@ -612,12 +759,18 @@ mod tests {
                 let name = format!("todo{}", i);
                 let uuid = Uuid::new_v4();
                 let mut builder = in_progress.builder().describe_tempid(&name);
-                builder.add(kw!(:todo/uuid), TypedValue::Uuid(uuid)).expect("Expected added uuid");
+                builder
+                    .add(kw!(:todo/uuid), TypedValue::Uuid(uuid))
+                    .expect("Expected added uuid");
                 changeset.insert(uuid_entid.clone());
-                builder.add(kw!(:todo/name), TypedValue::typed_string(name)).expect("Expected added name");
+                builder
+                    .add(kw!(:todo/name), TypedValue::typed_string(name))
+                    .expect("Expected added name");
                 changeset.insert(name_entid.clone());
                 if i % 2 == 0 {
-                    builder.add(kw!(:todo/completion_date), TypedValue::current_instant()).expect("Expected added date");
+                    builder
+                        .add(kw!(:todo/completion_date), TypedValue::current_instant())
+                        .expect("Expected added date");
                     changeset.insert(date_entid.clone());
                 }
                 let (ip, r) = builder.transact();
@@ -627,8 +780,12 @@ mod tests {
                 in_progress = ip;
             }
             let mut builder = in_progress.builder().describe_tempid("Label");
-            builder.add(kw!(:label/name), TypedValue::typed_string("Label 1")).expect("Expected added name");
-            builder.add(kw!(:label/color), TypedValue::typed_string("blue")).expect("Expected added color");
+            builder
+                .add(kw!(:label/name), TypedValue::typed_string("Label 1"))
+                .expect("Expected added name");
+            builder
+                .add(kw!(:label/color), TypedValue::typed_string("blue"))
+                .expect("Expected added color");
             builder.commit().expect("expect transaction to occur");
         }
 
@@ -647,8 +804,18 @@ mod tests {
         let mut conn = Store::open("").unwrap();
         add_schema(&mut conn);
 
-        let name_entid: Entid = conn.conn().current_schema().get_entid(&kw!(:todo/name)).expect("entid to exist for name").into();
-        let date_entid: Entid = conn.conn().current_schema().get_entid(&kw!(:todo/completion_date)).expect("entid to exist for completion_date").into();
+        let name_entid: Entid = conn
+            .conn()
+            .current_schema()
+            .get_entid(&kw!(:todo/name))
+            .expect("entid to exist for name")
+            .into();
+        let date_entid: Entid = conn
+            .conn()
+            .current_schema()
+            .get_entid(&kw!(:todo/completion_date))
+            .expect("entid to exist for completion_date")
+            .into();
         let mut registered_attrs = BTreeSet::new();
         registered_attrs.insert(name_entid.clone());
         registered_attrs.insert(date_entid.clone());
@@ -683,8 +850,12 @@ mod tests {
             for i in 0..3 {
                 let name = format!("label{}", i);
                 let mut builder = in_progress.builder().describe_tempid(&name);
-                builder.add(kw!(:label/name), TypedValue::typed_string(name)).expect("Expected added name");
-                builder.add(kw!(:label/color), TypedValue::typed_string("blue")).expect("Expected added color");
+                builder
+                    .add(kw!(:label/name), TypedValue::typed_string(name))
+                    .expect("Expected added name");
+                builder
+                    .add(kw!(:label/color), TypedValue::typed_string("blue"))
+                    .expect("Expected added color");
                 let (ip, _) = builder.transact();
                 in_progress = ip;
             }

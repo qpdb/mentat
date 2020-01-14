@@ -58,7 +58,7 @@ pub mod tests {
     use super::*;
     use uuid::Uuid;
 
-    use metadata::{PartitionsTable, SyncMetadata};
+    use crate::metadata::{PartitionsTable, SyncMetadata};
 
     use mentat_db::USER0;
 
@@ -162,7 +162,7 @@ pub mod tests {
         let mut values_iter = stmt
             .query_map(rusqlite::params![], |r| {
                 let raw_uuid: Vec<u8> = r.get(0).unwrap();
-                Ok(Uuid::from_bytes(raw_uuid.as_slice()))
+                Ok(Uuid::from_slice(raw_uuid.as_slice()))
             })
             .expect("query works");
 

@@ -8,32 +8,21 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
+extern crate core_traits;
 extern crate edn;
 extern crate mentat_core;
-extern crate core_traits;
 extern crate mentat_query_algebrizer;
 extern crate query_algebrizer_traits;
 
 mod utils;
 
-use core_traits::{
-    Attribute,
-    ValueType,
-};
+use core_traits::{Attribute, ValueType};
 
-use mentat_core::{
-    Schema,
-};
+use mentat_core::Schema;
 
-use edn::query::{
-    Keyword,
-};
+use edn::query::Keyword;
 
-use utils::{
-    add_attribute,
-    alg,
-    associate_ident,
-};
+use utils::{add_attribute, alg, associate_ident};
 
 use mentat_query_algebrizer::Known;
 
@@ -44,33 +33,53 @@ fn prepopulated_schema() -> Schema {
     associate_ident(&mut schema, Keyword::namespaced("foo", "parent"), 67);
     associate_ident(&mut schema, Keyword::namespaced("foo", "age"), 68);
     associate_ident(&mut schema, Keyword::namespaced("foo", "height"), 69);
-    add_attribute(&mut schema, 65, Attribute {
-        value_type: ValueType::String,
-        multival: false,
-        ..Default::default()
-    });
-    add_attribute(&mut schema, 66, Attribute {
-        value_type: ValueType::String,
-        index: true,
-        fulltext: true,
-        multival: true,
-        ..Default::default()
-    });
-    add_attribute(&mut schema, 67, Attribute {
-        value_type: ValueType::String,
-        multival: true,
-        ..Default::default()
-    });
-    add_attribute(&mut schema, 68, Attribute {
-        value_type: ValueType::Long,
-        multival: false,
-        ..Default::default()
-    });
-    add_attribute(&mut schema, 69, Attribute {
-        value_type: ValueType::Long,
-        multival: false,
-        ..Default::default()
-    });
+    add_attribute(
+        &mut schema,
+        65,
+        Attribute {
+            value_type: ValueType::String,
+            multival: false,
+            ..Default::default()
+        },
+    );
+    add_attribute(
+        &mut schema,
+        66,
+        Attribute {
+            value_type: ValueType::String,
+            index: true,
+            fulltext: true,
+            multival: true,
+            ..Default::default()
+        },
+    );
+    add_attribute(
+        &mut schema,
+        67,
+        Attribute {
+            value_type: ValueType::String,
+            multival: true,
+            ..Default::default()
+        },
+    );
+    add_attribute(
+        &mut schema,
+        68,
+        Attribute {
+            value_type: ValueType::Long,
+            multival: false,
+            ..Default::default()
+        },
+    );
+    add_attribute(
+        &mut schema,
+        69,
+        Attribute {
+            value_type: ValueType::Long,
+            multival: false,
+            ..Default::default()
+        },
+    );
     schema
 }
 

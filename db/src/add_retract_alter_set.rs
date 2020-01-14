@@ -24,7 +24,10 @@ pub struct AddRetractAlterSet<K, V> {
     pub altered: BTreeMap<K, (V, V)>,
 }
 
-impl<K, V> Default for AddRetractAlterSet<K, V> where K: Ord {
+impl<K, V> Default for AddRetractAlterSet<K, V>
+where
+    K: Ord,
+{
     fn default() -> AddRetractAlterSet<K, V> {
         AddRetractAlterSet {
             asserted: BTreeMap::default(),
@@ -34,7 +37,10 @@ impl<K, V> Default for AddRetractAlterSet<K, V> where K: Ord {
     }
 }
 
-impl<K, V> AddRetractAlterSet<K, V> where K: Ord {
+impl<K, V> AddRetractAlterSet<K, V>
+where
+    K: Ord,
+{
     pub fn witness(&mut self, key: K, value: V, added: bool) {
         if added {
             if let Some(retracted_value) = self.retracted.remove(&key) {

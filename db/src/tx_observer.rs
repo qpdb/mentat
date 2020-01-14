@@ -8,64 +8,50 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use std::sync::{
-    Arc,
-    Weak,
-};
+use std::sync::{Arc, Weak};
 
-use std::sync::mpsc::{
-    channel,
-    Receiver,
-    RecvError,
-    Sender,
-};
+use std::sync::mpsc::{channel, Receiver, RecvError, Sender};
 
 use std::thread;
 
-use indexmap::{
-    IndexMap,
-};
+use indexmap::IndexMap;
 
-use core_traits::{
-    Entid,
-    TypedValue,
-};
+use core_traits::{Entid, TypedValue};
 
-use mentat_core::{
-    Schema,
-};
+use mentat_core::Schema;
 
-use edn::entities::{
-    OpType,
-};
+use edn::entities::OpType;
 
-use db_traits::errors::{
-    Result,
-};
+use db_traits::errors::Result;
 
-use types::{
-    AttributeSet,
-};
+use types::AttributeSet;
 
 use watcher::TransactWatcher;
 
 pub struct TxObserver {
-    notify_fn: Arc<Box<Fn(&str, IndexMap<&Entid, &AttributeSet>) + Send + Sync>>,
+    notify_fn: Arc<Box<dyn Fn(&str, IndexMap<&Entid, &AttributeSet>) + Send + Sync>>,
     attributes: AttributeSet,
 }
 
 impl TxObserver {
-    pub fn new<F>(attributes: AttributeSet, notify_fn: F) -> TxObserver where F: Fn(&str, IndexMap<&Entid, &AttributeSet>) + 'static + Send + Sync {
+    pub fn new<F>(attributes: AttributeSet, notify_fn: F) -> TxObserver
+    where
+        F: Fn(&str, IndexMap<&Entid, &AttributeSet>) + 'static + Send + Sync,
+    {
         TxObserver {
             notify_fn: Arc::new(Box::new(notify_fn)),
             attributes,
         }
     }
 
-    pub fn applicable_reports<'r>(&self, reports: &'r IndexMap<Entid, AttributeSet>) -> IndexMap<&'r Entid, &'r AttributeSet> {
-        reports.into_iter()
-               .filter(|&(_txid, attrs)| !self.attributes.is_disjoint(attrs))
-               .collect()
+    pub fn applicable_reports<'r>(
+        &self,
+        reports: &'r IndexMap<Entid, AttributeSet>,
+    ) -> IndexMap<&'r Entid, &'r AttributeSet> {
+        reports
+            .into_iter()
+            .filter(|&(_txid, attrs)| !self.attributes.is_disjoint(attrs))
+            .collect()
     }
 
     fn notify(&self, key: &str, reports: IndexMap<&Entid, &AttributeSet>) {
@@ -83,7 +69,10 @@ pub struct TxCommand {
 }
 
 impl TxCommand {
-    fn new(observers: &Arc<IndexMap<String, Arc<TxObserver>>>, reports: IndexMap<Entid, AttributeSet>) -> Self {
+    fn new(
+        observers: &Arc<IndexMap<String, Arc<TxObserver>>>,
+        reports: IndexMap<Entid, AttributeSet>,
+    ) -> Self {
         TxCommand {
             reports,
             observers: Arc::downgrade(observers),
@@ -106,7 +95,7 @@ impl Command for TxCommand {
 
 pub struct TxObservationService {
     observers: Arc<IndexMap<String, Arc<TxObserver>>>,
-    executor: Option<Sender<Box<Command + Send>>>,
+    executor: Option<Sender<Box<dyn Command + Send>>>,
 }
 
 impl TxObservationService {
@@ -141,7 +130,10 @@ impl TxObservationService {
         }
 
         let executor = self.executor.get_or_insert_with(|| {
-            let (tx, rx): (Sender<Box<Command + Send>>, Receiver<Box<Command + Send>>) = channel();
+            let (tx, rx): (
+                Sender<Box<dyn Command + Send>>,
+                Receiver<Box<dyn Command + Send>>,
+            ) = channel();
             let mut worker = CommandExecutor::new(rx);
 
             thread::spawn(move || {
@@ -182,21 +174,20 @@ impl TransactWatcher for InProgressObserverTransactWatcher {
     }
 
     fn done(&mut self, t: &Entid, _schema: &Schema) -> Result<()> {
-        let collected_attributes = ::std::mem::replace(&mut self.collected_attributes, Default::default());
+        let collected_attributes =
+            ::std::mem::replace(&mut self.collected_attributes, Default::default());
         self.txes.insert(*t, collected_attributes);
         Ok(())
     }
 }
 
 struct CommandExecutor {
-    receiver: Receiver<Box<Command + Send>>,
+    receiver: Receiver<Box<dyn Command + Send>>,
 }
 
 impl CommandExecutor {
-    fn new(rx: Receiver<Box<Command + Send>>) -> Self {
-        CommandExecutor {
-            receiver: rx,
-        }
+    fn new(rx: Receiver<Box<dyn Command + Send>>) -> Self {
+        CommandExecutor { receiver: rx }
     }
 
     fn main(&mut self) {
@@ -207,12 +198,10 @@ impl CommandExecutor {
                     // sync_channel) is disconnected, implying that no further messages will ever be
                     // received."
                     // No need to log here.
-                    return
-                },
+                    return;
+                }
 
-                Ok(mut cmd) => {
-                    cmd.execute()
-                },
+                Ok(mut cmd) => cmd.execute(),
             }
         }
     }

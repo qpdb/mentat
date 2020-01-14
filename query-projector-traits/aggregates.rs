@@ -8,34 +8,15 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use core_traits::{
-    ValueType,
-    ValueTypeSet,
-};
+use core_traits::{ValueType, ValueTypeSet};
 
-use edn::query::{
-    Aggregate,
-    QueryFunction,
-    Variable,
-};
+use edn::query::{Aggregate, QueryFunction, Variable};
 
-use mentat_query_algebrizer::{
-    ColumnName,
-    ConjoiningClauses,
-    VariableColumn,
-};
+use mentat_query_algebrizer::{ColumnName, ConjoiningClauses, VariableColumn};
 
-use mentat_query_sql::{
-    ColumnOrExpression,
-    Expression,
-    Name,
-    ProjectedColumn,
-};
+use mentat_query_sql::{ColumnOrExpression, Expression, Name, ProjectedColumn};
 
-use errors::{
-    ProjectorError,
-    Result,
-};
+use errors::{ProjectorError, Result};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SimpleAggregationOp {
@@ -92,9 +73,12 @@ impl SimpleAggregationOp {
                     // The mean of a set of numeric values will always, for our purposes, be a double.
                     Ok(ValueType::Double)
                 } else {
-                    bail!(ProjectorError::CannotApplyAggregateOperationToTypes(*self, possibilities))
+                    bail!(ProjectorError::CannotApplyAggregateOperationToTypes(
+                        *self,
+                        possibilities
+                    ))
                 }
-            },
+            }
             &Sum => {
                 if possibilities.is_only_numeric() {
                     if possibilities.contains(ValueType::Double) {
@@ -104,9 +88,12 @@ impl SimpleAggregationOp {
                         Ok(ValueType::Long)
                     }
                 } else {
-                    bail!(ProjectorError::CannotApplyAggregateOperationToTypes(*self, possibilities))
+                    bail!(ProjectorError::CannotApplyAggregateOperationToTypes(
+                        *self,
+                        possibilities
+                    ))
                 }
-            },
+            }
 
             &Max | &Min => {
                 if possibilities.is_unit() {
@@ -124,8 +111,11 @@ impl SimpleAggregationOp {
 
                         // These types are unordered.
                         Keyword | Ref | Uuid => {
-                            bail!(ProjectorError::CannotApplyAggregateOperationToTypes(*self, possibilities))
-                        },
+                            bail!(ProjectorError::CannotApplyAggregateOperationToTypes(
+                                *self,
+                                possibilities
+                            ))
+                        }
                     }
                 } else {
                     // It cannot be empty -- we checked.
@@ -139,10 +129,13 @@ impl SimpleAggregationOp {
                             Ok(ValueType::Long)
                         }
                     } else {
-                        bail!(ProjectorError::CannotApplyAggregateOperationToTypes(*self, possibilities))
+                        bail!(ProjectorError::CannotApplyAggregateOperationToTypes(
+                            *self,
+                            possibilities
+                        ))
                     }
                 }
-            },
+            }
         }
     }
 }
@@ -184,10 +177,10 @@ impl SimpleAggregation for Aggregate {
         if self.args.len() != 1 {
             return None;
         }
-        self.args[0]
-            .as_variable()
-            .and_then(|v| SimpleAggregationOp::for_function(&self.func)
-                              .map(|op| SimpleAggregate { op, var: v.clone(), }))
+        self.args[0].as_variable().and_then(|v| {
+            SimpleAggregationOp::for_function(&self.func)
+                .map(|op| SimpleAggregate { op, var: v.clone() })
+        })
     }
 }
 
@@ -195,39 +188,44 @@ impl SimpleAggregation for Aggregate {
 /// - The `ColumnOrExpression` to use in the query. This will always refer to other
 ///   variables by name; never to a datoms column.
 /// - The known type of that value.
-pub fn projected_column_for_simple_aggregate(simple: &SimpleAggregate, cc: &ConjoiningClauses) -> Result<(ProjectedColumn, ValueType)> {
+pub fn projected_column_for_simple_aggregate(
+    simple: &SimpleAggregate,
+    cc: &ConjoiningClauses,
+) -> Result<(ProjectedColumn, ValueType)> {
     let known_types = cc.known_type_set(&simple.var);
     let return_type = simple.op.is_applicable_to_types(known_types)?;
-    let projected_column_or_expression =
-        if let Some(value) = cc.bound_value(&simple.var) {
-            // Oh, we already know the value!
-            if simple.use_static_value() {
-                // We can statically compute the aggregate result for some operators -- not count or
-                // sum, but avg/max/min are OK.
-                ColumnOrExpression::Value(value)
-            } else {
-                let expression = Expression::Unary {
-                    sql_op: simple.op.to_sql(),
-                    arg: ColumnOrExpression::Value(value),
-                };
-                if simple.is_nullable() {
-                    ColumnOrExpression::NullableAggregate(Box::new(expression), return_type)
-                } else {
-                    ColumnOrExpression::Expression(Box::new(expression), return_type)
-                }
-            }
+    let projected_column_or_expression = if let Some(value) = cc.bound_value(&simple.var) {
+        // Oh, we already know the value!
+        if simple.use_static_value() {
+            // We can statically compute the aggregate result for some operators -- not count or
+            // sum, but avg/max/min are OK.
+            ColumnOrExpression::Value(value)
         } else {
-            // The common case: the values are bound during execution.
-            let name = VariableColumn::Variable(simple.var.clone()).column_name();
             let expression = Expression::Unary {
                 sql_op: simple.op.to_sql(),
-                arg: ColumnOrExpression::ExistingColumn(name),
+                arg: ColumnOrExpression::Value(value),
             };
             if simple.is_nullable() {
                 ColumnOrExpression::NullableAggregate(Box::new(expression), return_type)
             } else {
                 ColumnOrExpression::Expression(Box::new(expression), return_type)
             }
+        }
+    } else {
+        // The common case: the values are bound during execution.
+        let name = VariableColumn::Variable(simple.var.clone()).column_name();
+        let expression = Expression::Unary {
+            sql_op: simple.op.to_sql(),
+            arg: ColumnOrExpression::ExistingColumn(name),
         };
-    Ok((ProjectedColumn(projected_column_or_expression, simple.column_name()), return_type))
+        if simple.is_nullable() {
+            ColumnOrExpression::NullableAggregate(Box::new(expression), return_type)
+        } else {
+            ColumnOrExpression::Expression(Box::new(expression), return_type)
+        }
+    };
+    Ok((
+        ProjectedColumn(projected_column_or_expression, simple.column_name()),
+        return_type,
+    ))
 }

@@ -8,14 +8,9 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use core_traits::{
-    Binding,
-};
+use core_traits::Binding;
 
-use query_projector_traits::errors::{
-    ProjectorError,
-    Result,
-};
+use query_projector_traits::errors::{ProjectorError, Result};
 
 /// A `BindingTuple` is any type that can accommodate a Mentat tuple query result of fixed length.
 ///
@@ -32,11 +27,14 @@ impl BindingTuple for Vec<Binding> {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
+                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                        expected,
+                        vec.len(),
+                    ))
                 } else {
                     Ok(Some(vec))
                 }
-            },
+            }
         }
     }
 }
@@ -51,7 +49,10 @@ impl BindingTuple for (Binding,) {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
+                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                        expected,
+                        vec.len(),
+                    ))
                 } else {
                     let mut iter = vec.into_iter();
                     Ok(Some((iter.next().unwrap(),)))
@@ -70,7 +71,10 @@ impl BindingTuple for (Binding, Binding) {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
+                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                        expected,
+                        vec.len(),
+                    ))
                 } else {
                     let mut iter = vec.into_iter();
                     Ok(Some((iter.next().unwrap(), iter.next().unwrap())))
@@ -89,10 +93,17 @@ impl BindingTuple for (Binding, Binding, Binding) {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
+                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                        expected,
+                        vec.len(),
+                    ))
                 } else {
                     let mut iter = vec.into_iter();
-                    Ok(Some((iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap())))
+                    Ok(Some((
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                    )))
                 }
             }
         }
@@ -108,10 +119,18 @@ impl BindingTuple for (Binding, Binding, Binding, Binding) {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
+                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                        expected,
+                        vec.len(),
+                    ))
                 } else {
                     let mut iter = vec.into_iter();
-                    Ok(Some((iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap())))
+                    Ok(Some((
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                    )))
                 }
             }
         }
@@ -127,10 +146,19 @@ impl BindingTuple for (Binding, Binding, Binding, Binding, Binding) {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
+                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                        expected,
+                        vec.len(),
+                    ))
                 } else {
                     let mut iter = vec.into_iter();
-                    Ok(Some((iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap())))
+                    Ok(Some((
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                    )))
                 }
             }
         }
@@ -148,10 +176,20 @@ impl BindingTuple for (Binding, Binding, Binding, Binding, Binding, Binding) {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
+                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                        expected,
+                        vec.len(),
+                    ))
                 } else {
                     let mut iter = vec.into_iter();
-                    Ok(Some((iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap())))
+                    Ok(Some((
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                        iter.next().unwrap(),
+                    )))
                 }
             }
         }

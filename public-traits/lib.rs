@@ -14,12 +14,12 @@ extern crate failure_derive;
 
 extern crate rusqlite;
 
-extern crate edn;
 extern crate core_traits;
 extern crate db_traits;
-extern crate query_pull_traits;
-extern crate query_projector_traits;
+extern crate edn;
 extern crate query_algebrizer_traits;
+extern crate query_projector_traits;
+extern crate query_pull_traits;
 extern crate sql_traits;
 extern crate uuid;
 

@@ -14,7 +14,7 @@ pub enum SQLError {
     InvalidParameterName(String),
 
     #[fail(display = "parameter name could be generated: '{}'", _0)]
-    BindParamCouldBeGenerated(String)
+    BindParamCouldBeGenerated(String),
 }
 
 pub type BuildQueryResult = Result<(), SQLError>;

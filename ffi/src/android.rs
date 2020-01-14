@@ -21,4 +21,6 @@ pub enum LogLevel {
     Error = 6,
 }
 
-extern { pub fn __android_log_write(prio: c_int, tag: *const c_char, text: *const c_char) -> c_int; }
+extern "C" {
+    pub fn __android_log_write(prio: c_int, tag: *const c_char, text: *const c_char) -> c_int;
+}

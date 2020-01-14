@@ -8,11 +8,7 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use std::fmt::{
-    Display,
-    Formatter,
-    Write,
-};
+use std::fmt::{Display, Formatter, Write};
 
 use namespaceable_name::NamespaceableName;
 
@@ -20,14 +16,14 @@ use namespaceable_name::NamespaceableName;
 macro_rules! ns_keyword {
     ($ns: expr, $name: expr) => {{
         $crate::Keyword::namespaced($ns, $name)
-    }}
+    }};
 }
 
 /// A simplification of Clojure's Symbol.
-#[derive(Clone,Debug,Eq,Hash,Ord,PartialOrd,PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub struct PlainSymbol(pub String);
 
-#[derive(Clone,Debug,Eq,Hash,Ord,PartialOrd,PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub struct NamespacedSymbol(NamespaceableName);
 
 /// A keyword is a symbol, optionally with a namespace, that prints with a leading colon.
@@ -67,12 +63,15 @@ pub struct NamespacedSymbol(NamespaceableName);
 ///
 /// Future: fast equality (interning?) for keywords.
 ///
-#[derive(Clone,Debug,Eq,Hash,Ord,PartialOrd,PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
 #[cfg_attr(feature = "serde_support", derive(Serialize, Deserialize))]
 pub struct Keyword(NamespaceableName);
 
 impl PlainSymbol {
-    pub fn plain<T>(name: T) -> Self where T: Into<String> {
+    pub fn plain<T>(name: T) -> Self
+    where
+        T: Into<String>,
+    {
         let n = name.into();
         assert!(!n.is_empty(), "Symbols cannot be unnamed.");
 
@@ -107,9 +106,16 @@ impl PlainSymbol {
 }
 
 impl NamespacedSymbol {
-    pub fn namespaced<N, T>(namespace: N, name: T) -> Self where N: AsRef<str>, T: AsRef<str> {
+    pub fn namespaced<N, T>(namespace: N, name: T) -> Self
+    where
+        N: AsRef<str>,
+        T: AsRef<str>,
+    {
         let r = namespace.as_ref();
-        assert!(!r.is_empty(), "Namespaced symbols cannot have an empty non-null namespace.");
+        assert!(
+            !r.is_empty(),
+            "Namespaced symbols cannot have an empty non-null namespace."
+        );
         NamespacedSymbol(NamespaceableName::namespaced(r, name))
     }
 
@@ -130,7 +136,10 @@ impl NamespacedSymbol {
 }
 
 impl Keyword {
-    pub fn plain<T>(name: T) -> Self where T: Into<String> {
+    pub fn plain<T>(name: T) -> Self
+    where
+        T: Into<String>,
+    {
         Keyword(NamespaceableName::plain(name))
     }
 }
@@ -147,9 +156,16 @@ impl Keyword {
     /// ```
     ///
     /// See also the `kw!` macro in the main `mentat` crate.
-    pub fn namespaced<N, T>(namespace: N, name: T) -> Self where N: AsRef<str>, T: AsRef<str> {
+    pub fn namespaced<N, T>(namespace: N, name: T) -> Self
+    where
+        N: AsRef<str>,
+        T: AsRef<str>,
+    {
         let r = namespace.as_ref();
-        assert!(!r.is_empty(), "Namespaced keywords cannot have an empty non-null namespace.");
+        assert!(
+            !r.is_empty(),
+            "Namespaced keywords cannot have an empty non-null namespace."
+        );
         Keyword(NamespaceableName::namespaced(r, name))
     }
 
@@ -307,8 +323,12 @@ impl Display for Keyword {
 
 #[test]
 fn test_ns_keyword_macro() {
-    assert_eq!(ns_keyword!("test", "name").to_string(),
-               Keyword::namespaced("test", "name").to_string());
-    assert_eq!(ns_keyword!("ns", "_name").to_string(),
-               Keyword::namespaced("ns", "_name").to_string());
+    assert_eq!(
+        ns_keyword!("test", "name").to_string(),
+        Keyword::namespaced("test", "name").to_string()
+    );
+    assert_eq!(
+        ns_keyword!("ns", "_name").to_string(),
+        Keyword::namespaced("ns", "_name").to_string()
+    );
 }

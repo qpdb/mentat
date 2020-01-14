@@ -26,6 +26,6 @@ pub fn merge(left: &Value, right: &Value) -> Option<Value> {
             result.extend(r.clone().into_iter());
             Some(Value::Map(result))
         }
-        _ => None
+        _ => None,
     }
 }

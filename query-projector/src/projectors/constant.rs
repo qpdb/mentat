@@ -10,33 +10,24 @@
 
 use std::rc::Rc;
 
-use ::{
-    Element,
-    FindSpec,
-    QueryOutput,
-    QueryResults,
-    Rows,
-    Schema,
-    rusqlite,
-};
+use {rusqlite, Element, FindSpec, QueryOutput, QueryResults, Rows, Schema};
 
-use query_projector_traits::errors::{
-    Result,
-};
+use query_projector_traits::errors::Result;
 
-use super::{
-    Projector,
-};
+use super::Projector;
 
 /// A projector that produces a `QueryResult` containing fixed data.
 /// Takes a boxed function that should return an empty result set of the desired type.
 pub struct ConstantProjector {
     spec: Rc<FindSpec>,
-    results_factory: Box<Fn() -> QueryResults>,
+    results_factory: Box<dyn Fn() -> QueryResults>,
 }
 
 impl ConstantProjector {
-    pub fn new(spec: Rc<FindSpec>, results_factory: Box<Fn() -> QueryResults>) -> ConstantProjector {
+    pub fn new(
+        spec: Rc<FindSpec>,
+        results_factory: Box<dyn Fn() -> QueryResults>,
+    ) -> ConstantProjector {
         ConstantProjector {
             spec: spec,
             results_factory: results_factory,
@@ -56,11 +47,16 @@ impl ConstantProjector {
 // TODO: a ConstantProjector with non-constant pull expressions.
 
 impl Projector for ConstantProjector {
-    fn project<'stmt, 's>(&self, _schema: &Schema, _sqlite: &'s rusqlite::Connection, _rows: Rows<'stmt>) -> Result<QueryOutput> {
+    fn project<'stmt, 's>(
+        &self,
+        _schema: &Schema,
+        _sqlite: &'s rusqlite::Connection,
+        _rows: Rows<'stmt>,
+    ) -> Result<QueryOutput> {
         self.project_without_rows()
     }
 
-    fn columns<'s>(&'s self) -> Box<Iterator<Item=&Element> + 's> {
+    fn columns<'s>(&'s self) -> Box<dyn Iterator<Item = &Element> + 's> {
         self.spec.columns()
     }
 }

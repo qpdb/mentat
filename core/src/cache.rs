@@ -9,34 +9,41 @@
 // specific language governing permissions and limitations under the License.
 
 /// Cache traits.
+use std::collections::BTreeSet;
 
-use std::collections::{
-    BTreeSet,
-};
+use core_traits::{Entid, TypedValue};
 
-use core_traits::{
-    Entid,
-    TypedValue,
-};
-
-use ::{
-    Schema,
-};
+use Schema;
 
 pub trait CachedAttributes {
     fn is_attribute_cached_reverse(&self, entid: Entid) -> bool;
     fn is_attribute_cached_forward(&self, entid: Entid) -> bool;
     fn has_cached_attributes(&self) -> bool;
 
-    fn get_values_for_entid(&self, schema: &Schema, attribute: Entid, entid: Entid) -> Option<&Vec<TypedValue>>;
-    fn get_value_for_entid(&self, schema: &Schema, attribute: Entid, entid: Entid) -> Option<&TypedValue>;
+    fn get_values_for_entid(
+        &self,
+        schema: &Schema,
+        attribute: Entid,
+        entid: Entid,
+    ) -> Option<&Vec<TypedValue>>;
+    fn get_value_for_entid(
+        &self,
+        schema: &Schema,
+        attribute: Entid,
+        entid: Entid,
+    ) -> Option<&TypedValue>;
 
     /// Reverse lookup.
     fn get_entid_for_value(&self, attribute: Entid, value: &TypedValue) -> Option<Entid>;
-    fn get_entids_for_value(&self, attribute: Entid, value: &TypedValue) -> Option<&BTreeSet<Entid>>;
+    fn get_entids_for_value(
+        &self,
+        attribute: Entid,
+        value: &TypedValue,
+    ) -> Option<&BTreeSet<Entid>>;
 }
 
 pub trait UpdateableCache<E> {
     fn update<I>(&mut self, schema: &Schema, retractions: I, assertions: I) -> Result<(), E>
-    where I: Iterator<Item=(Entid, Entid, TypedValue)>;
+    where
+        I: Iterator<Item = (Entid, Entid, TypedValue)>;
 }

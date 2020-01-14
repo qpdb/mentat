@@ -12,14 +12,9 @@
 
 use std::collections::HashSet;
 use std::hash::Hash;
-use std::ops::{
-    Deref,
-    DerefMut,
-};
+use std::ops::{Deref, DerefMut};
 
-use ::{
-    ValueRc,
-};
+use ValueRc;
 
 /// An `InternSet` allows to "intern" some potentially large values, maintaining a single value
 /// instance owned by the `InternSet` and leaving consumers with lightweight ref-counted handles to
@@ -29,11 +24,17 @@ use ::{
 ///
 /// See https://en.wikipedia.org/wiki/String_interning for discussion.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct InternSet<T> where T: Eq + Hash {
+pub struct InternSet<T>
+where
+    T: Eq + Hash,
+{
     inner: HashSet<ValueRc<T>>,
 }
 
-impl<T> Deref for InternSet<T> where T: Eq + Hash {
+impl<T> Deref for InternSet<T>
+where
+    T: Eq + Hash,
+{
     type Target = HashSet<ValueRc<T>>;
 
     fn deref(&self) -> &Self::Target {
@@ -41,13 +42,19 @@ impl<T> Deref for InternSet<T> where T: Eq + Hash {
     }
 }
 
-impl<T> DerefMut for InternSet<T> where T: Eq + Hash {
+impl<T> DerefMut for InternSet<T>
+where
+    T: Eq + Hash,
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
 
-impl<T> InternSet<T> where T: Eq + Hash {
+impl<T> InternSet<T>
+where
+    T: Eq + Hash,
+{
     pub fn new() -> InternSet<T> {
         InternSet {
             inner: HashSet::new(),

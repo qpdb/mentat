@@ -25,11 +25,13 @@ macro_rules! assert_matches {
             .expect(format!("to be able to parse expected {}", $expected).as_str())
             .without_spans();
         let input_value = $input.to_edn();
-        assert!(input_value.matches(&pattern_value),
-                "Expected value:\n{}\nto match pattern:\n{}\n",
-                input_value.to_pretty(120).unwrap(),
-                pattern_value.to_pretty(120).unwrap());
-    }}
+        assert!(
+            input_value.matches(&pattern_value),
+            "Expected value:\n{}\nto match pattern:\n{}\n",
+            input_value.to_pretty(120).unwrap(),
+            pattern_value.to_pretty(120).unwrap()
+        );
+    }};
 }
 
 // Transact $input against the given $conn, expecting success or a `Result<TxReport, String>`.
@@ -45,61 +47,45 @@ macro_rules! assert_transact {
     ( $conn: expr, $input: expr ) => {{
         trace!("assert_transact: {}", $input);
         let result = $conn.transact($input);
-        assert!(result.is_ok(), "Expected Ok(_), got `{}`", result.unwrap_err());
+        assert!(
+            result.is_ok(),
+            "Expected Ok(_), got `{}`",
+            result.unwrap_err()
+        );
         result.unwrap()
     }};
 }
 
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
-use std::io::{Write};
+use std::io::Write;
 
 use itertools::Itertools;
 use rusqlite;
-use rusqlite::{TransactionBehavior};
-use rusqlite::types::{ToSql};
+use rusqlite::types::ToSql;
+use rusqlite::TransactionBehavior;
 use tabwriter::TabWriter;
 
 use bootstrap;
 use db::*;
-use db::{read_attribute_map,read_ident_map};
+use db::{read_attribute_map, read_ident_map};
+use db_traits::errors::Result;
 use edn;
 use entids;
-use db_traits::errors::Result;
 
-use core_traits::{
-    Entid,
-    TypedValue,
-    ValueType,
-};
+use core_traits::{Entid, TypedValue, ValueType};
 
-use mentat_core::{
-    HasSchema,
-    SQLValueType,
-    TxReport,
-};
-use edn::{
-    InternSet,
-};
-use edn::entities::{
-    EntidOrIdent,
-    TempId,
-};
-use internal_types::{
-    TermWithTempIds,
-};
-use schema::{
-    SchemaBuilding,
-};
+use edn::entities::{EntidOrIdent, TempId};
+use edn::InternSet;
+use internal_types::TermWithTempIds;
+use mentat_core::{HasSchema, SQLValueType, TxReport};
+use schema::SchemaBuilding;
+use tx::{transact, transact_terms};
 use types::*;
-use tx::{
-    transact,
-    transact_terms,
-};
 use watcher::NullWatcher;
 
 /// Represents a *datom* (assertion) in the store.
-#[derive(Clone,Debug,Eq,Hash,Ord,PartialOrd,PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub struct Datom {
     // TODO: generalize this.
     pub e: EntidOrIdent,
@@ -160,19 +146,30 @@ impl Transactions {
 
 impl FulltextValues {
     pub fn to_edn(&self) -> edn::Value {
-        edn::Value::Vector((&self.0).into_iter().map(|&(x, ref y)| edn::Value::Vector(vec![edn::Value::Integer(x), edn::Value::Text(y.clone())])).collect())
+        edn::Value::Vector(
+            (&self.0)
+                .into_iter()
+                .map(|&(x, ref y)| {
+                    edn::Value::Vector(vec![edn::Value::Integer(x), edn::Value::Text(y.clone())])
+                })
+                .collect(),
+        )
     }
 }
 
 /// Turn TypedValue::Ref into TypedValue::Keyword when it is possible.
 trait ToIdent {
-  fn map_ident(self, schema: &Schema) -> Self;
+    fn map_ident(self, schema: &Schema) -> Self;
 }
 
 impl ToIdent for TypedValue {
     fn map_ident(self, schema: &Schema) -> Self {
         if let TypedValue::Ref(e) = self {
-            schema.get_ident(e).cloned().map(|i| i.into()).unwrap_or(TypedValue::Ref(e))
+            schema
+                .get_ident(e)
+                .cloned()
+                .map(|i| i.into())
+                .unwrap_or(TypedValue::Ref(e))
         } else {
             self
         }
@@ -181,7 +178,11 @@ impl ToIdent for TypedValue {
 
 /// Convert a numeric entid to an ident `Entid` if possible, otherwise a numeric `Entid`.
 pub fn to_entid(schema: &Schema, entid: i64) -> EntidOrIdent {
-    schema.get_ident(entid).map_or(EntidOrIdent::Entid(entid), |ident| EntidOrIdent::Ident(ident.clone()))
+    schema
+        .get_ident(entid)
+        .map_or(EntidOrIdent::Entid(entid), |ident| {
+            EntidOrIdent::Ident(ident.clone())
+        })
 }
 
 // /// Convert a symbolic ident to an ident `Entid` if possible, otherwise a numeric `Entid`.
@@ -199,38 +200,49 @@ pub fn datoms<S: Borrow<Schema>>(conn: &rusqlite::Connection, schema: &S) -> Res
 /// ordered by (e, a, v, tx).
 ///
 /// The datom set returned does not include any datoms of the form [... :db/txInstant ...].
-pub fn datoms_after<S: Borrow<Schema>>(conn: &rusqlite::Connection, schema: &S, tx: i64) -> Result<Datoms> {
+pub fn datoms_after<S: Borrow<Schema>>(
+    conn: &rusqlite::Connection,
+    schema: &S,
+    tx: i64,
+) -> Result<Datoms> {
     let borrowed_schema = schema.borrow();
 
     let mut stmt: rusqlite::Statement = conn.prepare("SELECT e, a, v, value_type_tag, tx FROM datoms WHERE tx > ? ORDER BY e ASC, a ASC, value_type_tag ASC, v ASC, tx ASC")?;
 
-    let r: Result<Vec<_>> = stmt.query_and_then(&[&tx], |row| {
-        let e: i64 = row.get(0)?;
-        let a: i64 = row.get(1)?;
+    let r: Result<Vec<_>> = stmt
+        .query_and_then(&[&tx], |row| {
+            let e: i64 = row.get(0)?;
+            let a: i64 = row.get(1)?;
 
-        if a == entids::DB_TX_INSTANT {
-            return Ok(None);
-        }
+            if a == entids::DB_TX_INSTANT {
+                return Ok(None);
+            }
 
-        let v: rusqlite::types::Value = row.get(2)?;
-        let value_type_tag: i32 = row.get(3)?;
+            let v: rusqlite::types::Value = row.get(2)?;
+            let value_type_tag: i32 = row.get(3)?;
 
-        let attribute = borrowed_schema.require_attribute_for_entid(a)?;
-        let value_type_tag = if !attribute.fulltext { value_type_tag } else { ValueType::Long.value_type_tag() };
+            let attribute = borrowed_schema.require_attribute_for_entid(a)?;
+            let value_type_tag = if !attribute.fulltext {
+                value_type_tag
+            } else {
+                ValueType::Long.value_type_tag()
+            };
 
-        let typed_value = TypedValue::from_sql_value_pair(v, value_type_tag)?.map_ident(borrowed_schema);
-        let (value, _) = typed_value.to_edn_value_pair();
+            let typed_value =
+                TypedValue::from_sql_value_pair(v, value_type_tag)?.map_ident(borrowed_schema);
+            let (value, _) = typed_value.to_edn_value_pair();
 
-        let tx: i64 = row.get(4)?;
+            let tx: i64 = row.get(4)?;
 
-        Ok(Some(Datom {
-            e: EntidOrIdent::Entid(e),
-            a: to_entid(borrowed_schema, a),
-            v: value,
-            tx: tx,
-            added: None,
-        }))
-    })?.collect();
+            Ok(Some(Datom {
+                e: EntidOrIdent::Entid(e),
+                a: to_entid(borrowed_schema, a),
+                v: value,
+                tx: tx,
+                added: None,
+            }))
+        })?
+        .collect();
 
     Ok(Datoms(r?.into_iter().filter_map(|x| x).collect()))
 }
@@ -239,51 +251,70 @@ pub fn datoms_after<S: Borrow<Schema>>(conn: &rusqlite::Connection, schema: &S, 
 /// given `tx`, ordered by (tx, e, a, v).
 ///
 /// Each transaction returned includes the [(transaction-tx) :db/txInstant ...] datom.
-pub fn transactions_after<S: Borrow<Schema>>(conn: &rusqlite::Connection, schema: &S, tx: i64) -> Result<Transactions> {
+pub fn transactions_after<S: Borrow<Schema>>(
+    conn: &rusqlite::Connection,
+    schema: &S,
+    tx: i64,
+) -> Result<Transactions> {
     let borrowed_schema = schema.borrow();
 
     let mut stmt: rusqlite::Statement = conn.prepare("SELECT e, a, v, value_type_tag, tx, added FROM transactions WHERE tx > ? ORDER BY tx ASC, e ASC, a ASC, value_type_tag ASC, v ASC, added ASC")?;
 
-    let r: Result<Vec<_>> = stmt.query_and_then(&[&tx], |row| {
-        let e: i64 = row.get(0)?;
-        let a: i64 = row.get(1)?;
+    let r: Result<Vec<_>> = stmt
+        .query_and_then(&[&tx], |row| {
+            let e: i64 = row.get(0)?;
+            let a: i64 = row.get(1)?;
 
-        let v: rusqlite::types::Value = row.get(2)?;
-        let value_type_tag: i32 = row.get(3)?;
+            let v: rusqlite::types::Value = row.get(2)?;
+            let value_type_tag: i32 = row.get(3)?;
 
-        let attribute = borrowed_schema.require_attribute_for_entid(a)?;
-        let value_type_tag = if !attribute.fulltext { value_type_tag } else { ValueType::Long.value_type_tag() };
+            let attribute = borrowed_schema.require_attribute_for_entid(a)?;
+            let value_type_tag = if !attribute.fulltext {
+                value_type_tag
+            } else {
+                ValueType::Long.value_type_tag()
+            };
 
-        let typed_value = TypedValue::from_sql_value_pair(v, value_type_tag)?.map_ident(borrowed_schema);
-        let (value, _) = typed_value.to_edn_value_pair();
+            let typed_value =
+                TypedValue::from_sql_value_pair(v, value_type_tag)?.map_ident(borrowed_schema);
+            let (value, _) = typed_value.to_edn_value_pair();
 
-        let tx: i64 = row.get(4)?;
-        let added: bool = row.get(5)?;
+            let tx: i64 = row.get(4)?;
+            let added: bool = row.get(5)?;
 
-        Ok(Datom {
-            e: EntidOrIdent::Entid(e),
-            a: to_entid(borrowed_schema, a),
-            v: value,
-            tx: tx,
-            added: Some(added),
-        })
-    })?.collect();
+            Ok(Datom {
+                e: EntidOrIdent::Entid(e),
+                a: to_entid(borrowed_schema, a),
+                v: value,
+                tx: tx,
+                added: Some(added),
+            })
+        })?
+        .collect();
 
     // Group by tx.
-    let r: Vec<Datoms> = r?.into_iter().group_by(|x| x.tx).into_iter().map(|(_key, group)| Datoms(group.collect())).collect();
+    let r: Vec<Datoms> = r?
+        .into_iter()
+        .group_by(|x| x.tx)
+        .into_iter()
+        .map(|(_key, group)| Datoms(group.collect()))
+        .collect();
     Ok(Transactions(r))
 }
 
 /// Return the set of fulltext values in the store, ordered by rowid.
 pub fn fulltext_values(conn: &rusqlite::Connection) -> Result<FulltextValues> {
-    let mut stmt: rusqlite::Statement = conn.prepare("SELECT rowid, text FROM fulltext_values ORDER BY rowid")?;
+    let mut stmt: rusqlite::Statement =
+        conn.prepare("SELECT rowid, text FROM fulltext_values ORDER BY rowid")?;
     let params: &[i32; 0] = &[];
 
-    let r: Result<Vec<_>> = stmt.query_and_then(params, |row| {
-        let rowid: i64 = row.get(0)?;
-        let text: String = row.get(1)?;
-        Ok((rowid, text))
-    })?.collect();
+    let r: Result<Vec<_>> = stmt
+        .query_and_then(params, |row| {
+            let rowid: i64 = row.get(0)?;
+            let text: String = row.get(1)?;
+            Ok((rowid, text))
+        })?
+        .collect();
 
     r.map(FulltextValues)
 }
@@ -293,7 +324,11 @@ pub fn fulltext_values(conn: &rusqlite::Connection) -> Result<FulltextValues> {
 ///
 /// The query is printed followed by a newline, then the returned columns followed by a newline, and
 /// then the data rows and columns.  All columns are aligned.
-pub fn dump_sql_query(conn: &rusqlite::Connection, sql: &str, params: &[&ToSql]) -> Result<String> {
+pub fn dump_sql_query(
+    conn: &rusqlite::Connection,
+    sql: &str,
+    params: &[&dyn ToSql],
+) -> Result<String> {
     let mut stmt: rusqlite::Statement = conn.prepare(sql)?;
 
     let mut tw = TabWriter::new(Vec::new()).padding(2);
@@ -304,14 +339,16 @@ pub fn dump_sql_query(conn: &rusqlite::Connection, sql: &str, params: &[&ToSql])
     }
     write!(&mut tw, "\n").unwrap();
 
-    let r: Result<Vec<_>> = stmt.query_and_then(params, |row| {
-        for i in 0..row.column_count() {
-            let value: rusqlite::types::Value = row.get(i)?;
-            write!(&mut tw, "{:?}\t", value).unwrap();
-        }
-        write!(&mut tw, "\n").unwrap();
-        Ok(())
-    })?.collect();
+    let r: Result<Vec<_>> = stmt
+        .query_and_then(params, |row| {
+            for i in 0..row.column_count() {
+                let value: rusqlite::types::Value = row.get(i)?;
+                write!(&mut tw, "{:?}\t", value).unwrap();
+            }
+            write!(&mut tw, "\n").unwrap();
+            Ok(())
+        })?
+        .collect();
     r?;
 
     let dump = String::from_utf8(tw.into_inner().unwrap()).unwrap();
@@ -331,20 +368,37 @@ impl TestConn {
         let materialized_ident_map = read_ident_map(&self.sqlite).expect("ident map");
         let materialized_attribute_map = read_attribute_map(&self.sqlite).expect("schema map");
 
-        let materialized_schema = Schema::from_ident_map_and_attribute_map(materialized_ident_map, materialized_attribute_map).expect("schema");
+        let materialized_schema = Schema::from_ident_map_and_attribute_map(
+            materialized_ident_map,
+            materialized_attribute_map,
+        )
+        .expect("schema");
         assert_eq!(materialized_schema, self.schema);
     }
 
-    pub fn transact<I>(&mut self, transaction: I) -> Result<TxReport> where I: Borrow<str> {
+    pub fn transact<I>(&mut self, transaction: I) -> Result<TxReport>
+    where
+        I: Borrow<str>,
+    {
         // Failure to parse the transaction is a coding error, so we unwrap.
-        let entities = edn::parse::entities(transaction.borrow()).expect(format!("to be able to parse {} into entities", transaction.borrow()).as_str());
+        let entities = edn::parse::entities(transaction.borrow())
+            .expect(format!("to be able to parse {} into entities", transaction.borrow()).as_str());
 
         let details = {
             // The block scopes the borrow of self.sqlite.
             // We're about to write, so go straight ahead and get an IMMEDIATE transaction.
-            let tx = self.sqlite.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let tx = self
+                .sqlite
+                .transaction_with_behavior(TransactionBehavior::Immediate)?;
             // Applying the transaction can fail, so we don't unwrap.
-            let details = transact(&tx, self.partition_map.clone(), &self.schema, &self.schema, NullWatcher(), entities)?;
+            let details = transact(
+                &tx,
+                self.partition_map.clone(),
+                &self.schema,
+                &self.schema,
+                NullWatcher(),
+                entities,
+            )?;
             tx.commit()?;
             details
         };
@@ -361,13 +415,30 @@ impl TestConn {
         Ok(report)
     }
 
-    pub fn transact_simple_terms<I>(&mut self, terms: I, tempid_set: InternSet<TempId>) -> Result<TxReport> where I: IntoIterator<Item=TermWithTempIds> {
+    pub fn transact_simple_terms<I>(
+        &mut self,
+        terms: I,
+        tempid_set: InternSet<TempId>,
+    ) -> Result<TxReport>
+    where
+        I: IntoIterator<Item = TermWithTempIds>,
+    {
         let details = {
             // The block scopes the borrow of self.sqlite.
             // We're about to write, so go straight ahead and get an IMMEDIATE transaction.
-            let tx = self.sqlite.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let tx = self
+                .sqlite
+                .transaction_with_behavior(TransactionBehavior::Immediate)?;
             // Applying the transaction can fail, so we don't unwrap.
-            let details = transact_terms(&tx, self.partition_map.clone(), &self.schema, &self.schema, NullWatcher(), terms, tempid_set)?;
+            let details = transact_terms(
+                &tx,
+                self.partition_map.clone(),
+                &self.schema,
+                &self.schema,
+                NullWatcher(),
+                terms,
+                tempid_set,
+            )?;
             tx.commit()?;
             details
         };
@@ -385,11 +456,19 @@ impl TestConn {
     }
 
     pub fn last_tx_id(&self) -> Entid {
-        self.partition_map.get(&":db.part/tx".to_string()).unwrap().next_entid() - 1
+        self.partition_map
+            .get(&":db.part/tx".to_string())
+            .unwrap()
+            .next_entid()
+            - 1
     }
 
     pub fn last_transaction(&self) -> Datoms {
-        transactions_after(&self.sqlite, &self.schema, self.last_tx_id() - 1).expect("last_transaction").0.pop().unwrap()
+        transactions_after(&self.sqlite, &self.schema, self.last_tx_id() - 1)
+            .expect("last_transaction")
+            .0
+            .pop()
+            .unwrap()
     }
 
     pub fn transactions(&self) -> Transactions {

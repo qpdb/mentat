@@ -10,18 +10,11 @@
 
 use std; // To refer to std::result::Result.
 
-use core_traits::{
-    ValueType,
-    ValueTypeSet,
-};
+use core_traits::{ValueType, ValueTypeSet};
 
-use edn::parse::{
-    ParseError,
-};
+use edn::parse::ParseError;
 
-use edn::query::{
-    PlainSymbol,
-};
+use edn::query::PlainSymbol;
 
 pub type Result<T> = std::result::Result<T, AlgebrizerError>;
 
@@ -42,7 +35,10 @@ pub enum BindingError {
 
     /// Expected `[?x1 … ?xN]` or `[[?x1 … ?xN]]` but got some other number of bindings.  Mentat is
     /// deliberately more strict than Datomic: we prefer placeholders to omission.
-    InvalidNumberOfBindings { number: usize, expected: usize },
+    InvalidNumberOfBindings {
+        number: usize,
+        expected: usize,
+    },
 }
 
 #[derive(Clone, Debug, Eq, Fail, PartialEq)]
@@ -53,23 +49,38 @@ pub enum AlgebrizerError {
     #[fail(display = "unexpected FnArg")]
     UnsupportedArgument,
 
-    #[fail(display = "value of type {} provided for var {}, expected {}", _0, _1, _2)]
+    #[fail(
+        display = "value of type {} provided for var {}, expected {}",
+        _0, _1, _2
+    )]
     InputTypeDisagreement(PlainSymbol, ValueType, ValueType),
 
-    #[fail(display = "invalid number of arguments to {}: expected {}, got {}.", _0, _1, _2)]
+    #[fail(
+        display = "invalid number of arguments to {}: expected {}, got {}.",
+        _0, _1, _2
+    )]
     InvalidNumberOfArguments(PlainSymbol, usize, usize),
 
-    #[fail(display = "invalid argument to {}: expected {} in position {}.", _0, _1, _2)]
+    #[fail(
+        display = "invalid argument to {}: expected {} in position {}.",
+        _0, _1, _2
+    )]
     InvalidArgument(PlainSymbol, &'static str, usize),
 
-    #[fail(display = "invalid argument to {}: expected one of {:?} in position {}.", _0, _1, _2)]
+    #[fail(
+        display = "invalid argument to {}: expected one of {:?} in position {}.",
+        _0, _1, _2
+    )]
     InvalidArgumentType(PlainSymbol, ValueTypeSet, usize),
 
     // TODO: flesh this out.
     #[fail(display = "invalid expression in ground constant")]
     InvalidGroundConstant,
 
-    #[fail(display = "invalid limit {} of type {}: expected natural number.", _0, _1)]
+    #[fail(
+        display = "invalid limit {} of type {}: expected natural number.",
+        _0, _1
+    )]
     InvalidLimit(String, ValueType),
 
     #[fail(display = "mismatched bindings in ground")]

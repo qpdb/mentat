@@ -8,16 +8,10 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use edn::{
-    Keyword,
-};
+use edn::Keyword;
 
-use core_traits::{
-    Entid,
-    TypedValue,
-};
-
-use types::TxPart;
+use crate::TxPart;
+use core_traits::{Entid, TypedValue};
 
 /// A primitive query interface geared toward processing bootstrap-like sets of datoms.
 pub struct DatomsHelper<'a> {
@@ -26,9 +20,7 @@ pub struct DatomsHelper<'a> {
 
 impl<'a> DatomsHelper<'a> {
     pub fn new(parts: &'a Vec<TxPart>) -> DatomsHelper {
-        DatomsHelper {
-            parts: parts,
-        }
+        DatomsHelper { parts: parts }
     }
 
     // TODO these are obviously quite inefficient

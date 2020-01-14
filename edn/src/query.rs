@@ -29,37 +29,19 @@
 ///! inner type directly in conjunction with matching on the enum. Before diving
 ///! deeply into this it's worth recognizing that this loss of 'sovereignty' is
 ///! a tradeoff against well-typed function signatures and other such boundaries.
-
-use std::collections::{
-    BTreeSet,
-    HashSet,
-};
+use std::collections::{BTreeSet, HashSet};
 
 use std;
 use std::fmt;
-use std::rc::{
-    Rc,
-};
+use std::rc::Rc;
 
-use ::{
-    BigInt,
-    DateTime,
-    OrderedFloat,
-    Uuid,
-    Utc,
-};
+use {BigInt, DateTime, OrderedFloat, Utc, Uuid};
 
-use ::value_rc::{
-    FromRc,
-    ValueRc,
-};
+use value_rc::{FromRc, ValueRc};
 
-pub use ::{
-    Keyword,
-    PlainSymbol,
-};
+pub use {Keyword, PlainSymbol};
 
-pub type SrcVarName = String;          // Do not include the required syntactic '$'.
+pub type SrcVarName = String; // Do not include the required syntactic '$'.
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Variable(pub Rc<PlainSymbol>);
@@ -167,7 +149,7 @@ pub enum Direction {
 
 /// An abstract declaration of ordering: direction and variable.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Order(pub Direction, pub Variable);   // Future: Element instead of Variable?
+pub struct Order(pub Direction, pub Variable); // Future: Element instead of Variable?
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SrcVar {
@@ -236,36 +218,26 @@ pub enum FnArg {
 
 impl FromValue<FnArg> for FnArg {
     fn from_value(v: &::ValueAndSpan) -> Option<FnArg> {
-        use ::SpannedValue::*;
+        use SpannedValue::*;
         match v.inner {
-            Integer(x) =>
-                Some(FnArg::EntidOrInteger(x)),
-            PlainSymbol(ref x) if x.is_src_symbol() =>
-                SrcVar::from_symbol(x).map(FnArg::SrcVar),
-            PlainSymbol(ref x) if x.is_var_symbol() =>
-                Variable::from_symbol(x).map(FnArg::Variable),
+            Integer(x) => Some(FnArg::EntidOrInteger(x)),
+            PlainSymbol(ref x) if x.is_src_symbol() => SrcVar::from_symbol(x).map(FnArg::SrcVar),
+            PlainSymbol(ref x) if x.is_var_symbol() => {
+                Variable::from_symbol(x).map(FnArg::Variable)
+            }
             PlainSymbol(_) => None,
-            Keyword(ref x) =>
-                Some(FnArg::IdentOrKeyword(x.clone())),
-            Instant(x) =>
-                Some(FnArg::Constant(NonIntegerConstant::Instant(x))),
-            Uuid(x) =>
-                Some(FnArg::Constant(NonIntegerConstant::Uuid(x))),
-            Boolean(x) =>
-                Some(FnArg::Constant(NonIntegerConstant::Boolean(x))),
-            Float(x) =>
-                Some(FnArg::Constant(NonIntegerConstant::Float(x))),
-            BigInteger(ref x) =>
-                Some(FnArg::Constant(NonIntegerConstant::BigInteger(x.clone()))),
+            Keyword(ref x) => Some(FnArg::IdentOrKeyword(x.clone())),
+            Instant(x) => Some(FnArg::Constant(NonIntegerConstant::Instant(x))),
+            Uuid(x) => Some(FnArg::Constant(NonIntegerConstant::Uuid(x))),
+            Boolean(x) => Some(FnArg::Constant(NonIntegerConstant::Boolean(x))),
+            Float(x) => Some(FnArg::Constant(NonIntegerConstant::Float(x))),
+            BigInteger(ref x) => Some(FnArg::Constant(NonIntegerConstant::BigInteger(x.clone()))),
             Text(ref x) =>
-                // TODO: intern strings. #398.
-                Some(FnArg::Constant(x.clone().into())),
-            Nil |
-            NamespacedSymbol(_) |
-            Vector(_) |
-            List(_) |
-            Set(_) |
-            Map(_) => None,
+            // TODO: intern strings. #398.
+            {
+                Some(FnArg::Constant(x.clone().into()))
+            }
+            Nil | NamespacedSymbol(_) | Vector(_) | List(_) | Set(_) | Map(_) => None,
         }
     }
 }
@@ -281,7 +253,7 @@ impl std::fmt::Display for FnArg {
                 } else {
                     write!(f, "{:?}", var)
                 }
-            },
+            }
             &FnArg::EntidOrInteger(entid) => write!(f, "{}", entid),
             &FnArg::IdentOrKeyword(ref kw) => write!(f, "{}", kw),
             &FnArg::Constant(ref constant) => write!(f, "{:?}", constant),
@@ -309,7 +281,7 @@ impl FnArg {
 pub enum PatternNonValuePlace {
     Placeholder,
     Variable(Variable),
-    Entid(i64),                       // Will always be +ve. See #190.
+    Entid(i64), // Will always be +ve. See #190.
     Ident(ValueRc<Keyword>),
 }
 
@@ -332,17 +304,17 @@ impl PatternNonValuePlace {
         match self {
             PatternNonValuePlace::Placeholder => PatternValuePlace::Placeholder,
             PatternNonValuePlace::Variable(x) => PatternValuePlace::Variable(x),
-            PatternNonValuePlace::Entid(x)    => PatternValuePlace::EntidOrInteger(x),
-            PatternNonValuePlace::Ident(x)    => PatternValuePlace::IdentOrKeyword(x),
+            PatternNonValuePlace::Entid(x) => PatternValuePlace::EntidOrInteger(x),
+            PatternNonValuePlace::Ident(x) => PatternValuePlace::IdentOrKeyword(x),
         }
     }
 
     fn to_pattern_value_place(&self) -> PatternValuePlace {
         match *self {
-            PatternNonValuePlace::Placeholder     => PatternValuePlace::Placeholder,
+            PatternNonValuePlace::Placeholder => PatternValuePlace::Placeholder,
             PatternNonValuePlace::Variable(ref x) => PatternValuePlace::Variable(x.clone()),
-            PatternNonValuePlace::Entid(x)        => PatternValuePlace::EntidOrInteger(x),
-            PatternNonValuePlace::Ident(ref x)    => PatternValuePlace::IdentOrKeyword(x.clone()),
+            PatternNonValuePlace::Entid(x) => PatternValuePlace::EntidOrInteger(x),
+            PatternNonValuePlace::Ident(ref x) => PatternValuePlace::IdentOrKeyword(x.clone()),
         }
     }
 }
@@ -350,22 +322,25 @@ impl PatternNonValuePlace {
 impl FromValue<PatternNonValuePlace> for PatternNonValuePlace {
     fn from_value(v: &::ValueAndSpan) -> Option<PatternNonValuePlace> {
         match v.inner {
-            ::SpannedValue::Integer(x) => if x >= 0 {
-                Some(PatternNonValuePlace::Entid(x))
-            } else {
-                None
-            },
-            ::SpannedValue::PlainSymbol(ref x) => if x.0.as_str() == "_" {
-                Some(PatternNonValuePlace::Placeholder)
-            } else {
-                if let Some(v) = Variable::from_symbol(x) {
-                    Some(PatternNonValuePlace::Variable(v))
+            ::SpannedValue::Integer(x) => {
+                if x >= 0 {
+                    Some(PatternNonValuePlace::Entid(x))
                 } else {
                     None
                 }
-            },
-            ::SpannedValue::Keyword(ref x) =>
-                Some(x.clone().into()),
+            }
+            ::SpannedValue::PlainSymbol(ref x) => {
+                if x.0.as_str() == "_" {
+                    Some(PatternNonValuePlace::Placeholder)
+                } else {
+                    if let Some(v) = Variable::from_symbol(x) {
+                        Some(PatternNonValuePlace::Variable(v))
+                    } else {
+                        None
+                    }
+                }
+            }
+            ::SpannedValue::Keyword(ref x) => Some(x.clone().into()),
             _ => None,
         }
     }
@@ -404,32 +379,39 @@ impl From<Keyword> for PatternValuePlace {
 impl FromValue<PatternValuePlace> for PatternValuePlace {
     fn from_value(v: &::ValueAndSpan) -> Option<PatternValuePlace> {
         match v.inner {
-            ::SpannedValue::Integer(x) =>
-                Some(PatternValuePlace::EntidOrInteger(x)),
-            ::SpannedValue::PlainSymbol(ref x) if x.0.as_str() == "_" =>
-                Some(PatternValuePlace::Placeholder),
-            ::SpannedValue::PlainSymbol(ref x) =>
-                Variable::from_symbol(x).map(PatternValuePlace::Variable),
-            ::SpannedValue::Keyword(ref x) if x.is_namespaced() =>
-                Some(x.clone().into()),
-            ::SpannedValue::Boolean(x) =>
-                Some(PatternValuePlace::Constant(NonIntegerConstant::Boolean(x))),
-            ::SpannedValue::Float(x) =>
-                Some(PatternValuePlace::Constant(NonIntegerConstant::Float(x))),
-            ::SpannedValue::BigInteger(ref x) =>
-                Some(PatternValuePlace::Constant(NonIntegerConstant::BigInteger(x.clone()))),
-            ::SpannedValue::Instant(x) =>
-                Some(PatternValuePlace::Constant(NonIntegerConstant::Instant(x))),
+            ::SpannedValue::Integer(x) => Some(PatternValuePlace::EntidOrInteger(x)),
+            ::SpannedValue::PlainSymbol(ref x) if x.0.as_str() == "_" => {
+                Some(PatternValuePlace::Placeholder)
+            }
+            ::SpannedValue::PlainSymbol(ref x) => {
+                Variable::from_symbol(x).map(PatternValuePlace::Variable)
+            }
+            ::SpannedValue::Keyword(ref x) if x.is_namespaced() => Some(x.clone().into()),
+            ::SpannedValue::Boolean(x) => {
+                Some(PatternValuePlace::Constant(NonIntegerConstant::Boolean(x)))
+            }
+            ::SpannedValue::Float(x) => {
+                Some(PatternValuePlace::Constant(NonIntegerConstant::Float(x)))
+            }
+            ::SpannedValue::BigInteger(ref x) => Some(PatternValuePlace::Constant(
+                NonIntegerConstant::BigInteger(x.clone()),
+            )),
+            ::SpannedValue::Instant(x) => {
+                Some(PatternValuePlace::Constant(NonIntegerConstant::Instant(x)))
+            }
             ::SpannedValue::Text(ref x) =>
-                // TODO: intern strings. #398.
-                Some(PatternValuePlace::Constant(x.clone().into())),
-            ::SpannedValue::Uuid(ref u) =>
-                Some(PatternValuePlace::Constant(NonIntegerConstant::Uuid(u.clone()))),
+            // TODO: intern strings. #398.
+            {
+                Some(PatternValuePlace::Constant(x.clone().into()))
+            }
+            ::SpannedValue::Uuid(ref u) => Some(PatternValuePlace::Constant(
+                NonIntegerConstant::Uuid(u.clone()),
+            )),
 
             // These don't appear in queries.
             ::SpannedValue::Nil => None,
             ::SpannedValue::NamespacedSymbol(_) => None,
-            ::SpannedValue::Keyword(_) => None,                // … yet.
+            ::SpannedValue::Keyword(_) => None, // … yet.
             ::SpannedValue::Map(_) => None,
             ::SpannedValue::List(_) => None,
             ::SpannedValue::Set(_) => None,
@@ -443,29 +425,35 @@ impl PatternValuePlace {
     #[allow(dead_code)]
     fn into_pattern_non_value_place(self) -> Option<PatternNonValuePlace> {
         match self {
-            PatternValuePlace::Placeholder       => Some(PatternNonValuePlace::Placeholder),
-            PatternValuePlace::Variable(x)       => Some(PatternNonValuePlace::Variable(x)),
-            PatternValuePlace::EntidOrInteger(x) => if x >= 0 {
-                Some(PatternNonValuePlace::Entid(x))
-            } else {
-                None
-            },
+            PatternValuePlace::Placeholder => Some(PatternNonValuePlace::Placeholder),
+            PatternValuePlace::Variable(x) => Some(PatternNonValuePlace::Variable(x)),
+            PatternValuePlace::EntidOrInteger(x) => {
+                if x >= 0 {
+                    Some(PatternNonValuePlace::Entid(x))
+                } else {
+                    None
+                }
+            }
             PatternValuePlace::IdentOrKeyword(x) => Some(PatternNonValuePlace::Ident(x)),
-            PatternValuePlace::Constant(_)       => None,
+            PatternValuePlace::Constant(_) => None,
         }
     }
 
     fn to_pattern_non_value_place(&self) -> Option<PatternNonValuePlace> {
         match *self {
-            PatternValuePlace::Placeholder           => Some(PatternNonValuePlace::Placeholder),
-            PatternValuePlace::Variable(ref x)       => Some(PatternNonValuePlace::Variable(x.clone())),
-            PatternValuePlace::EntidOrInteger(x)     => if x >= 0 {
-                Some(PatternNonValuePlace::Entid(x))
-            } else {
-                None
-            },
-            PatternValuePlace::IdentOrKeyword(ref x) => Some(PatternNonValuePlace::Ident(x.clone())),
-            PatternValuePlace::Constant(_)           => None,
+            PatternValuePlace::Placeholder => Some(PatternNonValuePlace::Placeholder),
+            PatternValuePlace::Variable(ref x) => Some(PatternNonValuePlace::Variable(x.clone())),
+            PatternValuePlace::EntidOrInteger(x) => {
+                if x >= 0 {
+                    Some(PatternNonValuePlace::Entid(x))
+                } else {
+                    None
+                }
+            }
+            PatternValuePlace::IdentOrKeyword(ref x) => {
+                Some(PatternNonValuePlace::Ident(x.clone()))
+            }
+            PatternValuePlace::Constant(_) => None,
         }
     }
 }
@@ -510,12 +498,8 @@ pub enum PullAttributeSpec {
 impl std::fmt::Display for PullConcreteAttribute {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            &PullConcreteAttribute::Ident(ref k) => {
-                write!(f, "{}", k)
-            },
-            &PullConcreteAttribute::Entid(i) => {
-                write!(f, "{}", i)
-            },
+            &PullConcreteAttribute::Ident(ref k) => write!(f, "{}", k),
+            &PullConcreteAttribute::Entid(i) => write!(f, "{}", i),
         }
     }
 }
@@ -530,20 +514,14 @@ impl std::fmt::Display for NamedPullAttribute {
     }
 }
 
-
 impl std::fmt::Display for PullAttributeSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            &PullAttributeSpec::Wildcard => {
-                write!(f, "*")
-            },
-            &PullAttributeSpec::Attribute(ref attr) => {
-                write!(f, "{}", attr)
-            },
+            &PullAttributeSpec::Wildcard => write!(f, "*"),
+            &PullAttributeSpec::Attribute(ref attr) => write!(f, "{}", attr),
         }
     }
 }
-
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Pull {
@@ -592,26 +570,23 @@ impl From<Variable> for Element {
 impl std::fmt::Display for Element {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            &Element::Variable(ref var) => {
-                write!(f, "{}", var)
-            },
-            &Element::Pull(Pull { ref var, ref patterns }) => {
+            &Element::Variable(ref var) => write!(f, "{}", var),
+            &Element::Pull(Pull {
+                ref var,
+                ref patterns,
+            }) => {
                 write!(f, "(pull {} [ ", var)?;
                 for p in patterns.iter() {
                     write!(f, "{} ", p)?;
                 }
                 write!(f, "])")
+            }
+            &Element::Aggregate(ref agg) => match agg.args.len() {
+                0 => write!(f, "({})", agg.func),
+                1 => write!(f, "({} {})", agg.func, agg.args[0]),
+                _ => write!(f, "({} {:?})", agg.func, agg.args),
             },
-            &Element::Aggregate(ref agg) => {
-                match agg.args.len() {
-                    0 => write!(f, "({})", agg.func),
-                    1 => write!(f, "({} {})", agg.func, agg.args[0]),
-                    _ => write!(f, "({} {:?})", agg.func, agg.args),
-                }
-            },
-            &Element::Corresponding(ref var) => {
-                write!(f, "(the {})", var)
-            },
+            &Element::Corresponding(ref var) => write!(f, "(the {})", var),
         }
     }
 }
@@ -675,9 +650,9 @@ impl FindSpec {
         use self::FindSpec::*;
         match self {
             &FindScalar(..) => true,
-            &FindTuple(..)  => true,
-            &FindRel(..)    => false,
-            &FindColl(..)   => false,
+            &FindTuple(..) => true,
+            &FindRel(..) => false,
+            &FindColl(..) => false,
         }
     }
 
@@ -685,11 +660,10 @@ impl FindSpec {
         use self::FindSpec::*;
         match self {
             &FindScalar(..) => 1,
-            &FindColl(..)   => 1,
+            &FindColl(..) => 1,
             &FindTuple(ref elems) | &FindRel(ref elems) => elems.len(),
         }
     }
-
 
     /// Returns true if the provided `FindSpec` cares about distinct results.
     ///
@@ -713,13 +687,13 @@ impl FindSpec {
         !self.is_unit_limited()
     }
 
-    pub fn columns<'s>(&'s self) -> Box<Iterator<Item=&Element> + 's> {
+    pub fn columns<'s>(&'s self) -> Box<dyn Iterator<Item = &Element> + 's> {
         use self::FindSpec::*;
         match self {
             &FindScalar(ref e) => Box::new(std::iter::once(e)),
-            &FindColl(ref e)   => Box::new(std::iter::once(e)),
-            &FindTuple(ref v)  => Box::new(v.iter()),
-            &FindRel(ref v)    => Box::new(v.iter()),
+            &FindColl(ref e) => Box::new(std::iter::once(e)),
+            &FindTuple(ref v) => Box::new(v.iter()),
+            &FindRel(ref v) => Box::new(v.iter()),
         }
     }
 }
@@ -748,7 +722,7 @@ impl VariableOrPlaceholder {
     }
 }
 
-#[derive(Clone,Debug,Eq,PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Binding {
     BindScalar(Variable),
     BindColl(Variable),
@@ -761,7 +735,9 @@ impl Binding {
     pub fn variables(&self) -> Vec<Option<Variable>> {
         match self {
             &Binding::BindScalar(ref var) | &Binding::BindColl(ref var) => vec![Some(var.clone())],
-            &Binding::BindRel(ref vars) | &Binding::BindTuple(ref vars) => vars.iter().map(|x| x.var().cloned()).collect(),
+            &Binding::BindRel(ref vars) | &Binding::BindTuple(ref vars) => {
+                vars.iter().map(|x| x.var().cloned()).collect()
+            }
         }
     }
 
@@ -769,7 +745,9 @@ impl Binding {
     pub fn is_empty(&self) -> bool {
         match self {
             &Binding::BindScalar(_) | &Binding::BindColl(_) => false,
-            &Binding::BindRel(ref vars) | &Binding::BindTuple(ref vars) => vars.iter().all(|x| x.var().is_none()),
+            &Binding::BindRel(ref vars) | &Binding::BindTuple(ref vars) => {
+                vars.iter().all(|x| x.var().is_none())
+            }
         }
     }
 
@@ -826,18 +804,22 @@ pub struct Pattern {
 }
 
 impl Pattern {
-    pub fn simple(e: PatternNonValuePlace,
-                  a: PatternNonValuePlace,
-                  v: PatternValuePlace) -> Option<Pattern> {
+    pub fn simple(
+        e: PatternNonValuePlace,
+        a: PatternNonValuePlace,
+        v: PatternValuePlace,
+    ) -> Option<Pattern> {
         Pattern::new(None, e, a, v, PatternNonValuePlace::Placeholder)
     }
 
-    pub fn new(src: Option<SrcVar>,
-               e: PatternNonValuePlace,
-               a: PatternNonValuePlace,
-               v: PatternValuePlace,
-               tx: PatternNonValuePlace) -> Option<Pattern> {
-        let aa = a.clone();       // Too tired of fighting borrow scope for now.
+    pub fn new(
+        src: Option<SrcVar>,
+        e: PatternNonValuePlace,
+        a: PatternNonValuePlace,
+        v: PatternValuePlace,
+        tx: PatternNonValuePlace,
+    ) -> Option<Pattern> {
+        let aa = a.clone(); // Too tired of fighting borrow scope for now.
         if let PatternNonValuePlace::Ident(ref k) = aa {
             if k.is_backward() {
                 // e and v have different types; we must convert them.
@@ -1005,7 +987,9 @@ pub(crate) enum QueryPart {
 /// We split `ParsedQuery` from `FindQuery` because it's not easy to generalize over containers
 /// (here, `Vec` and `BTreeSet`) in Rust.
 impl ParsedQuery {
-    pub(crate) fn from_parts(parts: Vec<QueryPart>) -> std::result::Result<ParsedQuery, &'static str> {
+    pub(crate) fn from_parts(
+        parts: Vec<QueryPart>,
+    ) -> std::result::Result<ParsedQuery, &'static str> {
         let mut find_spec: Option<FindSpec> = None;
         let mut with: Option<Vec<Variable>> = None;
         let mut in_vars: Option<Vec<Variable>> = None;
@@ -1020,37 +1004,37 @@ impl ParsedQuery {
                         return Err("find query has repeated :find");
                     }
                     find_spec = Some(x)
-                },
+                }
                 QueryPart::WithVars(x) => {
                     if with.is_some() {
                         return Err("find query has repeated :with");
                     }
                     with = Some(x)
-                },
+                }
                 QueryPart::InVars(x) => {
                     if in_vars.is_some() {
                         return Err("find query has repeated :in");
                     }
                     in_vars = Some(x)
-                },
+                }
                 QueryPart::Limit(x) => {
                     if limit.is_some() {
                         return Err("find query has repeated :limit");
                     }
                     limit = Some(x)
-                },
+                }
                 QueryPart::WhereClauses(x) => {
                     if where_clauses.is_some() {
                         return Err("find query has repeated :where");
                     }
                     where_clauses = Some(x)
-                },
+                }
                 QueryPart::Order(x) => {
                     if order.is_some() {
                         return Err("find query has repeated :order");
                     }
                     order = Some(x)
-                },
+                }
             }
         }
 
@@ -1110,13 +1094,13 @@ impl ContainsVariables for WhereClause {
     fn accumulate_mentioned_variables(&self, acc: &mut BTreeSet<Variable>) {
         use self::WhereClause::*;
         match self {
-            &OrJoin(ref o)         => o.accumulate_mentioned_variables(acc),
-            &Pred(ref p)           => p.accumulate_mentioned_variables(acc),
-            &Pattern(ref p)        => p.accumulate_mentioned_variables(acc),
-            &NotJoin(ref n)        => n.accumulate_mentioned_variables(acc),
-            &WhereFn(ref f)        => f.accumulate_mentioned_variables(acc),
+            &OrJoin(ref o) => o.accumulate_mentioned_variables(acc),
+            &Pred(ref p) => p.accumulate_mentioned_variables(acc),
+            &Pattern(ref p) => p.accumulate_mentioned_variables(acc),
+            &NotJoin(ref n) => n.accumulate_mentioned_variables(acc),
+            &WhereFn(ref f) => f.accumulate_mentioned_variables(acc),
             &TypeAnnotation(ref a) => a.accumulate_mentioned_variables(acc),
-            &RuleExpr              => (),
+            &RuleExpr => (),
         }
     }
 }
@@ -1125,7 +1109,11 @@ impl ContainsVariables for OrWhereClause {
     fn accumulate_mentioned_variables(&self, acc: &mut BTreeSet<Variable>) {
         use self::OrWhereClause::*;
         match self {
-            &And(ref clauses) => for clause in clauses { clause.accumulate_mentioned_variables(acc) },
+            &And(ref clauses) => {
+                for clause in clauses {
+                    clause.accumulate_mentioned_variables(acc)
+                }
+            }
             &Clause(ref clause) => clause.accumulate_mentioned_variables(acc),
         }
     }
@@ -1142,9 +1130,9 @@ impl ContainsVariables for OrJoin {
 impl OrJoin {
     pub fn dismember(self) -> (Vec<OrWhereClause>, UnifyVars, BTreeSet<Variable>) {
         let vars = match self.mentioned_vars {
-                       Some(m) => m,
-                       None => self.collect_mentioned_variables(),
-                   };
+            Some(m) => m,
+            None => self.collect_mentioned_variables(),
+        };
         (self.clauses, self.unify_vars, vars)
     }
 
@@ -1189,16 +1177,14 @@ impl ContainsVariables for TypeAnnotation {
 impl ContainsVariables for Binding {
     fn accumulate_mentioned_variables(&self, acc: &mut BTreeSet<Variable>) {
         match self {
-            &Binding::BindScalar(ref v) | &Binding::BindColl(ref v) => {
-                acc_ref(acc, v)
-            },
+            &Binding::BindScalar(ref v) | &Binding::BindColl(ref v) => acc_ref(acc, v),
             &Binding::BindRel(ref vs) | &Binding::BindTuple(ref vs) => {
                 for v in vs {
                     if let &VariableOrPlaceholder::Variable(ref v) = v {
                         acc_ref(acc, v);
                     }
                 }
-            },
+            }
         }
     }
 }

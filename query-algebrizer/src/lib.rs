@@ -20,49 +20,23 @@ use std::collections::BTreeSet;
 use std::ops::Sub;
 use std::rc::Rc;
 
+mod clauses;
 mod types;
 mod validate;
-mod clauses;
 
-use core_traits::{
-    Entid,
-    TypedValue,
-    ValueType,
-};
+use core_traits::{Entid, TypedValue, ValueType};
 
-use mentat_core::{
-    CachedAttributes,
-    Schema,
-    parse_query,
-};
+use mentat_core::{parse_query, CachedAttributes, Schema};
 
 use mentat_core::counter::RcCounter;
 
-use edn::query::{
-    Element,
-    FindSpec,
-    Limit,
-    Order,
-    ParsedQuery,
-    SrcVar,
-    Variable,
-    WhereClause,
-};
+use edn::query::{Element, FindSpec, Limit, Order, ParsedQuery, SrcVar, Variable, WhereClause};
 
-use query_algebrizer_traits::errors::{
-    AlgebrizerError,
-    Result,
-};
+use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
-pub use clauses::{
-    QueryInputs,
-    VariableBindings,
-};
+pub use clauses::{QueryInputs, VariableBindings};
 
-pub use types::{
-    EmptyBecause,
-    FindQuery,
-};
+pub use types::{EmptyBecause, FindQuery};
 
 /// A convenience wrapper around things known in memory: the schema and caches.
 /// We use a trait object here to avoid making dozens of functions generic over the type
@@ -71,7 +45,7 @@ pub use types::{
 #[derive(Clone, Copy)]
 pub struct Known<'s, 'c> {
     pub schema: &'s Schema,
-    pub cache: Option<&'c CachedAttributes>,
+    pub cache: Option<&'c dyn CachedAttributes>,
 }
 
 impl<'s, 'c> Known<'s, 'c> {
@@ -82,7 +56,7 @@ impl<'s, 'c> Known<'s, 'c> {
         }
     }
 
-    pub fn new(s: &'s Schema, c: Option<&'c CachedAttributes>) -> Known<'s, 'c> {
+    pub fn new(s: &'s Schema, c: Option<&'c dyn CachedAttributes>) -> Known<'s, 'c> {
         Known {
             schema: s,
             cache: c,
@@ -93,36 +67,70 @@ impl<'s, 'c> Known<'s, 'c> {
 /// This is `CachedAttributes`, but with handy generic parameters.
 /// Why not make the trait generic? Because then we can't use it as a trait object in `Known`.
 impl<'s, 'c> Known<'s, 'c> {
-    pub fn is_attribute_cached_reverse<U>(&self, entid: U) -> bool where U: Into<Entid> {
+    pub fn is_attribute_cached_reverse<U>(&self, entid: U) -> bool
+    where
+        U: Into<Entid>,
+    {
         self.cache
             .map(|cache| cache.is_attribute_cached_reverse(entid.into()))
             .unwrap_or(false)
     }
 
-    pub fn is_attribute_cached_forward<U>(&self, entid: U) -> bool where U: Into<Entid> {
+    pub fn is_attribute_cached_forward<U>(&self, entid: U) -> bool
+    where
+        U: Into<Entid>,
+    {
         self.cache
             .map(|cache| cache.is_attribute_cached_forward(entid.into()))
             .unwrap_or(false)
     }
 
-    pub fn get_values_for_entid<U, V>(&self, schema: &Schema, attribute: U, entid: V) -> Option<&Vec<TypedValue>>
-    where U: Into<Entid>, V: Into<Entid> {
-        self.cache.and_then(|cache| cache.get_values_for_entid(schema, attribute.into(), entid.into()))
+    pub fn get_values_for_entid<U, V>(
+        &self,
+        schema: &Schema,
+        attribute: U,
+        entid: V,
+    ) -> Option<&Vec<TypedValue>>
+    where
+        U: Into<Entid>,
+        V: Into<Entid>,
+    {
+        self.cache
+            .and_then(|cache| cache.get_values_for_entid(schema, attribute.into(), entid.into()))
     }
 
-    pub fn get_value_for_entid<U, V>(&self, schema: &Schema, attribute: U, entid: V) -> Option<&TypedValue>
-    where U: Into<Entid>, V: Into<Entid> {
-        self.cache.and_then(|cache| cache.get_value_for_entid(schema, attribute.into(), entid.into()))
+    pub fn get_value_for_entid<U, V>(
+        &self,
+        schema: &Schema,
+        attribute: U,
+        entid: V,
+    ) -> Option<&TypedValue>
+    where
+        U: Into<Entid>,
+        V: Into<Entid>,
+    {
+        self.cache
+            .and_then(|cache| cache.get_value_for_entid(schema, attribute.into(), entid.into()))
     }
 
     pub fn get_entid_for_value<U>(&self, attribute: U, value: &TypedValue) -> Option<Entid>
-    where U: Into<Entid> {
-        self.cache.and_then(|cache| cache.get_entid_for_value(attribute.into(), value))
+    where
+        U: Into<Entid>,
+    {
+        self.cache
+            .and_then(|cache| cache.get_entid_for_value(attribute.into(), value))
     }
 
-    pub fn get_entids_for_value<U>(&self, attribute: U, value: &TypedValue) -> Option<&BTreeSet<Entid>>
-    where U: Into<Entid> {
-        self.cache.and_then(|cache| cache.get_entids_for_value(attribute.into(), value))
+    pub fn get_entids_for_value<U>(
+        &self,
+        attribute: U,
+        value: &TypedValue,
+    ) -> Option<&BTreeSet<Entid>>
+    where
+        U: Into<Entid>,
+    {
+        self.cache
+            .and_then(|cache| cache.get_entids_for_value(attribute.into(), value))
     }
 }
 
@@ -157,38 +165,41 @@ impl AlgebraicQuery {
 
     /// Return true if every variable in the find spec is fully bound to a single value.
     pub fn is_fully_bound(&self) -> bool {
-        self.find_spec
-            .columns()
-            .all(|e| match e {
-                // Pull expressions are never fully bound.
-                // TODO: but the 'inside' of a pull expression certainly can be.
-                &Element::Pull(_) => false,
+        self.find_spec.columns().all(|e| match e {
+            // Pull expressions are never fully bound.
+            // TODO: but the 'inside' of a pull expression certainly can be.
+            &Element::Pull(_) => false,
 
-                &Element::Variable(ref var) |
-                &Element::Corresponding(ref var) => self.cc.is_value_bound(var),
+            &Element::Variable(ref var) | &Element::Corresponding(ref var) => {
+                self.cc.is_value_bound(var)
+            }
 
-                // For now, we pretend that aggregate functions are never fully bound:
-                // we don't statically compute them, even if we know the value of the var.
-                &Element::Aggregate(ref _fn) => false,
-            })
+            // For now, we pretend that aggregate functions are never fully bound:
+            // we don't statically compute them, even if we know the value of the var.
+            &Element::Aggregate(ref _fn) => false,
+        })
     }
 
     /// Return true if every variable in the find spec is fully bound to a single value,
     /// and evaluating the query doesn't require running SQL.
     pub fn is_fully_unit_bound(&self) -> bool {
-        self.cc.wheres.is_empty() &&
-        self.is_fully_bound()
+        self.cc.wheres.is_empty() && self.is_fully_bound()
     }
-
 
     /// Return a set of the input variables mentioned in the `:in` clause that have not yet been
     /// bound. We do this by looking at the CC.
     pub fn unbound_variables(&self) -> BTreeSet<Variable> {
-        self.cc.input_variables.sub(&self.cc.value_bound_variable_set())
+        self.cc
+            .input_variables
+            .sub(&self.cc.value_bound_variable_set())
     }
 }
 
-pub fn algebrize_with_counter(known: Known, parsed: FindQuery, counter: usize) -> Result<AlgebraicQuery> {
+pub fn algebrize_with_counter(
+    known: Known,
+    parsed: FindQuery,
+    counter: usize,
+) -> Result<AlgebraicQuery> {
     algebrize_with_inputs(known, parsed, counter, QueryInputs::default())
 }
 
@@ -200,12 +211,14 @@ pub fn algebrize(known: Known, parsed: FindQuery) -> Result<AlgebraicQuery> {
 /// a vector of `OrderBy` instances, including type comparisons if necessary. This function also
 /// returns a set of variables that should be added to the `with` clause to make the ordering
 /// clauses possible.
-fn validate_and_simplify_order(cc: &ConjoiningClauses, order: Option<Vec<Order>>)
-    -> Result<(Option<Vec<OrderBy>>, BTreeSet<Variable>)> {
+fn validate_and_simplify_order(
+    cc: &ConjoiningClauses,
+    order: Option<Vec<Order>>,
+) -> Result<(Option<Vec<OrderBy>>, BTreeSet<Variable>)> {
     match order {
         None => Ok((None, BTreeSet::default())),
         Some(order) => {
-            let mut order_bys: Vec<OrderBy> = Vec::with_capacity(order.len() * 2);   // Space for tags.
+            let mut order_bys: Vec<OrderBy> = Vec::with_capacity(order.len() * 2); // Space for tags.
             let mut vars: BTreeSet<Variable> = BTreeSet::default();
 
             for Order(direction, var) in order.into_iter() {
@@ -221,49 +234,63 @@ fn validate_and_simplify_order(cc: &ConjoiningClauses, order: Option<Vec<Order>>
 
                 // Otherwise, determine if we also need to order by type…
                 if cc.known_type(&var).is_none() {
-                    order_bys.push(OrderBy(direction.clone(), VariableColumn::VariableTypeTag(var.clone())));
+                    order_bys.push(OrderBy(
+                        direction.clone(),
+                        VariableColumn::VariableTypeTag(var.clone()),
+                    ));
                 }
                 order_bys.push(OrderBy(direction, VariableColumn::Variable(var.clone())));
                 vars.insert(var.clone());
             }
 
-            Ok((if order_bys.is_empty() { None } else { Some(order_bys) }, vars))
+            Ok((
+                if order_bys.is_empty() {
+                    None
+                } else {
+                    Some(order_bys)
+                },
+                vars,
+            ))
         }
     }
 }
 
-
 fn simplify_limit(mut query: AlgebraicQuery) -> Result<AlgebraicQuery> {
     // Unpack any limit variables in place.
-    let refined_limit =
-        match query.limit {
-            Limit::Variable(ref v) => {
-                match query.cc.bound_value(v) {
-                    Some(TypedValue::Long(n)) => {
-                        if n <= 0 {
-                            // User-specified limits should always be natural numbers (> 0).
-                            bail!(AlgebrizerError::InvalidLimit(n.to_string(), ValueType::Long))
-                        } else {
-                            Some(Limit::Fixed(n as u64))
-                        }
-                    },
-                    Some(val) => {
-                        // Same.
-                        bail!(AlgebrizerError::InvalidLimit(format!("{:?}", val), val.value_type()))
-                    },
-                    None => {
-                        // We know that the limit variable is mentioned in `:in`.
-                        // That it's not bound here implies that we haven't got all the variables
-                        // we'll need to run the query yet.
-                        // (We should never hit this in `q_once`.)
-                        // Simply pass the `Limit` through to `SelectQuery` untouched.
-                        None
-                    },
+    let refined_limit = match query.limit {
+        Limit::Variable(ref v) => {
+            match query.cc.bound_value(v) {
+                Some(TypedValue::Long(n)) => {
+                    if n <= 0 {
+                        // User-specified limits should always be natural numbers (> 0).
+                        bail!(AlgebrizerError::InvalidLimit(
+                            n.to_string(),
+                            ValueType::Long
+                        ))
+                    } else {
+                        Some(Limit::Fixed(n as u64))
+                    }
                 }
-            },
-            Limit::None => None,
-            Limit::Fixed(_) => None,
-        };
+                Some(val) => {
+                    // Same.
+                    bail!(AlgebrizerError::InvalidLimit(
+                        format!("{:?}", val),
+                        val.value_type()
+                    ))
+                }
+                None => {
+                    // We know that the limit variable is mentioned in `:in`.
+                    // That it's not bound here implies that we haven't got all the variables
+                    // we'll need to run the query yet.
+                    // (We should never hit this in `q_once`.)
+                    // Simply pass the `Limit` through to `SelectQuery` untouched.
+                    None
+                }
+            }
+        }
+        Limit::None => None,
+        Limit::Fixed(_) => None,
+    };
 
     if let Some(lim) = refined_limit {
         query.limit = lim;
@@ -271,12 +298,15 @@ fn simplify_limit(mut query: AlgebraicQuery) -> Result<AlgebraicQuery> {
     Ok(query)
 }
 
-pub fn algebrize_with_inputs(known: Known,
-                             parsed: FindQuery,
-                             counter: usize,
-                             inputs: QueryInputs) -> Result<AlgebraicQuery> {
+pub fn algebrize_with_inputs(
+    known: Known,
+    parsed: FindQuery,
+    counter: usize,
+    inputs: QueryInputs,
+) -> Result<AlgebraicQuery> {
     let alias_counter = RcCounter::with_initial(counter);
-    let mut cc = ConjoiningClauses::with_inputs_and_alias_counter(parsed.in_vars, inputs, alias_counter);
+    let mut cc =
+        ConjoiningClauses::with_inputs_and_alias_counter(parsed.in_vars, inputs, alias_counter);
 
     // This is so the rest of the query knows that `?x` is a ref if `(pull ?x …)` appears in `:find`.
     cc.derive_types_from_find_spec(&parsed.find_spec);
@@ -297,11 +327,15 @@ pub fn algebrize_with_inputs(known: Known,
     let (order, extra_vars) = validate_and_simplify_order(&cc, parsed.order)?;
 
     // This might leave us with an unused `:in` variable.
-    let limit = if parsed.find_spec.is_unit_limited() { Limit::Fixed(1) } else { parsed.limit };
+    let limit = if parsed.find_spec.is_unit_limited() {
+        Limit::Fixed(1)
+    } else {
+        parsed.limit
+    };
     let q = AlgebraicQuery {
         default_source: parsed.default_source,
         find_spec: Rc::new(parsed.find_spec),
-        has_aggregates: false,           // TODO: we don't parse them yet.
+        has_aggregates: false, // TODO: we don't parse them yet.
         with: parsed.with,
         named_projection: extra_vars,
         order: order,
@@ -313,29 +347,13 @@ pub fn algebrize_with_inputs(known: Known,
     simplify_limit(q)
 }
 
-pub use clauses::{
-    ConjoiningClauses,
-};
+pub use clauses::ConjoiningClauses;
 
 pub use types::{
-    Column,
-    ColumnAlternation,
-    ColumnConstraint,
-    ColumnConstraintOrAlternation,
-    ColumnIntersection,
-    ColumnName,
-    ComputedTable,
-    DatomsColumn,
-    DatomsTable,
-    FulltextColumn,
-    OrderBy,
-    QualifiedAlias,
-    QueryValue,
-    SourceAlias,
-    TableAlias,
-    VariableColumn,
+    Column, ColumnAlternation, ColumnConstraint, ColumnConstraintOrAlternation, ColumnIntersection,
+    ColumnName, ComputedTable, DatomsColumn, DatomsTable, FulltextColumn, OrderBy, QualifiedAlias,
+    QueryValue, SourceAlias, TableAlias, VariableColumn,
 };
-
 
 impl FindQuery {
     pub fn simple(spec: FindSpec, where_clauses: Vec<WhereClause>) -> FindQuery {

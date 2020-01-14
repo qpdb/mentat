@@ -10,14 +10,5 @@
 
 // Verify that our public API can be imported.
 
-extern crate mentat;
-
 #[allow(unused_imports)]
-use mentat::{
-    Conn,
-    QueryResults,
-    TypedValue,
-    ValueType,
-    conn,
-    new_connection,
-};
+use mentat::{conn, new_connection, Conn, QueryResults, TypedValue, ValueType};

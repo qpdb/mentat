@@ -8,6 +8,8 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
+#![allow(ellipsis_inclusive_range_patterns)]
+
 extern crate chrono;
 extern crate itertools;
 extern crate num;
@@ -24,23 +26,17 @@ extern crate serde_derive;
 
 pub mod entities;
 pub mod intern_set;
-pub use intern_set::{
-    InternSet,
-};
+pub use intern_set::InternSet;
 // Intentionally not pub.
+pub mod matcher;
 mod namespaceable_name;
+pub mod pretty_print;
 pub mod query;
 pub mod symbols;
 pub mod types;
-pub mod pretty_print;
 pub mod utils;
-pub mod matcher;
 pub mod value_rc;
-pub use value_rc::{
-    Cloned,
-    FromRc,
-    ValueRc,
-};
+pub use value_rc::{Cloned, FromRc, ValueRc};
 
 pub mod parse {
     include!(concat!(env!("OUT_DIR"), "/edn.rs"));
@@ -54,20 +50,8 @@ pub use uuid::Uuid;
 
 // Export from our modules.
 pub use parse::ParseError;
-pub use uuid::ParseError as UuidParseError;
 pub use types::{
-    FromMicros,
-    FromMillis,
-    Span,
-    SpannedValue,
-    ToMicros,
-    ToMillis,
-    Value,
-    ValueAndSpan,
+    FromMicros, FromMillis, Span, SpannedValue, ToMicros, ToMillis, Value, ValueAndSpan,
 };
 
-pub use symbols::{
-    Keyword,
-    NamespacedSymbol,
-    PlainSymbol,
-};
+pub use symbols::{Keyword, NamespacedSymbol, PlainSymbol};

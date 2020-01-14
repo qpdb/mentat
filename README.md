@@ -1,4 +1,4 @@
-# UNMAINTAINED Project Mentat
+# Project Mentat
 [![Build Status](https://travis-ci.org/mozilla/mentat.svg?branch=master)](https://travis-ci.org/mozilla/mentat)
 
 **Project Mentat is [no longer being developed or actively maintained by Mozilla](https://mail.mozilla.org/pipermail/firefox-dev/2018-September/006780.html).**  This repository will be marked read-only in the near future.  You are, of course, welcome to fork the repository and use the existing code.
@@ -17,7 +17,7 @@ The Rust implementation gives us a smaller compiled output, better performance, 
 
 ## Motivation
 
-Mentat is intended to be a flexible relational (not key-value, not document-oriented) store that makes it easy to describe, grow, and reuse your domain schema.
+Mentat is a flexible relational (not key-value, not document-oriented) store that makes it easy to describe, grow, and reuse your domain schema.
 
 By abstracting away the storage schema, and by exposing change listeners outside the database (not via triggers), we hope to make domain schemas stable, and allow both the data store itself and embedding applications to use better architectures, meeting performance goals in a way that allows future evolution.
 

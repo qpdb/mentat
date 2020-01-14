@@ -8,71 +8,32 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-extern crate uuid;
-extern crate mentat;
-extern crate edn;
-extern crate core_traits;
-extern crate public_traits;
-
-extern crate log;
-#[macro_use] extern crate mentat_db;
-
 #[cfg(feature = "syncable")]
-extern crate mentat_tolstoy;
-
-#[cfg(feature = "syncable")]
-extern crate tolstoy_traits;
-
 // Run with 'cargo test tolstoy_tests' from top-level.
 #[cfg(feature = "syncable")]
 mod tolstoy_tests {
-    use std::collections::HashMap;
+    use std::borrow::Borrow;
     use std::collections::BTreeMap;
+    use std::collections::HashMap;
 
     use std::collections::hash_map::Entry;
 
-    use std::borrow::Borrow;
-
-    use edn;
-
     use uuid::Uuid;
 
-    use mentat::conn::Conn;
+    use mentat::{conn::Conn, new_connection};
 
-    use mentat::new_connection;
-
-    use mentat_db::TX0;
+    use mentat_db::{assert_matches, TX0};
 
     use mentat_tolstoy::{
-        Tx,
-        TxPart,
-        GlobalTransactionLog,
-        SyncReport,
-        SyncFollowup,
-        Syncer,
+        debug::parts_to_datoms, GlobalTransactionLog, SyncFollowup, SyncReport, Syncer, Tx, TxPart,
     };
 
-    use mentat_tolstoy::debug::{
-        parts_to_datoms,
-        txs_after,
-    };
+    use mentat_tolstoy::debug::txs_after;
 
-    use mentat_tolstoy::tx_processor::{
-        Processor,
-        TxReceiver,
-    };
-    use core_traits::{
-        Entid,
-        TypedValue,
-        ValueType,
-    };
-    use public_traits::errors::{
-        Result,
-        MentatError,
-    };
-    use tolstoy_traits::errors::{
-        TolstoyError,
-    };
+    use core_traits::{Entid, TypedValue, ValueType};
+    use mentat_tolstoy::tx_processor::{Processor, TxReceiver};
+    use public_traits::errors::{MentatError, Result};
+    use tolstoy_traits::errors::TolstoyError;
 
     struct TxCountingReceiver {
         tx_count: usize,
@@ -80,15 +41,15 @@ mod tolstoy_tests {
 
     impl TxCountingReceiver {
         fn new() -> TxCountingReceiver {
-            TxCountingReceiver {
-                tx_count: 0,
-            }
+            TxCountingReceiver { tx_count: 0 }
         }
     }
 
     impl TxReceiver<usize> for TxCountingReceiver {
         fn tx<T>(&mut self, _tx_id: Entid, _d: &mut T) -> Result<()>
-            where T: Iterator<Item=TxPart> {
+        where
+            T: Iterator<Item = TxPart>,
+        {
             self.tx_count = self.tx_count + 1;
             Ok(())
         }
@@ -113,7 +74,9 @@ mod tolstoy_tests {
 
     impl TxReceiver<BTreeMap<Entid, Vec<TxPart>>> for TestingReceiver {
         fn tx<T>(&mut self, tx_id: Entid, d: &mut T) -> Result<()>
-            where T: Iterator<Item=TxPart> {
+        where
+            T: Iterator<Item = TxPart>,
+        {
             let datoms = self.txes.entry(tx_id).or_insert(vec![]);
             datoms.extend(d);
             Ok(())
@@ -124,7 +87,11 @@ mod tolstoy_tests {
         }
     }
 
-    fn assert_tx_datoms_count(txes: &BTreeMap<Entid, Vec<TxPart>>, tx_num: usize, expected_datoms: usize) {
+    fn assert_tx_datoms_count(
+        txes: &BTreeMap<Entid, Vec<TxPart>>,
+        tx_num: usize,
+        expected_datoms: usize,
+    ) {
         let tx = txes.keys().nth(tx_num).expect("first tx");
         let datoms = txes.get(tx).expect("datoms");
         assert_eq!(expected_datoms, datoms.len());
@@ -162,7 +129,7 @@ mod tolstoy_tests {
             if tx == &Uuid::nil() {
                 rowid_range = 0..;
             } else {
-                rowid_range = self.tx_rowid[tx] + 1 ..;
+                rowid_range = self.tx_rowid[tx] + 1..;
             }
 
             let mut txs = vec![];
@@ -186,12 +153,17 @@ mod tolstoy_tests {
                 Entry::Vacant(entry) => {
                     entry.insert(payload.clone());
                     ()
-                },
+                }
             }
             Ok(())
         }
 
-        fn put_transaction(&mut self, tx: &Uuid, _parent_tx: &Uuid, chunk_txs: &Vec<Uuid>) -> Result<()> {
+        fn put_transaction(
+            &mut self,
+            tx: &Uuid,
+            _parent_tx: &Uuid,
+            chunk_txs: &Vec<Uuid>,
+        ) -> Result<()> {
             let mut parts = vec![];
             for chunk_tx in chunk_txs {
                 parts.push(self.chunks.get(chunk_tx).unwrap().clone());
@@ -205,7 +177,9 @@ mod tolstoy_tests {
 
     macro_rules! assert_sync {
         ( $report: pat, $conn: expr, $sqlite: expr, $remote: expr ) => {{
-            let mut ip = $conn.begin_transaction(&mut $sqlite).expect("begun successfully");
+            let mut ip = $conn
+                .begin_transaction(&mut $sqlite)
+                .expect("begun successfully");
             match Syncer::sync(&mut ip, &mut $remote).expect("sync report") {
                 $report => (),
                 wr => panic!("Wrong sync report: {:?}", wr),
@@ -213,8 +187,12 @@ mod tolstoy_tests {
             ip.commit().expect("committed");
         }};
         ( error => $error: pat, $conn: expr, $sqlite: expr, $remote: expr ) => {{
-            let mut ip = $conn.begin_transaction(&mut $sqlite).expect("begun successfully");
-            match Syncer::sync(&mut ip, &mut $remote).expect_err("expected sync to fail, but did not") {
+            let mut ip = $conn
+                .begin_transaction(&mut $sqlite)
+                .expect("begun successfully");
+            match Syncer::sync(&mut ip, &mut $remote)
+                .expect_err("expected sync to fail, but did not")
+            {
                 $error => (),
                 we => panic!("Failed with wrong error: {:?}", we),
             }
@@ -240,10 +218,10 @@ mod tolstoy_tests {
             // Schema assumed to be first transaction.
             assert_matches!(parts_to_datoms(&$conn.current_schema(), &txs[0].parts), $schema);
 
-            let mut index = 1;
+            let index = 1;
             $(
                 assert_matches!(parts_to_datoms(&$conn.current_schema(), &txs[index].parts), $tx);
-                index = index + 1;
+                let index = index + 1;
             )*
 
             assert_eq!(index, txs.len());
@@ -257,21 +235,34 @@ mod tolstoy_tests {
         {
             let db_tx = c.transaction().expect("db tx");
             // Ensure that we see a bootstrap transaction.
-            assert_eq!(1, Processor::process(
-                &db_tx, None, TxCountingReceiver::new()
-            ).expect("processor"));
+            assert_eq!(
+                1,
+                Processor::process(&db_tx, None, TxCountingReceiver::new()).expect("processor")
+            );
         }
 
-        let ids = conn.transact(&mut c, r#"[
+        let ids = conn
+            .transact(
+                &mut c,
+                r#"[
             [:db/add "s" :db/ident :foo/numba]
             [:db/add "s" :db/valueType :db.type/long]
             [:db/add "s" :db/cardinality :db.cardinality/one]
-        ]"#).expect("successful transaction").tempids;
+        ]"#,
+            )
+            .expect("successful transaction")
+            .tempids;
         let numba_entity_id = ids.get("s").unwrap();
 
-        let ids = conn.transact(&mut c, r#"[
+        let ids = conn
+            .transact(
+                &mut c,
+                r#"[
             [:db/add "b" :foo/numba 123]
-        ]"#).expect("successful transaction").tempids;
+        ]"#,
+            )
+            .expect("successful transaction")
+            .tempids;
         let _asserted_e = ids.get("b").unwrap();
 
         let first_tx;
@@ -290,9 +281,15 @@ mod tolstoy_tests {
             first_tx = txes.keys().nth(1).expect("first non-bootstrap tx").clone();
         }
 
-        let ids = conn.transact(&mut c, r#"[
+        let ids = conn
+            .transact(
+                &mut c,
+                r#"[
             [:db/add "b" :foo/numba 123]
-        ]"#).expect("successful transaction").tempids;
+        ]"#,
+            )
+            .expect("successful transaction")
+            .tempids;
         let asserted_e = ids.get("b").unwrap();
 
         {
@@ -312,7 +309,10 @@ mod tolstoy_tests {
             // Inspect the assertion.
             let tx_id = txes.keys().nth(1).expect("tx");
             let datoms = txes.get(tx_id).expect("datoms");
-            let part = datoms.iter().find(|&part| &part.e == asserted_e).expect("to find asserted datom");
+            let part = datoms
+                .iter()
+                .find(|&part| &part.e == asserted_e)
+                .expect("to find asserted datom");
 
             assert_eq!(numba_entity_id, &part.a);
             assert!(part.v.matches_type(ValueType::Long));
@@ -330,9 +330,14 @@ mod tolstoy_tests {
         // Fast forward empty remote with a bootstrap transaction.
         assert_sync!(SyncReport::RemoteFastForward, conn, sqlite, remote_client);
 
-        let bootstrap_tx_parts = remote_client.transactions.get(&remote_client.rowid_tx[0]).unwrap();
+        let bootstrap_tx_parts = remote_client
+            .transactions
+            .get(&remote_client.rowid_tx[0])
+            .unwrap();
 
-        assert_matches!(parts_to_datoms(&conn.current_schema(), &bootstrap_tx_parts), "[
+        assert_matches!(
+            parts_to_datoms(&conn.current_schema(), &bootstrap_tx_parts),
+            "[
             [:db.schema/core :db.schema/attribute 1 ?tx true]
             [:db.schema/core :db.schema/attribute 3 ?tx true]
             [:db.schema/core :db.schema/attribute 4 ?tx true]
@@ -427,7 +432,8 @@ mod tolstoy_tests {
             [:db/ident :db/index true ?tx true]
             [:db/txInstant :db/index true ?tx true]
             [:db.schema/attribute :db/index true ?tx true]
-            [:db.schema/core :db.schema/version 1 ?tx true]]");
+            [:db.schema/core :db.schema/version 1 ?tx true]]"
+        );
     }
 
     #[test]
@@ -441,10 +447,20 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // Fast forward empty remote with a bootstrap transaction from 1.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge 1 and 2 bootstrap transactions.
-        assert_sync!(SyncReport::Merge(SyncFollowup::None), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::None),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // Assert that nothing besides a bootstrap transaction is present after a sync on 2.
         let synced_txs_2 = txs_after(&sqlite_2, &conn_2.current_schema(), TX0);
@@ -468,16 +484,31 @@ mod tolstoy_tests {
 
         let mut remote_client = TestRemoteClient::new();
 
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions from 1.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
-        assert_sync!(SyncReport::Merge(SyncFollowup::None), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::None),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // Assert that we end up with the same schema on 2 as we had on 1.
         assert_transactions!(sqlite_2, conn_2,
@@ -503,21 +534,41 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // Both 1 and 2 define the same schema.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
-        assert_sync!(SyncReport::Merge(SyncFollowup::None), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::None),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // Assert that 2's schema didn't change after sync.
         assert_transactions!(sqlite_2, conn_2,
@@ -543,24 +594,46 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // Both 1 and 2 define the same schema.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
         // But 1 also has an assertion against its schema.
-        conn_1.transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_1
+            .transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
-        assert_sync!(SyncReport::Merge(SyncFollowup::None), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::None),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         assert_transactions!(sqlite_2, conn_2,
             // Assert that 2's schema is the same as before the sync.
@@ -590,24 +663,44 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // 1 defines a richer schema than 2.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one}
             {:db/ident :person/age
               :db/valueType :db.type/long
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
-        assert_sync!(SyncReport::Merge(SyncFollowup::None), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::None),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // Assert that 2's schema has been augmented with 1's.
         assert_transactions!(sqlite_2, conn_2,
@@ -636,30 +729,54 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // Both have the same schema with a unique/identity attribute.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one
               :db/unique :db.unique/identity
-              :db/index true}]").expect("transacted");
+              :db/index true}]",
+            )
+            .expect("transacted");
 
         // Both have the same assertion against the schema.
-        conn_1.transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_1
+            .transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one
               :db/unique :db.unique/identity
-              :db/index true}]").expect("transacted");
+              :db/index true}]",
+            )
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_2
+            .transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
-        assert_sync!(SyncReport::Merge(SyncFollowup::None), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::None),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         assert_transactions!(sqlite_2, conn_2,
             // Assert that 2's schema is unchanged.
@@ -691,57 +808,101 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // Both start off with the same schema (a single unique/identity attribute) and an assertion.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one
               :db/unique :db.unique/identity
-              :db/index true}]").expect("transacted");
+              :db/index true}]",
+            )
+            .expect("transacted");
 
-        conn_1.transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_1
+            .transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one
               :db/unique :db.unique/identity
-              :db/index true}]").expect("transacted");
+              :db/index true}]",
+            )
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_2
+            .transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
-        assert_sync!(SyncReport::Merge(SyncFollowup::None), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::None),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // First removes the entity.
-        conn_1.transact(&mut sqlite_1, r#"[
-            [:db/retract (lookup-ref :person/name "Ivan") :person/name "Ivan"]]"#).expect("transacted");
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                r#"[
+            [:db/retract (lookup-ref :person/name "Ivan") :person/name "Ivan"]]"#,
+            )
+            .expect("transacted");
 
         // Second changes the entitiy.
-        conn_2.transact(&mut sqlite_2, r#"[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                r#"[
             {:db/id (lookup-ref :person/name "Ivan") :person/name "Vanya"}
-        ]"#).expect("transacted");
+        ]"#,
+            )
+            .expect("transacted");
 
         // First syncs first.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // And now, merge!
-        assert_sync!(SyncReport::Merge(SyncFollowup::FullSync), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::FullSync),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // We currently have a primitive conflict resolution strategy,
         // ending up with a new "Vanya" entity.
-        assert_transactions!(sqlite_2, conn_2,
+        assert_transactions!(
+            sqlite_2,
+            conn_2,
             // These hard-coded entids are brittle but deterministic.
             // They signify that we end up with a new entity Vanya, separate from the one
             // that was renamed.
             r#"[[65537 :person/name "Ivan" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]]"#,
-
             r#"[[65537 :person/name "Ivan" ?tx false]
             [?tx :db/txInstant ?ms ?tx true]]"#,
-
             r#"[[65538 :person/name "Vanya" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]]"#
         );
@@ -758,52 +919,97 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // Both start off with the same schema (a single unique/identity attribute) and an assertion.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one
               :db/unique :db.unique/identity
-              :db/index true}]").expect("transacted");
+              :db/index true}]",
+            )
+            .expect("transacted");
 
-        conn_1.transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_1
+            .transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one
               :db/unique :db.unique/identity
-              :db/index true}]").expect("transacted");
+              :db/index true}]",
+            )
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_2
+            .transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
-        assert_sync!(SyncReport::Merge(SyncFollowup::None), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::None),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // First removes the entity.
-        conn_1.transact(&mut sqlite_1, r#"[
-            [:db/retract (lookup-ref :person/name "Ivan") :person/name "Ivan"]]"#).expect("transacted");
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                r#"[
+            [:db/retract (lookup-ref :person/name "Ivan") :person/name "Ivan"]]"#,
+            )
+            .expect("transacted");
 
         // Second changes the entitiy.
-        conn_2.transact(&mut sqlite_2, r#"[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                r#"[
             [:db/add (lookup-ref :person/name "Ivan") :person/name "Vanya"]
-        ]"#).expect("transacted");
+        ]"#,
+            )
+            .expect("transacted");
 
         // Second syncs first.
-        assert_sync!(SyncReport::RemoteFastForward, conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // And now, merge!
-        assert_sync!(SyncReport::Merge(SyncFollowup::None), conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::None),
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Deletion of "Ivan" will be dropped on the floor, since there's no such
         // entity anymore (it's "Vanya").
-        assert_transactions!(sqlite_1, conn_1,
+        assert_transactions!(
+            sqlite_1,
+            conn_1,
             // These hard-coded entids are brittle but deterministic.
             r#"[[65537 :person/name "Ivan" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]]"#,
-
             r#"[[65537 :person/name "Ivan" ?tx false]
             [65537 :person/name "Vanya" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]]"#
@@ -821,56 +1027,100 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // Both start off with the same schema (a single unique/identity attribute) and an assertion.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one
               :db/unique :db.unique/identity
-              :db/index true}]").expect("transacted");
+              :db/index true}]",
+            )
+            .expect("transacted");
 
-        conn_1.transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_1
+            .transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one
               :db/unique :db.unique/identity
-              :db/index true}]").expect("transacted");
+              :db/index true}]",
+            )
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_2
+            .transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
-        assert_sync!(SyncReport::Merge(SyncFollowup::None), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::None),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // First renames the entity.
-        conn_1.transact(&mut sqlite_1, r#"[
-            [:db/add (lookup-ref :person/name "Ivan") :person/name "Vanechka"]]"#).expect("transacted");
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                r#"[
+            [:db/add (lookup-ref :person/name "Ivan") :person/name "Vanechka"]]"#,
+            )
+            .expect("transacted");
 
         // Second also renames the entitiy.
-        conn_2.transact(&mut sqlite_2, r#"[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                r#"[
             [:db/add (lookup-ref :person/name "Ivan") :person/name "Vanya"]
-        ]"#).expect("transacted");
+        ]"#,
+            )
+            .expect("transacted");
 
         // Second syncs first.
-        assert_sync!(SyncReport::RemoteFastForward, conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // And now, merge!
-        assert_sync!(SyncReport::Merge(SyncFollowup::FullSync), conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::FullSync),
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // These hard-coded entids are brittle but deterministic.
         // They signify that we end up with a new entity Vanechka, separate from the one
         // that was renamed.
-        assert_transactions!(sqlite_1, conn_1,
+        assert_transactions!(
+            sqlite_1,
+            conn_1,
             r#"[[65537 :person/name "Ivan" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]]"#,
-
             r#"[[65537 :person/name "Ivan" ?tx false]
             [65537 :person/name "Vanya" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]]"#,
-
             // A new entity is created for the second rename.
             r#"[[65538 :person/name "Vanechka" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]]"#
@@ -887,22 +1137,36 @@ mod tolstoy_tests {
 
         let mut remote_client = TestRemoteClient::new();
 
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/many}]").expect("transacted");
+              :db/cardinality :db.cardinality/many}]",
+            )
+            .expect("transacted");
 
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
         assert_sync!(
             error => MentatError::TolstoyError(TolstoyError::NotYetImplemented(_)),
             conn_2, sqlite_2, remote_client);
     }
-
 
     #[test]
     fn test_schema_with_non_matching_entids() {
@@ -915,27 +1179,59 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // :person/name will be e=65536.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
         // This entity will be e=65537.
-        conn_1.transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_1
+            .transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
         // :person/name will be e=65536, :person/age will be e=65537 (NB conflict w/ above entity).
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one}
             {:db/ident :person/age
               :db/valueType :db.type/long
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
-        assert_sync!(SyncReport::Merge(SyncFollowup::FullSync), conn_2, sqlite_2, remote_client);
-        assert_sync!(SyncReport::RemoteFastForward, conn_2, sqlite_2, remote_client);
-        assert_sync!(SyncReport::LocalFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::FullSync),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
+        assert_sync!(
+            SyncReport::LocalFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         assert_transactions!(sqlite_1, conn_1,
             schema =>
@@ -967,47 +1263,101 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // Both start off with the same schema (a single unique/identity attribute) and an assertion.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
-        conn_1.transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_1
+            .transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_2
+            .transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
         // Will result in two Ivans.
-        assert_sync!(SyncReport::Merge(SyncFollowup::FullSync), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::FullSync),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
         // Upload the second Ivan.
-        assert_sync!(SyncReport::RemoteFastForward, conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // Get the second Ivan.
-        assert_sync!(SyncReport::LocalFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::LocalFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // These entids are determenistic. We can't use lookup-refs because :person/name is
         // a non-unique attribute.
         // First removes an Ivan.
-        conn_1.transact(&mut sqlite_1, r#"[
-            [:db/retract 65537 :person/name "Ivan"]]"#).expect("transacted");
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                r#"[
+            [:db/retract 65537 :person/name "Ivan"]]"#,
+            )
+            .expect("transacted");
 
         // Second renames an Ivan.
-        conn_2.transact(&mut sqlite_2, r#"[
-            {:db/id 65537 :person/name "Vanya"}]"#).expect("transacted");
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                r#"[
+            {:db/id 65537 :person/name "Vanya"}]"#,
+            )
+            .expect("transacted");
 
         // First syncs first.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // And now, merge!
-        assert_sync!(SyncReport::Merge(SyncFollowup::FullSync), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::FullSync),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // We currently have a primitive conflict resolution strategy,
         // ending up with a new "Vanya" entity.
@@ -1015,16 +1365,15 @@ mod tolstoy_tests {
         // These hard-coded entids are brittle but deterministic.
         // They signify that we end up with a new entity Vanya, separate from the one
         // that was renamed.
-        assert_transactions!(sqlite_2, conn_2,
+        assert_transactions!(
+            sqlite_2,
+            conn_2,
             r#"[[65537 :person/name "Ivan" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]]"#,
-
             r#"[[65538 :person/name "Ivan" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]]"#,
-
             r#"[[65537 :person/name "Ivan" ?tx false]
             [?tx :db/txInstant ?ms ?tx true]]"#,
-
             r#"[[65538 :person/name "Ivan" ?tx false]
             [65538 :person/name "Vanya" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]]"#
@@ -1042,47 +1391,101 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // Both start off with the same schema (a single unique/identity attribute) and an assertion.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
-        conn_1.transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_1
+            .transact(&mut sqlite_1, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_2
+            .transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
         // Merge will result in two Ivans.
-        assert_sync!(SyncReport::Merge(SyncFollowup::FullSync), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::FullSync),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
         // Upload the second Ivan.
-        assert_sync!(SyncReport::RemoteFastForward, conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // Get the second Ivan.
-        assert_sync!(SyncReport::LocalFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::LocalFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // These entids are determenistic. We can't use lookup-refs because :person/name is
         // a non-unique attribute.
         // First removes an Ivan.
-        conn_1.transact(&mut sqlite_1, r#"[
-            [:db/retract 65537 :person/name "Ivan"]]"#).expect("transacted");
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                r#"[
+            [:db/retract 65537 :person/name "Ivan"]]"#,
+            )
+            .expect("transacted");
 
         // Second renames an Ivan.
-        conn_2.transact(&mut sqlite_2, r#"[
-            [:db/add 65537 :person/name "Vanya"]]"#).expect("transacted");
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                r#"[
+            [:db/add 65537 :person/name "Vanya"]]"#,
+            )
+            .expect("transacted");
 
         // Second wins the sync race.
-        assert_sync!(SyncReport::RemoteFastForward, conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // First merges its changes with second's.
-        assert_sync!(SyncReport::Merge(SyncFollowup::None), conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::None),
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // We currently have a primitive conflict resolution strategy,
         // ending up dropping first's removal of "Ivan".
@@ -1091,13 +1494,13 @@ mod tolstoy_tests {
         // These hard-coded entids are brittle but deterministic.
         // They signify that we end up with a new entity Vanya, separate from the one
         // that was renamed.
-        assert_transactions!(sqlite_1, conn_1,
+        assert_transactions!(
+            sqlite_1,
+            conn_1,
             r#"[[65537 :person/name "Ivan" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]]"#,
-
             r#"[[65538 :person/name "Ivan" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]]"#,
-
             // Just the rename left, removal is dropped on the floor.
             r#"[[65537 :person/name "Ivan" ?tx false]
             [65537 :person/name "Vanya" ?tx true]
@@ -1116,27 +1519,51 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // 1 defines the same schema as 2.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :world/city
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
         // Vancouver, BC
-        conn_1.transact(&mut sqlite_1, r#"[{:world/city "Vancouver"}]"#).expect("transacted");
+        conn_1
+            .transact(&mut sqlite_1, r#"[{:world/city "Vancouver"}]"#)
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :world/city
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
         // Vancouver, WA
-        conn_2.transact(&mut sqlite_2, r#"[{:world/city "Vancouver"}]"#).expect("transacted");
+        conn_2
+            .transact(&mut sqlite_2, r#"[{:world/city "Vancouver"}]"#)
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Since :world/city is not unique, we elect not to smush these entities.
-        assert_sync!(SyncReport::Merge(SyncFollowup::FullSync), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::FullSync),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         assert_transactions!(sqlite_2, conn_2,
             schema =>
@@ -1157,10 +1584,20 @@ mod tolstoy_tests {
         assert_sync!(SyncReport::NoChanges, conn_1, sqlite_1, remote_client);
 
         // Follow-up sync.
-        assert_sync!(SyncReport::RemoteFastForward, conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // 2 should now observe merge results from 1.
-        assert_sync!(SyncReport::LocalFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::LocalFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         assert_transactions!(sqlite_1, conn_1,
             // Assert that 1's schema is unchanged.
@@ -1190,28 +1627,52 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // 1 defines a richer schema than 2.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one}
             {:db/ident :person/age
               :db/valueType :db.type/long
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
-        conn_1.transact(&mut sqlite_1, r#"[{:person/name "Ivan" :person/age 28}]"#).expect("transacted");
+        conn_1
+            .transact(&mut sqlite_1, r#"[{:person/name "Ivan" :person/age 28}]"#)
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#).expect("transacted");
+        conn_2
+            .transact(&mut sqlite_2, r#"[{:person/name "Ivan"}]"#)
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
-        assert_sync!(SyncReport::Merge(SyncFollowup::FullSync), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::FullSync),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         assert_transactions!(sqlite_2, conn_2,
             // Assert that 2's schema has been augmented with 1's.
@@ -1233,10 +1694,20 @@ mod tolstoy_tests {
         );
 
         // Follow-up sync after merge.
-        assert_sync!(SyncReport::RemoteFastForward, conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // Assert that 2's sync fast-forwarded remote.
-        assert_sync!(SyncReport::LocalFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::LocalFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         assert_transactions!(sqlite_1, conn_1,
             // Assert that 1's schema remains the same, and it sees the extra Ivan.
@@ -1269,27 +1740,47 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // 1 and 2 define different schemas.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one}
             {:db/ident :person/age
               :db/valueType :db.type/long
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one}
             {:db/ident :person/sin
               :db/valueType :db.type/long
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
-        assert_sync!(SyncReport::Merge(SyncFollowup::FullSync), conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::Merge(SyncFollowup::FullSync),
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         assert_transactions!(sqlite_2, conn_2,
             schema =>
@@ -1308,10 +1799,20 @@ mod tolstoy_tests {
         );
 
         // Follow-up sync after merge.
-        assert_sync!(SyncReport::RemoteFastForward, conn_2, sqlite_2, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_2,
+            sqlite_2,
+            remote_client
+        );
 
         // Assert that 2's sync moved forward the remote state.
-        assert_sync!(SyncReport::LocalFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::LocalFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         assert_transactions!(sqlite_1, conn_1,
             // Assert that 1's schema is intact, and has been augmented with 2's.
@@ -1342,24 +1843,39 @@ mod tolstoy_tests {
         let mut remote_client = TestRemoteClient::new();
 
         // 1 and 2 define same idents but with different cardinality.
-        conn_1.transact(&mut sqlite_1, "[
+        conn_1
+            .transact(
+                &mut sqlite_1,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one}
             {:db/ident :person/bff
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}]").expect("transacted");
+              :db/cardinality :db.cardinality/one}]",
+            )
+            .expect("transacted");
 
-        conn_2.transact(&mut sqlite_2, "[
+        conn_2
+            .transact(
+                &mut sqlite_2,
+                "[
             {:db/ident :person/name
               :db/valueType :db.type/string
               :db/cardinality :db.cardinality/one}
             {:db/ident :person/bff
               :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/many}]").expect("transacted");
+              :db/cardinality :db.cardinality/many}]",
+            )
+            .expect("transacted");
 
         // Fast forward empty remote with a bootstrap and schema transactions.
-        assert_sync!(SyncReport::RemoteFastForward, conn_1, sqlite_1, remote_client);
+        assert_sync!(
+            SyncReport::RemoteFastForward,
+            conn_1,
+            sqlite_1,
+            remote_client
+        );
 
         // Merge bootstrap+schema transactions from 1 into 2.
         assert_sync!(

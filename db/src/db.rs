@@ -43,6 +43,7 @@ use schema::SchemaBuilding;
 use tx::transact;
 use types::{AVMap, AVPair, Partition, PartitionMap, DB};
 
+use std::convert::TryInto;
 use watcher::NullWatcher;
 
 // In PRAGMA foo='bar', `'bar'` must be a constant string (it cannot be a
@@ -256,8 +257,11 @@ lazy_static! {
 /// Mentat manages its own SQL schema version using the user version.  See the [SQLite
 /// documentation](https://www.sqlite.org/pragma.html#pragma_user_version).
 fn set_user_version(conn: &rusqlite::Connection, version: i32) -> Result<()> {
-    conn.execute(&format!("PRAGMA user_version = {}", version), rusqlite::params![])
-        .context(DbErrorKind::CouldNotSetVersionPragma)?;
+    conn.execute(
+        &format!("PRAGMA user_version = {}", version),
+        rusqlite::params![],
+    )
+    .context(DbErrorKind::CouldNotSetVersionPragma)?;
     Ok(())
 }
 
@@ -418,15 +422,15 @@ impl TypedSQLValue for TypedValue {
             (5, rusqlite::types::Value::Real(x)) => Ok(TypedValue::Double(x.into())),
             (10, rusqlite::types::Value::Text(x)) => Ok(x.into()),
             (11, rusqlite::types::Value::Blob(x)) => {
-                let u = Uuid::from_bytes(x.as_slice());
-                if u.is_err() {
+                let u = Uuid::from_bytes(x.as_slice().try_into().unwrap());
+                if u.is_nil() {
                     // Rather than exposing Uuid's ParseError…
                     bail!(DbErrorKind::BadSQLValuePair(
                         rusqlite::types::Value::Blob(x),
                         value_type_tag
                     ));
                 }
-                Ok(TypedValue::Uuid(u.unwrap()))
+                Ok(TypedValue::Uuid(u))
             }
             (13, rusqlite::types::Value::Text(x)) => to_namespaced_keyword(&x).map(|k| k.into()),
             (_, value) => bail!(DbErrorKind::BadSQLValuePair(value, value_type_tag)),
@@ -491,7 +495,9 @@ pub(crate) fn read_materialized_view(
 ) -> Result<Vec<(Entid, Entid, TypedValue)>> {
     let mut stmt: rusqlite::Statement =
         conn.prepare(format!("SELECT e, a, v, value_type_tag FROM {}", table).as_str())?;
-    let m: Result<Vec<_>> = stmt.query_and_then(rusqlite::params![], row_to_datom_assertion)?.collect();
+    let m: Result<Vec<_>> = stmt
+        .query_and_then(rusqlite::params![], row_to_datom_assertion)?
+        .collect();
     m
 }
 
@@ -660,7 +666,8 @@ fn search(conn: &rusqlite::Connection) -> Result<()> {
          t.a0 = d.a"#;
 
     let mut stmt = conn.prepare_cached(s)?;
-    stmt.execute(rusqlite::params![]).context(DbErrorKind::CouldNotSearch)?;
+    stmt.execute(rusqlite::params![])
+        .context(DbErrorKind::CouldNotSearch)?;
     Ok(())
 }
 
@@ -727,7 +734,8 @@ fn update_datoms(conn: &rusqlite::Connection, tx: Entid) -> Result<()> {
     // datom twice in datoms.  The transactor unifies repeated datoms, and in addition we add
     // indices to the search inputs and search results to ensure that we don't see repeated datoms
     // at this point.
-    let s = format!(r#"
+    let s = format!(
+        r#"
       INSERT INTO datoms (e, a, v, tx, value_type_tag, index_avet, index_vaet, index_fulltext, unique_value)
       SELECT e0, a0, v0, ?, value_type_tag0,
              flags0 & {} IS NOT 0,
@@ -736,10 +744,11 @@ fn update_datoms(conn: &rusqlite::Connection, tx: Entid) -> Result<()> {
              flags0 & {} IS NOT 0
       FROM temp.search_results
       WHERE added0 IS 1 AND ((rid IS NULL) OR ((rid IS NOT NULL) AND (v0 IS NOT v)))"#,
-      AttributeBitFlags::IndexAVET as u8,
-      AttributeBitFlags::IndexVAET as u8,
-      AttributeBitFlags::IndexFulltext as u8,
-      AttributeBitFlags::UniqueValue as u8);
+        AttributeBitFlags::IndexAVET as u8,
+        AttributeBitFlags::IndexVAET as u8,
+        AttributeBitFlags::IndexFulltext as u8,
+        AttributeBitFlags::UniqueValue as u8
+    );
 
     let mut stmt = conn.prepare_cached(&s)?;
     stmt.execute(&[&tx])
@@ -775,12 +784,12 @@ impl MentatStoring for rusqlite::Connection {
             }).collect();
 
             // `params` reference computed values in `block`.
-            let params: Vec<&ToSql> = block.iter().flat_map(|&(ref searchid, ref a, ref value, ref value_type_tag)| {
+            let params: Vec<&dyn ToSql> = block.iter().flat_map(|&(ref searchid, ref a, ref value, ref value_type_tag)| {
                 // Avoid inner heap allocation.
-                once(searchid as &ToSql)
-                    .chain(once(a as &ToSql)
-                           .chain(once(value as &ToSql)
-                                  .chain(once(value_type_tag as &ToSql))))
+                once(searchid as &dyn ToSql)
+                    .chain(once(a as &dyn ToSql)
+                           .chain(once(value as &dyn ToSql)
+                                  .chain(once(value_type_tag as &dyn ToSql))))
             }).collect();
 
             // TODO: cache these statements for selected values of `count`.
@@ -843,7 +852,6 @@ impl MentatStoring for rusqlite::Connection {
                value_type_tag0 SMALLINT NOT NULL,
                added0 TINYINT NOT NULL,
                flags0 TINYINT NOT NULL)"#,
-
             // It is fine to transact the same [e a v] twice in one transaction, but the transaction
             // processor should unify such repeated datoms.  This index will cause insertion to fail
             // if the transaction processor incorrectly tries to assert the same (cardinality one)
@@ -919,15 +927,15 @@ impl MentatStoring for rusqlite::Connection {
             let block = block?;
 
             // `params` reference computed values in `block`.
-            let params: Vec<&ToSql> = block.iter().flat_map(|&(ref e, ref a, ref value, ref value_type_tag, added, ref flags)| {
+            let params: Vec<&dyn ToSql> = block.iter().flat_map(|&(ref e, ref a, ref value, ref value_type_tag, added, ref flags)| {
                 // Avoid inner heap allocation.
                 // TODO: extract some finite length iterator to make this less indented!
-                once(e as &ToSql)
-                    .chain(once(a as &ToSql)
-                           .chain(once(value as &ToSql)
-                                  .chain(once(value_type_tag as &ToSql)
-                                         .chain(once(to_bool_ref(added) as &ToSql)
-                                                .chain(once(flags as &ToSql))))))
+                once(e as &dyn ToSql)
+                    .chain(once(a as &dyn ToSql)
+                           .chain(once(value as &dyn ToSql)
+                                  .chain(once(value_type_tag as &dyn ToSql)
+                                         .chain(once(to_bool_ref(added) as &dyn ToSql)
+                                                .chain(once(flags as &dyn ToSql))))))
             }).collect();
 
             // TODO: cache this for selected values of count.
@@ -1019,15 +1027,15 @@ impl MentatStoring for rusqlite::Connection {
 
             // First, insert all fulltext string values.
             // `fts_params` reference computed values in `block`.
-            let fts_params: Vec<&ToSql> =
+            let fts_params: Vec<&dyn ToSql> =
                 block.iter()
                      .filter(|&&(ref _e, ref _a, ref value, ref _value_type_tag, _added, ref _flags, ref _searchid)| {
                          value.is_some()
                      })
                      .flat_map(|&(ref _e, ref _a, ref value, ref _value_type_tag, _added, ref _flags, ref searchid)| {
                          // Avoid inner heap allocation.
-                         once(value as &ToSql)
-                             .chain(once(searchid as &ToSql))
+                         once(value as &dyn ToSql)
+                             .chain(once(searchid as &dyn ToSql))
                      }).collect();
 
             // TODO: make this maximally efficient. It's not terribly inefficient right now.
@@ -1040,15 +1048,15 @@ impl MentatStoring for rusqlite::Connection {
 
             // Second, insert searches.
             // `params` reference computed values in `block`.
-            let params: Vec<&ToSql> = block.iter().flat_map(|&(ref e, ref a, ref _value, ref value_type_tag, added, ref flags, ref searchid)| {
+            let params: Vec<&dyn ToSql> = block.iter().flat_map(|&(ref e, ref a, ref _value, ref value_type_tag, added, ref flags, ref searchid)| {
                 // Avoid inner heap allocation.
                 // TODO: extract some finite length iterator to make this less indented!
-                once(e as &ToSql)
-                    .chain(once(a as &ToSql)
-                           .chain(once(searchid as &ToSql)
-                                  .chain(once(value_type_tag as &ToSql)
-                                         .chain(once(to_bool_ref(added) as &ToSql)
-                                                .chain(once(flags as &ToSql))))))
+                once(e as &dyn ToSql)
+                    .chain(once(a as &dyn ToSql)
+                           .chain(once(searchid as &dyn ToSql)
+                                  .chain(once(value_type_tag as &dyn ToSql)
+                                         .chain(once(to_bool_ref(added) as &dyn ToSql)
+                                                .chain(once(flags as &dyn ToSql))))))
             }).collect();
 
             // TODO: cache this for selected values of count.
@@ -1136,7 +1144,7 @@ pub fn committed_metadata_assertions(
 
     let mut stmt = conn.prepare_cached(&sql_stmt)?;
     let m: Result<Vec<_>> = stmt
-        .query_and_then(&[&tx_id as &ToSql], row_to_transaction_assertion)?
+        .query_and_then(&[&tx_id as &dyn ToSql], row_to_transaction_assertion)?
         .collect();
     m
 }
@@ -1236,13 +1244,16 @@ SELECT EXISTS
             match alteration {
                 &Index => {
                     // This should always succeed.
-                    index_stmt.execute(&[&attribute.index, &entid as &ToSql])?;
+                    index_stmt.execute(&[&attribute.index, &entid as &dyn ToSql])?;
                 }
                 &Unique => {
                     // TODO: This can fail if there are conflicting values; give a more helpful
                     // error message in this case.
                     if unique_value_stmt
-                        .execute(&[to_bool_ref(attribute.unique.is_some()), &entid as &ToSql])
+                        .execute(&[
+                            to_bool_ref(attribute.unique.is_some()),
+                            &entid as &dyn ToSql,
+                        ])
                         .is_err()
                     {
                         match attribute.unique {
@@ -1269,7 +1280,7 @@ SELECT EXISTS
                     // TODO: improve the failure message.  Perhaps try to mimic what Datomic says in
                     // this case?
                     if !attribute.multival {
-                        let mut rows = cardinality_stmt.query(&[&entid as &ToSql])?;
+                        let mut rows = cardinality_stmt.query(&[&entid as &dyn ToSql])?;
                         if rows.next()?.is_some() {
                             bail!(DbErrorKind::SchemaAlterationFailed(format!(
                                 "Cannot alter schema attribute {} to be :db.cardinality/one",
@@ -3041,11 +3052,14 @@ mod tests {
     fn test_conflicting_upserts() {
         let mut conn = TestConn::default();
 
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             {:db/ident :page/id :db/valueType :db.type/string :db/index true :db/unique :db.unique/identity}
             {:db/ident :page/ref :db/valueType :db.type/ref :db/index true :db/unique :db.unique/identity}
             {:db/ident :page/title :db/valueType :db.type/string :db/cardinality :db.cardinality/many}
-        ]"#);
+        ]"#
+        );
 
         // Let's test some conflicting upserts.  First, valid data to work with -- note self references.
         assert_transact!(
@@ -3101,11 +3115,14 @@ mod tests {
     fn test_upsert_issue_532() {
         let mut conn = TestConn::default();
 
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             {:db/ident :page/id :db/valueType :db.type/string :db/index true :db/unique :db.unique/identity}
             {:db/ident :page/ref :db/valueType :db.type/ref :db/index true :db/unique :db.unique/identity}
             {:db/ident :page/title :db/valueType :db.type/string :db/cardinality :db.cardinality/many}
-        ]"#);
+        ]"#
+        );
 
         // Observe that "foo" and "zot" upsert to the same entid, and that doesn't cause a
         // cardinality conflict, because we treat the input with set semantics and accept
@@ -3257,10 +3274,13 @@ mod tests {
     fn test_cardinality_constraints() {
         let mut conn = TestConn::default();
 
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             {:db/id 200 :db/ident :test/one :db/valueType :db.type/long :db/cardinality :db.cardinality/one}
             {:db/id 201 :db/ident :test/many :db/valueType :db.type/long :db/cardinality :db.cardinality/many}
-        ]"#);
+        ]"#
+        );
 
         // Can add the same datom multiple times for an attribute, regardless of cardinality.
         assert_transact!(
@@ -3317,9 +3337,11 @@ mod tests {
         let sqlite = new_connection_with_key("../fixtures/v1encrypted.db", secret_key)
             .expect("Failed to find test DB");
         sqlite
-            .query_row("SELECT COUNT(*) FROM sqlite_master", rusqlite::params![], |row| {
-                row.get::<_, i64>(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master",
+                rusqlite::params![],
+                |row| row.get::<_, i64>(0),
+            )
             .expect("Failed to execute sql query on encrypted DB");
     }
 

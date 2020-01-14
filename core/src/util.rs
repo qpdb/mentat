@@ -67,7 +67,8 @@ pub enum Either<L, R> {
 // Cribbed from https://github.com/bluss/either/blob/f793721f3fdeb694f009e731b23a2858286bc0d6/src/lib.rs#L219-L259.
 impl<L, R> Either<L, R> {
     pub fn map_left<F, M>(self, f: F) -> Either<M, R>
-        where F: FnOnce(L) -> M
+    where
+        F: FnOnce(L) -> M,
     {
         use self::Either::*;
         match self {
@@ -77,7 +78,8 @@ impl<L, R> Either<L, R> {
     }
 
     pub fn map_right<F, S>(self, f: F) -> Either<L, S>
-        where F: FnOnce(R) -> S
+    where
+        F: FnOnce(R) -> S,
     {
         use self::Either::*;
         match self {

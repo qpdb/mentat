@@ -11,16 +11,11 @@
 use std::cmp::Ordering;
 use uuid::Uuid;
 
-use core_traits::{
-    Entid,
-    TypedValue,
-};
+use core_traits::{Entid, TypedValue};
 
 use mentat_db::PartitionMap;
 
-use public_traits::errors::{
-    Result,
-};
+use public_traits::errors::Result;
 
 pub struct LocalGlobalTxMapping<'a> {
     pub local: Entid,
@@ -40,7 +35,7 @@ impl<'a> LocalGlobalTxMapping<'a> {
     pub fn new(local: Entid, remote: &'a Uuid) -> LocalGlobalTxMapping<'a> {
         LocalGlobalTxMapping {
             local: local,
-            remote: remote
+            remote: remote,
         }
     }
 }
@@ -51,7 +46,6 @@ pub struct LocalTx {
     pub tx: Entid,
     pub parts: Vec<TxPart>,
 }
-
 
 impl PartialOrd for LocalTx {
     fn partial_cmp(&self, other: &LocalTx) -> Option<Ordering> {
@@ -80,7 +74,7 @@ pub struct Tx {
     pub parts: Vec<TxPart>,
 }
 
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TxPart {
     // TODO this is a temporary for development. Only first TxPart in a chunk series should have a non-None 'parts'.
     // 'parts' should actually live in a transaction, but we do this now to avoid changing the server until dust settles.
@@ -96,6 +90,7 @@ pub trait GlobalTransactionLog {
     fn head(&self) -> Result<Uuid>;
     fn transactions_after(&self, tx: &Uuid) -> Result<Vec<Tx>>;
     fn set_head(&mut self, tx: &Uuid) -> Result<()>;
-    fn put_transaction(&mut self, tx: &Uuid, parent_tx: &Uuid, chunk_txs: &Vec<Uuid>) -> Result<()>;
+    fn put_transaction(&mut self, tx: &Uuid, parent_tx: &Uuid, chunk_txs: &Vec<Uuid>)
+        -> Result<()>;
     fn put_chunk(&mut self, tx: &Uuid, payload: &TxPart) -> Result<()>;
 }

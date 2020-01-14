@@ -1059,7 +1059,7 @@ impl AttributeCaches {
             "SELECT a, e, v, value_type_tag FROM {} WHERE a = ? ORDER BY a ASC, e ASC",
             table
         );
-        let args: Vec<&rusqlite::types::ToSql> = vec![&attribute];
+        let args: Vec<&dyn rusqlite::types::ToSql> = vec![&attribute];
         let mut stmt = sqlite
             .prepare(&sql)
             .context(DbErrorKind::CacheUpdateFailed)?;
@@ -1071,7 +1071,7 @@ impl AttributeCaches {
         &'a mut self,
         schema: &'s Schema,
         statement: &'c mut rusqlite::Statement,
-        args: Vec<&'v rusqlite::types::ToSql>,
+        args: Vec<&'v dyn rusqlite::types::ToSql>,
         replacing: bool,
     ) -> Result<()> {
         let mut aev_factory = AevFactory::new();
@@ -1208,15 +1208,15 @@ impl AttributeCaches {
         &'a self,
         schema: &'s Schema,
         a: Entid,
-    ) -> Option<&'a AttributeCache> {
+    ) -> Option<&'a dyn AttributeCache> {
         if !self.forward_cached_attributes.contains(&a) {
             return None;
         }
         schema.attribute_for_entid(a).and_then(|attr| {
             if attr.multival {
-                self.multi_vals.get(&a).map(|v| v as &AttributeCache)
+                self.multi_vals.get(&a).map(|v| v as &dyn AttributeCache)
             } else {
-                self.single_vals.get(&a).map(|v| v as &AttributeCache)
+                self.single_vals.get(&a).map(|v| v as &dyn AttributeCache)
             }
         })
     }

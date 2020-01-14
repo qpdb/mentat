@@ -12,29 +12,17 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
-use core_traits::{
-    Entid,
-};
+use core_traits::Entid;
 
-use mentat_db::{
-    PartitionMap,
-    V1_PARTS,
-};
+use mentat_db::{PartitionMap, V1_PARTS};
 
-use public_traits::errors::{
-    Result,
-};
+use public_traits::errors::Result;
 
-use tx_processor::{
-    TxReceiver,
-};
+use crate::tx_processor::TxReceiver;
 
-use types::{
-    TxPart,
-    GlobalTransactionLog,
-};
+use crate::types::{GlobalTransactionLog, TxPart};
 
-use logger::d;
+use crate::logger::d;
 
 pub struct UploaderReport {
     pub temp_uuids: HashMap<Entid, Uuid>,
@@ -43,14 +31,18 @@ pub struct UploaderReport {
 
 pub(crate) struct TxUploader<'c> {
     tx_temp_uuids: HashMap<Entid, Uuid>,
-    remote_client: &'c mut GlobalTransactionLog,
+    remote_client: &'c mut dyn GlobalTransactionLog,
     remote_head: &'c Uuid,
     rolling_temp_head: Option<Uuid>,
     local_partitions: PartitionMap,
 }
 
 impl<'c> TxUploader<'c> {
-    pub fn new(client: &'c mut GlobalTransactionLog, remote_head: &'c Uuid, local_partitions: PartitionMap) -> TxUploader<'c> {
+    pub fn new(
+        client: &'c mut dyn GlobalTransactionLog,
+        remote_head: &'c Uuid,
+        local_partitions: PartitionMap,
+    ) -> TxUploader<'c> {
         TxUploader {
             tx_temp_uuids: HashMap::new(),
             remote_client: client,
@@ -64,7 +56,9 @@ impl<'c> TxUploader<'c> {
 /// Given a set of entids and a partition map, returns a new PartitionMap that would result from
 /// expanding the partitions to fit the entids.
 fn allocate_partition_map_for_entids<T>(entids: T, local_partitions: &PartitionMap) -> PartitionMap
-where T: Iterator<Item=Entid> {
+where
+    T: Iterator<Item = Entid>,
+{
     let mut parts = HashMap::new();
     for name in V1_PARTS.iter().map(|&(ref part, ..)| part.to_string()) {
         // This shouldn't fail: locally-sourced partitions must be present within with V1_PARTS.
@@ -90,7 +84,9 @@ where T: Iterator<Item=Entid> {
 
 impl<'c> TxReceiver<UploaderReport> for TxUploader<'c> {
     fn tx<T>(&mut self, tx_id: Entid, datoms: &mut T) -> Result<()>
-    where T: Iterator<Item=TxPart> {
+    where
+        T: Iterator<Item = TxPart>,
+    {
         // Yes, we generate a new UUID for a given Tx, even if we might
         // already have one mapped locally. Pre-existing local mapping will
         // be replaced if this sync succeeds entirely.
@@ -108,7 +104,10 @@ impl<'c> TxReceiver<UploaderReport> for TxUploader<'c> {
 
         // TODO this should live within a transaction, once server support is in place.
         // For now, we're uploading the PartitionMap in transaction's first chunk.
-        datoms[0].partitions = Some(allocate_partition_map_for_entids(datoms.iter().map(|d| d.e), &self.local_partitions));
+        datoms[0].partitions = Some(allocate_partition_map_for_entids(
+            datoms.iter().map(|d| d.e),
+            &self.local_partitions,
+        ));
 
         // Upload all chunks.
         for datom in &datoms {
@@ -131,8 +130,12 @@ impl<'c> TxReceiver<UploaderReport> for TxUploader<'c> {
             Some(p) => p,
             None => *self.remote_head,
         };
-        d(&format!("putting transaction: {:?}, {:?}, {:?}", &tx_uuid, &tx_parent, &tx_chunks));
-        self.remote_client.put_transaction(&tx_uuid, &tx_parent, &tx_chunks)?;
+        d(&format!(
+            "putting transaction: {:?}, {:?}, {:?}",
+            &tx_uuid, &tx_parent, &tx_chunks
+        ));
+        self.remote_client
+            .put_transaction(&tx_uuid, &tx_parent, &tx_chunks)?;
 
         d(&format!("updating rolling head: {:?}", tx_uuid));
         self.rolling_temp_head = Some(tx_uuid.clone());
@@ -152,20 +155,19 @@ impl<'c> TxReceiver<UploaderReport> for TxUploader<'c> {
 pub mod tests {
     use super::*;
 
-    use mentat_db::{
-        Partition,
-        V1_PARTS,
-    };
+    use mentat_db::{Partition, V1_PARTS};
 
-    use schema::{
-        PARTITION_USER,
-        PARTITION_TX,
-        PARTITION_DB,
-    };
+    use crate::schema::{PARTITION_DB, PARTITION_TX, PARTITION_USER};
 
     fn bootstrap_partition_map() -> PartitionMap {
-        V1_PARTS.iter()
-            .map(|&(ref part, start, end, index, allow_excision)| (part.to_string(), Partition::new(start, end, index, allow_excision)))
+        V1_PARTS
+            .iter()
+            .map(|&(ref part, start, end, index, allow_excision)| {
+                (
+                    part.to_string(),
+                    Partition::new(start, end, index, allow_excision),
+                )
+            })
             .collect()
     }
 

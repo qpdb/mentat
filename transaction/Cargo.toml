@@ -43,5 +43,5 @@ path = "../query-pull"
 path = "../query-sql"
 
 [dependencies.rusqlite]
-version = "0.19"
+version = "0.21"
 features = ["limits"]

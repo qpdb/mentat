@@ -23,10 +23,7 @@ extern crate mentat_query_projector;
 extern crate mentat_query_pull;
 extern crate mentat_sql;
 
-use std::sync::{
-    Arc,
-    Mutex,
-};
+use std::sync::{Arc, Mutex};
 
 use std::io::Read;
 
@@ -34,93 +31,42 @@ use std::borrow::Borrow;
 
 use std::collections::BTreeMap;
 
-use std::fs::{
-    File,
-};
+use std::fs::File;
 
-use std::path::{
-    Path,
-};
+use std::path::Path;
 
-use edn::{
-    InternSet,
-    Keyword,
-};
-use edn::entities::{
-    TempId,
-    OpType,
-};
+use edn::entities::{OpType, TempId};
+use edn::{InternSet, Keyword};
 
-use core_traits::{
-    Attribute,
-    Entid,
-    KnownEntid,
-    StructuredMap,
-    TypedValue,
-    ValueType,
-};
+use core_traits::{Attribute, Entid, KnownEntid, StructuredMap, TypedValue, ValueType};
 
-use public_traits::errors::{
-    Result,
-    MentatError,
-};
+use public_traits::errors::{MentatError, Result};
 
-use mentat_core::{
-    HasSchema,
-    Schema,
-    TxReport,
-    ValueRc,
-};
+use mentat_core::{HasSchema, Schema, TxReport, ValueRc};
 
-use mentat_query_pull::{
-    pull_attributes_for_entities,
-    pull_attributes_for_entity,
-};
+use mentat_query_pull::{pull_attributes_for_entities, pull_attributes_for_entity};
 
 use mentat_db::{
-    transact,
-    transact_terms,
-    InProgressObserverTransactWatcher,
-    PartitionMap,
-    TransactableValue,
-    TransactWatcher,
-    TxObservationService,
+    transact, transact_terms, InProgressObserverTransactWatcher, PartitionMap, TransactWatcher,
+    TransactableValue, TxObservationService,
 };
 
 use mentat_db::internal_types::TermWithTempIds;
 
-use mentat_db::cache::{
-    InProgressCacheTransactWatcher,
-    InProgressSQLiteAttributeCache,
-};
+use mentat_db::cache::{InProgressCacheTransactWatcher, InProgressSQLiteAttributeCache};
 
 pub mod entity_builder;
 pub mod metadata;
 pub mod query;
 
-pub use entity_builder::{
-    InProgressBuilder,
-    TermBuilder,
-};
+pub use entity_builder::{InProgressBuilder, TermBuilder};
 
-pub use metadata::{
-    Metadata,
-};
+pub use metadata::Metadata;
 
 use query::{
-    Known,
-    PreparedResult,
-    QueryExplanation,
-    QueryInputs,
-    QueryOutput,
-    lookup_value_for_attribute,
-    lookup_values_for_attribute,
-    q_explain,
-    q_once,
-    q_prepare,
-    q_uncached,
+    lookup_value_for_attribute, lookup_values_for_attribute, q_explain, q_once, q_prepare,
+    q_uncached, Known, PreparedResult, QueryExplanation, QueryInputs, QueryOutput,
 };
-
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CacheDirection {
@@ -159,23 +105,42 @@ pub struct InProgressRead<'a, 'c> {
 
 pub trait Queryable {
     fn q_explain<T>(&self, query: &str, inputs: T) -> Result<QueryExplanation>
-        where T: Into<Option<QueryInputs>>;
+    where
+        T: Into<Option<QueryInputs>>;
     fn q_once<T>(&self, query: &str, inputs: T) -> Result<QueryOutput>
-        where T: Into<Option<QueryInputs>>;
+    where
+        T: Into<Option<QueryInputs>>;
     fn q_prepare<T>(&self, query: &str, inputs: T) -> PreparedResult
-        where T: Into<Option<QueryInputs>>;
-    fn lookup_values_for_attribute<E>(&self, entity: E, attribute: &edn::Keyword) -> Result<Vec<TypedValue>>
-        where E: Into<Entid>;
-    fn lookup_value_for_attribute<E>(&self, entity: E, attribute: &edn::Keyword) -> Result<Option<TypedValue>>
-        where E: Into<Entid>;
+    where
+        T: Into<Option<QueryInputs>>;
+    fn lookup_values_for_attribute<E>(
+        &self,
+        entity: E,
+        attribute: &edn::Keyword,
+    ) -> Result<Vec<TypedValue>>
+    where
+        E: Into<Entid>;
+    fn lookup_value_for_attribute<E>(
+        &self,
+        entity: E,
+        attribute: &edn::Keyword,
+    ) -> Result<Option<TypedValue>>
+    where
+        E: Into<Entid>;
 }
 
 pub trait Pullable {
-    fn pull_attributes_for_entities<E, A>(&self, entities: E, attributes: A) -> Result<BTreeMap<Entid, ValueRc<StructuredMap>>>
-    where E: IntoIterator<Item=Entid>,
-          A: IntoIterator<Item=Entid>;
+    fn pull_attributes_for_entities<E, A>(
+        &self,
+        entities: E,
+        attributes: A,
+    ) -> Result<BTreeMap<Entid, ValueRc<StructuredMap>>>
+    where
+        E: IntoIterator<Item = Entid>,
+        A: IntoIterator<Item = Entid>;
     fn pull_attributes_for_entity<A>(&self, entity: Entid, attributes: A) -> Result<StructuredMap>
-    where A: IntoIterator<Item=Entid>;
+    where
+        A: IntoIterator<Item = Entid>;
 }
 
 impl<'a, 'c> InProgress<'a, 'c> {
@@ -191,24 +156,28 @@ impl<'a, 'c> InProgress<'a, 'c> {
     /// If you only have a reference to an `InProgress`, you can't use the easy builder.
     /// This exists so you can make your own.
     pub fn transact_builder(&mut self, builder: TermBuilder) -> Result<TxReport> {
-        builder.build()
-               .and_then(|(terms, _tempid_set)| {
-                    self.transact_entities(terms)
-               })
+        builder
+            .build()
+            .and_then(|(terms, _tempid_set)| self.transact_entities(terms))
     }
 
-    pub fn transact_terms<I>(&mut self, terms: I, tempid_set: InternSet<TempId>) -> Result<TxReport> where I: IntoIterator<Item=TermWithTempIds> {
+    pub fn transact_terms<I>(&mut self, terms: I, tempid_set: InternSet<TempId>) -> Result<TxReport>
+    where
+        I: IntoIterator<Item = TermWithTempIds>,
+    {
         let w = InProgressTransactWatcher::new(
-                &mut self.tx_observer_watcher,
-                self.cache.transact_watcher());
-        let (report, next_partition_map, next_schema, _watcher) =
-            transact_terms(&self.transaction,
-                           self.partition_map.clone(),
-                           &self.schema,
-                           &self.schema,
-                           w,
-                           terms,
-                           tempid_set)?;
+            &mut self.tx_observer_watcher,
+            self.cache.transact_watcher(),
+        );
+        let (report, next_partition_map, next_schema, _watcher) = transact_terms(
+            &self.transaction,
+            self.partition_map.clone(),
+            &self.schema,
+            &self.schema,
+            w,
+            terms,
+            tempid_set,
+        )?;
         self.partition_map = next_partition_map;
         if let Some(schema) = next_schema {
             self.schema = schema;
@@ -216,7 +185,10 @@ impl<'a, 'c> InProgress<'a, 'c> {
         Ok(report)
     }
 
-    pub fn transact_entities<I, V: TransactableValue>(&mut self, entities: I) -> Result<TxReport> where I: IntoIterator<Item=edn::entities::Entity<V>> {
+    pub fn transact_entities<I, V: TransactableValue>(&mut self, entities: I) -> Result<TxReport>
+    where
+        I: IntoIterator<Item = edn::entities::Entity<V>>,
+    {
         // We clone the partition map here, rather than trying to use a Cell or using a mutable
         // reference, for two reasons:
         // 1. `transact` allocates new IDs in partitions before and while doing work that might
@@ -226,15 +198,17 @@ impl<'a, 'c> InProgress<'a, 'c> {
         //    `Default::default` in those situations to extract the partition map, and so there
         //    would still be some cost.
         let w = InProgressTransactWatcher::new(
-                &mut self.tx_observer_watcher,
-                self.cache.transact_watcher());
-        let (report, next_partition_map, next_schema, _watcher) =
-            transact(&self.transaction,
-                     self.partition_map.clone(),
-                     &self.schema,
-                     &self.schema,
-                     w,
-                     entities)?;
+            &mut self.tx_observer_watcher,
+            self.cache.transact_watcher(),
+        );
+        let (report, next_partition_map, next_schema, _watcher) = transact(
+            &self.transaction,
+            self.partition_map.clone(),
+            &self.schema,
+            &self.schema,
+            w,
+            entities,
+        )?;
         self.partition_map = next_partition_map;
         if let Some(schema) = next_schema {
             self.schema = schema;
@@ -242,13 +216,18 @@ impl<'a, 'c> InProgress<'a, 'c> {
         Ok(report)
     }
 
-    pub fn transact<B>(&mut self, transaction: B) -> Result<TxReport> where B: Borrow<str> {
+    pub fn transact<B>(&mut self, transaction: B) -> Result<TxReport>
+    where
+        B: Borrow<str>,
+    {
         let entities = edn::parse::entities(transaction.borrow())?;
         self.transact_entities(entities)
     }
 
     pub fn import<P>(&mut self, path: P) -> Result<TxReport>
-    where P: AsRef<Path> {
+    where
+        P: AsRef<Path>,
+    {
         let mut file = File::open(path)?;
         let mut text: String = String::new();
         file.read_to_string(&mut text)?;
@@ -289,31 +268,47 @@ impl<'a, 'c> InProgress<'a, 'c> {
         }
 
         let txes = self.tx_observer_watcher.txes;
-        self.tx_observer.lock().unwrap().in_progress_did_commit(txes);
+        self.tx_observer
+            .lock()
+            .unwrap()
+            .in_progress_did_commit(txes);
 
         Ok(())
     }
 
-    pub fn cache(&mut self,
-                 attribute: &Keyword,
-                 cache_direction: CacheDirection,
-                 cache_action: CacheAction) -> Result<()> {
-        let attribute_entid: Entid = self.schema
-                                         .attribute_for_ident(&attribute)
-                                         .ok_or_else(|| MentatError::UnknownAttribute(attribute.to_string()))?.1.into();
+    pub fn cache(
+        &mut self,
+        attribute: &Keyword,
+        cache_direction: CacheDirection,
+        cache_action: CacheAction,
+    ) -> Result<()> {
+        let attribute_entid: Entid = self
+            .schema
+            .attribute_for_ident(&attribute)
+            .ok_or_else(|| MentatError::UnknownAttribute(attribute.to_string()))?
+            .1
+            .into();
 
         match cache_action {
-            CacheAction::Register => {
-                match cache_direction {
-                    CacheDirection::Both => self.cache.register(&self.schema, &self.transaction, attribute_entid),
-                    CacheDirection::Forward => self.cache.register_forward(&self.schema, &self.transaction, attribute_entid),
-                    CacheDirection::Reverse => self.cache.register_reverse(&self.schema, &self.transaction, attribute_entid),
-                }.map_err(|e| e.into())
-            },
+            CacheAction::Register => match cache_direction {
+                CacheDirection::Both => {
+                    self.cache
+                        .register(&self.schema, &self.transaction, attribute_entid)
+                }
+                CacheDirection::Forward => {
+                    self.cache
+                        .register_forward(&self.schema, &self.transaction, attribute_entid)
+                }
+                CacheDirection::Reverse => {
+                    self.cache
+                        .register_reverse(&self.schema, &self.transaction, attribute_entid)
+                }
+            }
+            .map_err(|e| e.into()),
             CacheAction::Deregister => {
                 self.cache.unregister(attribute_entid);
                 Ok(())
-            },
+            }
         }
     }
 
@@ -322,17 +317,20 @@ impl<'a, 'c> InProgress<'a, 'c> {
     }
 
     pub fn savepoint(&self, name: &str) -> Result<()> {
-        self.transaction.execute(&format!("SAVEPOINT {}", name), rusqlite::params![])?;
+        self.transaction
+            .execute(&format!("SAVEPOINT {}", name), rusqlite::params![])?;
         Ok(())
     }
 
     pub fn rollback_savepoint(&self, name: &str) -> Result<()> {
-        self.transaction.execute(&format!("ROLLBACK TO {}", name), rusqlite::params![])?;
+        self.transaction
+            .execute(&format!("ROLLBACK TO {}", name), rusqlite::params![])?;
         Ok(())
     }
 
     pub fn release_savepoint(&self, name: &str) -> Result<()> {
-        self.transaction.execute(&format!("RELEASE {}", name), rusqlite::params![])?;
+        self.transaction
+            .execute(&format!("RELEASE {}", name), rusqlite::params![])?;
         Ok(())
     }
 }
@@ -343,108 +341,148 @@ impl<'a, 'c> InProgressRead<'a, 'c> {
     }
 }
 
-
 impl<'a, 'c> Queryable for InProgressRead<'a, 'c> {
     fn q_once<T>(&self, query: &str, inputs: T) -> Result<QueryOutput>
-        where T: Into<Option<QueryInputs>> {
+    where
+        T: Into<Option<QueryInputs>>,
+    {
         self.in_progress.q_once(query, inputs)
     }
 
     fn q_prepare<T>(&self, query: &str, inputs: T) -> PreparedResult
-        where T: Into<Option<QueryInputs>> {
+    where
+        T: Into<Option<QueryInputs>>,
+    {
         self.in_progress.q_prepare(query, inputs)
     }
 
     fn q_explain<T>(&self, query: &str, inputs: T) -> Result<QueryExplanation>
-        where T: Into<Option<QueryInputs>> {
+    where
+        T: Into<Option<QueryInputs>>,
+    {
         self.in_progress.q_explain(query, inputs)
     }
 
-    fn lookup_values_for_attribute<E>(&self, entity: E, attribute: &edn::Keyword) -> Result<Vec<TypedValue>>
-        where E: Into<Entid> {
-        self.in_progress.lookup_values_for_attribute(entity, attribute)
+    fn lookup_values_for_attribute<E>(
+        &self,
+        entity: E,
+        attribute: &edn::Keyword,
+    ) -> Result<Vec<TypedValue>>
+    where
+        E: Into<Entid>,
+    {
+        self.in_progress
+            .lookup_values_for_attribute(entity, attribute)
     }
 
-    fn lookup_value_for_attribute<E>(&self, entity: E, attribute: &edn::Keyword) -> Result<Option<TypedValue>>
-        where E: Into<Entid> {
-        self.in_progress.lookup_value_for_attribute(entity, attribute)
+    fn lookup_value_for_attribute<E>(
+        &self,
+        entity: E,
+        attribute: &edn::Keyword,
+    ) -> Result<Option<TypedValue>>
+    where
+        E: Into<Entid>,
+    {
+        self.in_progress
+            .lookup_value_for_attribute(entity, attribute)
     }
 }
 
 impl<'a, 'c> Pullable for InProgressRead<'a, 'c> {
-    fn pull_attributes_for_entities<E, A>(&self, entities: E, attributes: A) -> Result<BTreeMap<Entid, ValueRc<StructuredMap>>>
-    where E: IntoIterator<Item=Entid>,
-          A: IntoIterator<Item=Entid> {
-        self.in_progress.pull_attributes_for_entities(entities, attributes)
+    fn pull_attributes_for_entities<E, A>(
+        &self,
+        entities: E,
+        attributes: A,
+    ) -> Result<BTreeMap<Entid, ValueRc<StructuredMap>>>
+    where
+        E: IntoIterator<Item = Entid>,
+        A: IntoIterator<Item = Entid>,
+    {
+        self.in_progress
+            .pull_attributes_for_entities(entities, attributes)
     }
 
     fn pull_attributes_for_entity<A>(&self, entity: Entid, attributes: A) -> Result<StructuredMap>
-    where A: IntoIterator<Item=Entid> {
-        self.in_progress.pull_attributes_for_entity(entity, attributes)
+    where
+        A: IntoIterator<Item = Entid>,
+    {
+        self.in_progress
+            .pull_attributes_for_entity(entity, attributes)
     }
 }
 
 impl<'a, 'c> Queryable for InProgress<'a, 'c> {
     fn q_once<T>(&self, query: &str, inputs: T) -> Result<QueryOutput>
-        where T: Into<Option<QueryInputs>> {
-
+    where
+        T: Into<Option<QueryInputs>>,
+    {
         if self.use_caching {
             let known = Known::new(&self.schema, Some(&self.cache));
-            q_once(&*(self.transaction),
-                   known,
-                   query,
-                   inputs)
+            q_once(&*(self.transaction), known, query, inputs)
         } else {
-            q_uncached(&*(self.transaction),
-                       &self.schema,
-                       query,
-                       inputs)
+            q_uncached(&*(self.transaction), &self.schema, query, inputs)
         }
     }
 
     fn q_prepare<T>(&self, query: &str, inputs: T) -> PreparedResult
-        where T: Into<Option<QueryInputs>> {
-
+    where
+        T: Into<Option<QueryInputs>>,
+    {
         let known = Known::new(&self.schema, Some(&self.cache));
-        q_prepare(&*(self.transaction),
-                  known,
-                  query,
-                  inputs)
+        q_prepare(&*(self.transaction), known, query, inputs)
     }
 
     fn q_explain<T>(&self, query: &str, inputs: T) -> Result<QueryExplanation>
-        where T: Into<Option<QueryInputs>> {
-
+    where
+        T: Into<Option<QueryInputs>>,
+    {
         let known = Known::new(&self.schema, Some(&self.cache));
-        q_explain(&*(self.transaction),
-                  known,
-                  query,
-                  inputs)
+        q_explain(&*(self.transaction), known, query, inputs)
     }
 
-    fn lookup_values_for_attribute<E>(&self, entity: E, attribute: &edn::Keyword) -> Result<Vec<TypedValue>>
-        where E: Into<Entid> {
+    fn lookup_values_for_attribute<E>(
+        &self,
+        entity: E,
+        attribute: &edn::Keyword,
+    ) -> Result<Vec<TypedValue>>
+    where
+        E: Into<Entid>,
+    {
         let known = Known::new(&self.schema, Some(&self.cache));
         lookup_values_for_attribute(&*(self.transaction), known, entity, attribute)
     }
 
-    fn lookup_value_for_attribute<E>(&self, entity: E, attribute: &edn::Keyword) -> Result<Option<TypedValue>>
-        where E: Into<Entid> {
+    fn lookup_value_for_attribute<E>(
+        &self,
+        entity: E,
+        attribute: &edn::Keyword,
+    ) -> Result<Option<TypedValue>>
+    where
+        E: Into<Entid>,
+    {
         let known = Known::new(&self.schema, Some(&self.cache));
         lookup_value_for_attribute(&*(self.transaction), known, entity, attribute)
     }
 }
 
 impl<'a, 'c> Pullable for InProgress<'a, 'c> {
-    fn pull_attributes_for_entities<E, A>(&self, entities: E, attributes: A) -> Result<BTreeMap<Entid, ValueRc<StructuredMap>>>
-    where E: IntoIterator<Item=Entid>,
-          A: IntoIterator<Item=Entid> {
+    fn pull_attributes_for_entities<E, A>(
+        &self,
+        entities: E,
+        attributes: A,
+    ) -> Result<BTreeMap<Entid, ValueRc<StructuredMap>>>
+    where
+        E: IntoIterator<Item = Entid>,
+        A: IntoIterator<Item = Entid>,
+    {
         pull_attributes_for_entities(&self.schema, &*(self.transaction), entities, attributes)
             .map_err(|e| e.into())
     }
 
     fn pull_attributes_for_entity<A>(&self, entity: Entid, attributes: A) -> Result<StructuredMap>
-    where A: IntoIterator<Item=Entid> {
+    where
+        A: IntoIterator<Item = Entid>,
+    {
         pull_attributes_for_entity(&self.schema, &*(self.transaction), entity, attributes)
             .map_err(|e| e.into())
     }
@@ -455,7 +493,10 @@ impl<'a, 'c> HasSchema for InProgressRead<'a, 'c> {
         self.in_progress.entid_for_type(t)
     }
 
-    fn get_ident<T>(&self, x: T) -> Option<&Keyword> where T: Into<Entid> {
+    fn get_ident<T>(&self, x: T) -> Option<&Keyword>
+    where
+        T: Into<Entid>,
+    {
         self.in_progress.get_ident(x)
     }
 
@@ -463,7 +504,10 @@ impl<'a, 'c> HasSchema for InProgressRead<'a, 'c> {
         self.in_progress.get_entid(x)
     }
 
-    fn attribute_for_entid<T>(&self, x: T) -> Option<&Attribute> where T: Into<Entid> {
+    fn attribute_for_entid<T>(&self, x: T) -> Option<&Attribute>
+    where
+        T: Into<Entid>,
+    {
         self.in_progress.attribute_for_entid(x)
     }
 
@@ -472,7 +516,10 @@ impl<'a, 'c> HasSchema for InProgressRead<'a, 'c> {
     }
 
     /// Return true if the provided entid identifies an attribute in this schema.
-    fn is_attribute<T>(&self, x: T) -> bool where T: Into<Entid> {
+    fn is_attribute<T>(&self, x: T) -> bool
+    where
+        T: Into<Entid>,
+    {
         self.in_progress.is_attribute(x)
     }
 
@@ -491,7 +538,10 @@ impl<'a, 'c> HasSchema for InProgress<'a, 'c> {
         self.schema.entid_for_type(t)
     }
 
-    fn get_ident<T>(&self, x: T) -> Option<&Keyword> where T: Into<Entid> {
+    fn get_ident<T>(&self, x: T) -> Option<&Keyword>
+    where
+        T: Into<Entid>,
+    {
         self.schema.get_ident(x)
     }
 
@@ -499,7 +549,10 @@ impl<'a, 'c> HasSchema for InProgress<'a, 'c> {
         self.schema.get_entid(x)
     }
 
-    fn attribute_for_entid<T>(&self, x: T) -> Option<&Attribute> where T: Into<Entid> {
+    fn attribute_for_entid<T>(&self, x: T) -> Option<&Attribute>
+    where
+        T: Into<Entid>,
+    {
         self.schema.attribute_for_entid(x)
     }
 
@@ -508,7 +561,10 @@ impl<'a, 'c> HasSchema for InProgress<'a, 'c> {
     }
 
     /// Return true if the provided entid identifies an attribute in this schema.
-    fn is_attribute<T>(&self, x: T) -> bool where T: Into<Entid> {
+    fn is_attribute<T>(&self, x: T) -> bool
+    where
+        T: Into<Entid>,
+    {
         self.schema.is_attribute(x)
     }
 
@@ -529,7 +585,10 @@ struct InProgressTransactWatcher<'a, 'o> {
 }
 
 impl<'a, 'o> InProgressTransactWatcher<'a, 'o> {
-    fn new(observer_watcher: &'o mut InProgressObserverTransactWatcher, cache_watcher: InProgressCacheTransactWatcher<'a>) -> Self {
+    fn new(
+        observer_watcher: &'o mut InProgressObserverTransactWatcher,
+        cache_watcher: InProgressCacheTransactWatcher<'a>,
+    ) -> Self {
         InProgressTransactWatcher {
             cache_watcher: cache_watcher,
             observer_watcher: observer_watcher,
@@ -540,8 +599,10 @@ impl<'a, 'o> InProgressTransactWatcher<'a, 'o> {
 
 impl<'a, 'o> TransactWatcher for InProgressTransactWatcher<'a, 'o> {
     fn datom(&mut self, op: OpType, e: Entid, a: Entid, v: &TypedValue) {
-        self.cache_watcher.datom(op.clone(), e.clone(), a.clone(), v);
-        self.observer_watcher.datom(op.clone(), e.clone(), a.clone(), v);
+        self.cache_watcher
+            .datom(op.clone(), e.clone(), a.clone(), v);
+        self.observer_watcher
+            .datom(op.clone(), e.clone(), a.clone(), v);
     }
 
     fn done(&mut self, t: &Entid, schema: &Schema) -> ::db_traits::errors::Result<()> {

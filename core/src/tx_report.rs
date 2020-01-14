@@ -10,18 +10,11 @@
 
 #![allow(dead_code)]
 
-use std::collections::{
-    BTreeMap,
-};
+use std::collections::BTreeMap;
 
-use core_traits::{
-    Entid,
-};
+use core_traits::Entid;
 
-use ::{
-    DateTime,
-    Utc,
-};
+use {DateTime, Utc};
 
 /// A transaction report summarizes an applied transaction.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]

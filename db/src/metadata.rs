@@ -26,39 +26,21 @@
 
 use failure::ResultExt;
 
-use std::collections::{BTreeMap, BTreeSet};
 use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 
-use add_retract_alter_set::{
-    AddRetractAlterSet,
-};
+use add_retract_alter_set::AddRetractAlterSet;
+use db_traits::errors::{DbErrorKind, Result};
 use edn::symbols;
 use entids;
-use db_traits::errors::{
-    DbErrorKind,
-    Result,
-};
 
-use core_traits::{
-    attribute,
-    Entid,
-    TypedValue,
-    ValueType,
-};
+use core_traits::{attribute, Entid, TypedValue, ValueType};
 
-use mentat_core::{
-    Schema,
-    AttributeMap,
-};
+use mentat_core::{AttributeMap, Schema};
 
-use schema::{
-    AttributeBuilder,
-    AttributeValidation,
-};
+use schema::{AttributeBuilder, AttributeValidation};
 
-use types::{
-    EAV,
-};
+use types::EAV;
 
 /// An alteration to an attribute.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
@@ -100,8 +82,7 @@ pub struct MetadataReport {
 
 impl MetadataReport {
     pub fn attributes_did_change(&self) -> bool {
-        !(self.attributes_installed.is_empty() &&
-          self.attributes_altered.is_empty())
+        !(self.attributes_installed.is_empty() && self.attributes_altered.is_empty())
     }
 }
 
@@ -115,7 +96,11 @@ impl MetadataReport {
 /// - we're allowing optional attributes to not be retracted and dangle afterwards
 ///
 /// Returns a set of attribute retractions which do not involve schema-defining attributes.
-fn update_attribute_map_from_schema_retractions(attribute_map: &mut AttributeMap, retractions: Vec<EAV>, ident_retractions: &BTreeMap<Entid, symbols::Keyword>) -> Result<Vec<EAV>> {
+fn update_attribute_map_from_schema_retractions(
+    attribute_map: &mut AttributeMap,
+    retractions: Vec<EAV>,
+    ident_retractions: &BTreeMap<Entid, symbols::Keyword>,
+) -> Result<Vec<EAV>> {
     // Process retractions of schema attributes first. It's allowed to retract a schema attribute
     // if all of the schema-defining schema attributes are being retracted.
     // A defining set of attributes is :db/ident, :db/valueType, :db/cardinality.
@@ -152,7 +137,9 @@ fn update_attribute_map_from_schema_retractions(attribute_map: &mut AttributeMap
         let attributes = eas.get(&e).unwrap();
 
         // Found a set of retractions which negate a schema.
-        if attributes.contains(&entids::DB_CARDINALITY) && attributes.contains(&entids::DB_VALUE_TYPE) {
+        if attributes.contains(&entids::DB_CARDINALITY)
+            && attributes.contains(&entids::DB_VALUE_TYPE)
+        {
             // Ensure that corresponding :db/ident is also being retracted at the same time.
             if ident_retractions.contains_key(&e) {
                 // Remove attributes corresponding to retracted attribute.
@@ -174,11 +161,19 @@ fn update_attribute_map_from_schema_retractions(attribute_map: &mut AttributeMap
 /// contain install and alter markers.
 ///
 /// Returns a report summarizing the mutations that were applied.
-pub fn update_attribute_map_from_entid_triples(attribute_map: &mut AttributeMap, assertions: Vec<EAV>, retractions: Vec<EAV>) -> Result<MetadataReport> {
-    fn attribute_builder_to_modify(attribute_id: Entid, existing: &AttributeMap) -> AttributeBuilder {
-        existing.get(&attribute_id)
-                .map(AttributeBuilder::to_modify_attribute)
-                .unwrap_or_else(AttributeBuilder::default)
+pub fn update_attribute_map_from_entid_triples(
+    attribute_map: &mut AttributeMap,
+    assertions: Vec<EAV>,
+    retractions: Vec<EAV>,
+) -> Result<MetadataReport> {
+    fn attribute_builder_to_modify(
+        attribute_id: Entid,
+        existing: &AttributeMap,
+    ) -> AttributeBuilder {
+        existing
+            .get(&attribute_id)
+            .map(AttributeBuilder::to_modify_attribute)
+            .unwrap_or_else(AttributeBuilder::default)
     }
 
     // Group mutations by impacted entid.
@@ -187,7 +182,9 @@ pub fn update_attribute_map_from_entid_triples(attribute_map: &mut AttributeMap,
     // For retractions, we start with an attribute builder that's pre-populated with the existing
     // attribute values. That allows us to check existing values and unset them.
     for (entid, attr, ref value) in retractions {
-        let builder = builders.entry(entid).or_insert_with(|| attribute_builder_to_modify(entid, attribute_map));
+        let builder = builders
+            .entry(entid)
+            .or_insert_with(|| attribute_builder_to_modify(entid, attribute_map));
         match attr {
             // You can only retract :db/unique, :db/isComponent; all others must be altered instead
             // of retracted, or are not allowed to change.
@@ -303,7 +300,7 @@ pub fn update_attribute_map_from_entid_triples(attribute_map: &mut AttributeMap,
                 bail!(DbErrorKind::BadSchemaAssertion(format!("Do not recognize attribute {} for entid {}", attr, entid)))
             }
         }
-    };
+    }
 
     let mut attributes_installed: BTreeSet<Entid> = BTreeSet::default();
     let mut attributes_altered: BTreeMap<Entid, Vec<AttributeAlteration>> = BTreeMap::default();
@@ -312,20 +309,30 @@ pub fn update_attribute_map_from_entid_triples(attribute_map: &mut AttributeMap,
         match attribute_map.entry(entid) {
             Entry::Vacant(entry) => {
                 // Validate once…
-                builder.validate_install_attribute().context(DbErrorKind::BadSchemaAssertion(format!("Schema alteration for new attribute with entid {} is not valid", entid)))?;
+                builder
+                    .validate_install_attribute()
+                    .context(DbErrorKind::BadSchemaAssertion(format!(
+                        "Schema alteration for new attribute with entid {} is not valid",
+                        entid
+                    )))?;
 
                 // … and twice, now we have the Attribute.
                 let a = builder.build();
                 a.validate(|| entid.to_string())?;
                 entry.insert(a);
                 attributes_installed.insert(entid);
-            },
+            }
 
             Entry::Occupied(mut entry) => {
-                builder.validate_alter_attribute().context(DbErrorKind::BadSchemaAssertion(format!("Schema alteration for existing attribute with entid {} is not valid", entid)))?;
+                builder
+                    .validate_alter_attribute()
+                    .context(DbErrorKind::BadSchemaAssertion(format!(
+                        "Schema alteration for existing attribute with entid {} is not valid",
+                        entid
+                    )))?;
                 let mutations = builder.mutate(entry.get_mut());
                 attributes_altered.insert(entid, mutations);
-            },
+            }
         }
     }
 
@@ -344,14 +351,19 @@ pub fn update_attribute_map_from_entid_triples(attribute_map: &mut AttributeMap,
 /// This is suitable for mutating a `Schema` from an applied transaction.
 ///
 /// Returns a report summarizing the mutations that were applied.
-pub fn update_schema_from_entid_quadruples<U>(schema: &mut Schema, assertions: U) -> Result<MetadataReport>
-    where U: IntoIterator<Item=(Entid, Entid, TypedValue, bool)> {
-
+pub fn update_schema_from_entid_quadruples<U>(
+    schema: &mut Schema,
+    assertions: U,
+) -> Result<MetadataReport>
+where
+    U: IntoIterator<Item = (Entid, Entid, TypedValue, bool)>,
+{
     // Group attribute assertions into asserted, retracted, and updated.  We assume all our
     // attribute assertions are :db/cardinality :db.cardinality/one (so they'll only be added or
     // retracted at most once), which means all attribute alterations are simple changes from an old
     // value to a new value.
-    let mut attribute_set: AddRetractAlterSet<(Entid, Entid), TypedValue> = AddRetractAlterSet::default();
+    let mut attribute_set: AddRetractAlterSet<(Entid, Entid), TypedValue> =
+        AddRetractAlterSet::default();
     let mut ident_set: AddRetractAlterSet<Entid, symbols::Keyword> = AddRetractAlterSet::default();
 
     for (e, a, typed_value, added) in assertions.into_iter() {
@@ -359,7 +371,7 @@ pub fn update_schema_from_entid_quadruples<U>(schema: &mut Schema, assertions: U
         if a == entids::DB_IDENT {
             if let TypedValue::Keyword(ref keyword) = typed_value {
                 ident_set.witness(e, keyword.as_ref().clone(), added);
-                continue
+                continue;
             } else {
                 // Something is terribly wrong: the schema ensures we have a keyword.
                 unreachable!();
@@ -370,20 +382,33 @@ pub fn update_schema_from_entid_quadruples<U>(schema: &mut Schema, assertions: U
     }
 
     // Collect triples.
-    let retracted_triples = attribute_set.retracted.into_iter().map(|((e, a), typed_value)| (e, a, typed_value));
-    let asserted_triples = attribute_set.asserted.into_iter().map(|((e, a), typed_value)| (e, a, typed_value));
-    let altered_triples = attribute_set.altered.into_iter().map(|((e, a), (_old_value, new_value))| (e, a, new_value));
+    let retracted_triples = attribute_set
+        .retracted
+        .into_iter()
+        .map(|((e, a), typed_value)| (e, a, typed_value));
+    let asserted_triples = attribute_set
+        .asserted
+        .into_iter()
+        .map(|((e, a), typed_value)| (e, a, typed_value));
+    let altered_triples = attribute_set
+        .altered
+        .into_iter()
+        .map(|((e, a), (_old_value, new_value))| (e, a, new_value));
 
     // First we process retractions which remove schema.
     // This operation consumes our current list of attribute retractions, producing a filtered one.
-    let non_schema_retractions = update_attribute_map_from_schema_retractions(&mut schema.attribute_map,
-                                                                              retracted_triples.collect(),
-                                                                              &ident_set.retracted)?;
+    let non_schema_retractions = update_attribute_map_from_schema_retractions(
+        &mut schema.attribute_map,
+        retracted_triples.collect(),
+        &ident_set.retracted,
+    )?;
 
     // Now we process all other retractions.
-    let report = update_attribute_map_from_entid_triples(&mut schema.attribute_map,
-                                                         asserted_triples.chain(altered_triples).collect(),
-                                                         non_schema_retractions)?;
+    let report = update_attribute_map_from_entid_triples(
+        &mut schema.attribute_map,
+        asserted_triples.chain(altered_triples).collect(),
+        non_schema_retractions,
+    )?;
 
     let mut idents_altered: BTreeMap<Entid, IdentAlteration> = BTreeMap::new();
 
@@ -420,6 +445,6 @@ pub fn update_schema_from_entid_quadruples<U>(schema: &mut Schema, assertions: U
 
     Ok(MetadataReport {
         idents_altered: idents_altered,
-        .. report
+        ..report
     })
 }

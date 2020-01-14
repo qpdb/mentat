@@ -8,27 +8,19 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-extern crate edn;
 extern crate core_traits;
+extern crate edn;
 extern crate mentat_core;
 extern crate mentat_query_algebrizer;
 extern crate query_algebrizer_traits;
 
 mod utils;
 
-use utils::{
-    alg,
-    SchemaBuilder,
-    bails,
-};
+use utils::{alg, bails, SchemaBuilder};
 
-use core_traits::{
-    ValueType,
-};
+use core_traits::ValueType;
 
-use mentat_core::{
-    Schema,
-};
+use mentat_core::Schema;
 
 use mentat_query_algebrizer::Known;
 
@@ -51,13 +43,21 @@ fn test_empty_known() {
     let known = Known::for_schema(&schema);
     for known_type in ValueType::all_enums().iter() {
         for required in ValueType::all_enums().iter() {
-            let q = format!("[:find ?e :where [?e :test/{} ?v] [(type ?v {})]]",
-                            known_type.into_keyword().name(), required);
+            let q = format!(
+                "[:find ?e :where [?e :test/{} ?v] [(type ?v {})]]",
+                known_type.into_keyword().name(),
+                required
+            );
             println!("Query: {}", q);
             let cc = alg(known, &q);
             // It should only be empty if the known type and our requirement differ.
-            assert_eq!(cc.empty_because.is_some(), known_type != required,
-                       "known_type = {}; required = {}", known_type, required);
+            assert_eq!(
+                cc.empty_because.is_some(),
+                known_type != required,
+                "known_type = {}; required = {}",
+                known_type,
+                required
+            );
         }
     }
 }

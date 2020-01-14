@@ -11,54 +11,56 @@
 #![allow(dead_code)]
 
 use db::TypedSQLValue;
+use db_traits::errors::{DbErrorKind, Result};
 use edn;
-use db_traits::errors::{
-    DbErrorKind,
-    Result,
-};
 use edn::symbols;
 
-use core_traits::{
-    attribute,
-    Attribute,
-    Entid,
-    KnownEntid,
-    TypedValue,
-    ValueType,
-};
+use core_traits::{attribute, Attribute, Entid, KnownEntid, TypedValue, ValueType};
 
-use mentat_core::{
-    EntidMap,
-    HasSchema,
-    IdentMap,
-    Schema,
-    AttributeMap,
-};
+use mentat_core::{AttributeMap, EntidMap, HasSchema, IdentMap, Schema};
 use metadata;
-use metadata::{
-    AttributeAlteration,
-};
+use metadata::AttributeAlteration;
 
 pub trait AttributeValidation {
-    fn validate<F>(&self, ident: F) -> Result<()> where F: Fn() -> String;
+    fn validate<F>(&self, ident: F) -> Result<()>
+    where
+        F: Fn() -> String;
 }
 
 impl AttributeValidation for Attribute {
-    fn validate<F>(&self, ident: F) -> Result<()> where F: Fn() -> String {
+    fn validate<F>(&self, ident: F) -> Result<()>
+    where
+        F: Fn() -> String,
+    {
         if self.unique == Some(attribute::Unique::Value) && !self.index {
-            bail!(DbErrorKind::BadSchemaAssertion(format!(":db/unique :db/unique_value without :db/index true for entid: {}", ident())))
+            bail!(DbErrorKind::BadSchemaAssertion(format!(
+                ":db/unique :db/unique_value without :db/index true for entid: {}",
+                ident()
+            )))
         }
         if self.unique == Some(attribute::Unique::Identity) && !self.index {
-            bail!(DbErrorKind::BadSchemaAssertion(format!(":db/unique :db/unique_identity without :db/index true for entid: {}", ident())))
+            bail!(DbErrorKind::BadSchemaAssertion(format!(
+                ":db/unique :db/unique_identity without :db/index true for entid: {}",
+                ident()
+            )))
         }
         if self.fulltext && self.value_type != ValueType::String {
-            bail!(DbErrorKind::BadSchemaAssertion(format!(":db/fulltext true without :db/valueType :db.type/string for entid: {}", ident())))
+            bail!(DbErrorKind::BadSchemaAssertion(format!(
+                ":db/fulltext true without :db/valueType :db.type/string for entid: {}",
+                ident()
+            )))
         }
         if self.fulltext && !self.index {
-            bail!(DbErrorKind::BadSchemaAssertion(format!(":db/fulltext true without :db/index true for entid: {}", ident())))
+            bail!(DbErrorKind::BadSchemaAssertion(format!(
+                ":db/fulltext true without :db/index true for entid: {}",
+                ident()
+            )))
         }
         if self.component && self.value_type != ValueType::Ref {
-            bail!(DbErrorKind::BadSchemaAssertion(format!(":db/isComponent true without :db/valueType :db.type/ref for entid: {}", ident())))
+            bail!(DbErrorKind::BadSchemaAssertion(format!(
+                ":db/isComponent true without :db/valueType :db.type/ref for entid: {}",
+                ident()
+            )))
         }
         // TODO: consider warning if we have :db/index true for :db/valueType :db.type/string,
         // since this may be inefficient.  More generally, we should try to drive complex
@@ -71,13 +73,18 @@ impl AttributeValidation for Attribute {
 /// Return `Ok(())` if `attribute_map` defines a valid Mentat schema.
 fn validate_attribute_map(entid_map: &EntidMap, attribute_map: &AttributeMap) -> Result<()> {
     for (entid, attribute) in attribute_map {
-        let ident = || entid_map.get(entid).map(|ident| ident.to_string()).unwrap_or(entid.to_string());
+        let ident = || {
+            entid_map
+                .get(entid)
+                .map(|ident| ident.to_string())
+                .unwrap_or(entid.to_string())
+        };
         attribute.validate(ident)?;
     }
     Ok(())
 }
 
-#[derive(Clone,Debug,Default,Eq,Hash,Ord,PartialOrd,PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub struct AttributeBuilder {
     helpful: bool,
     pub value_type: Option<ValueType>,
@@ -103,9 +110,9 @@ impl AttributeBuilder {
     /// retraction. Only attributes that we allow to change are duplicated here.
     pub fn to_modify_attribute(attribute: &Attribute) -> Self {
         let mut ab = AttributeBuilder::default();
-        ab.multival   = Some(attribute.multival);
-        ab.unique     = Some(attribute.unique);
-        ab.component  = Some(attribute.component);
+        ab.multival = Some(attribute.multival);
+        ab.unique = Some(attribute.unique);
+        ab.component = Some(attribute.component);
         ab
     }
 
@@ -157,17 +164,23 @@ impl AttributeBuilder {
 
     pub fn validate_install_attribute(&self) -> Result<()> {
         if self.value_type.is_none() {
-            bail!(DbErrorKind::BadSchemaAssertion("Schema attribute for new attribute does not set :db/valueType".into()));
+            bail!(DbErrorKind::BadSchemaAssertion(
+                "Schema attribute for new attribute does not set :db/valueType".into()
+            ));
         }
         Ok(())
     }
 
     pub fn validate_alter_attribute(&self) -> Result<()> {
         if self.value_type.is_some() {
-            bail!(DbErrorKind::BadSchemaAssertion("Schema alteration must not set :db/valueType".into()));
+            bail!(DbErrorKind::BadSchemaAssertion(
+                "Schema alteration must not set :db/valueType".into()
+            ));
         }
         if self.fulltext.is_some() {
-            bail!(DbErrorKind::BadSchemaAssertion("Schema alteration must not set :db/fulltext".into()));
+            bail!(DbErrorKind::BadSchemaAssertion(
+                "Schema alteration must not set :db/fulltext".into()
+            ));
         }
         Ok(())
     }
@@ -247,27 +260,40 @@ pub trait SchemaBuilding {
     fn require_ident(&self, entid: Entid) -> Result<&symbols::Keyword>;
     fn require_entid(&self, ident: &symbols::Keyword) -> Result<KnownEntid>;
     fn require_attribute_for_entid(&self, entid: Entid) -> Result<&Attribute>;
-    fn from_ident_map_and_attribute_map(ident_map: IdentMap, attribute_map: AttributeMap) -> Result<Schema>;
+    fn from_ident_map_and_attribute_map(
+        ident_map: IdentMap,
+        attribute_map: AttributeMap,
+    ) -> Result<Schema>;
     fn from_ident_map_and_triples<U>(ident_map: IdentMap, assertions: U) -> Result<Schema>
-        where U: IntoIterator<Item=(symbols::Keyword, symbols::Keyword, TypedValue)>;
+    where
+        U: IntoIterator<Item = (symbols::Keyword, symbols::Keyword, TypedValue)>;
 }
 
 impl SchemaBuilding for Schema {
     fn require_ident(&self, entid: Entid) -> Result<&symbols::Keyword> {
-        self.get_ident(entid).ok_or(DbErrorKind::UnrecognizedEntid(entid).into())
+        self.get_ident(entid)
+            .ok_or(DbErrorKind::UnrecognizedEntid(entid).into())
     }
 
     fn require_entid(&self, ident: &symbols::Keyword) -> Result<KnownEntid> {
-        self.get_entid(&ident).ok_or(DbErrorKind::UnrecognizedIdent(ident.to_string()).into())
+        self.get_entid(&ident)
+            .ok_or(DbErrorKind::UnrecognizedIdent(ident.to_string()).into())
     }
 
     fn require_attribute_for_entid(&self, entid: Entid) -> Result<&Attribute> {
-        self.attribute_for_entid(entid).ok_or(DbErrorKind::UnrecognizedEntid(entid).into())
+        self.attribute_for_entid(entid)
+            .ok_or(DbErrorKind::UnrecognizedEntid(entid).into())
     }
 
     /// Create a valid `Schema` from the constituent maps.
-    fn from_ident_map_and_attribute_map(ident_map: IdentMap, attribute_map: AttributeMap) -> Result<Schema> {
-        let entid_map: EntidMap = ident_map.iter().map(|(k, v)| (v.clone(), k.clone())).collect();
+    fn from_ident_map_and_attribute_map(
+        ident_map: IdentMap,
+        attribute_map: AttributeMap,
+    ) -> Result<Schema> {
+        let entid_map: EntidMap = ident_map
+            .iter()
+            .map(|(k, v)| (v.clone(), k.clone()))
+            .collect();
 
         validate_attribute_map(&entid_map, &attribute_map)?;
         Ok(Schema::new(ident_map, entid_map, attribute_map))
@@ -275,19 +301,30 @@ impl SchemaBuilding for Schema {
 
     /// Turn vec![(Keyword(:ident), Keyword(:key), TypedValue(:value)), ...] into a Mentat `Schema`.
     fn from_ident_map_and_triples<U>(ident_map: IdentMap, assertions: U) -> Result<Schema>
-        where U: IntoIterator<Item=(symbols::Keyword, symbols::Keyword, TypedValue)>{
+    where
+        U: IntoIterator<Item = (symbols::Keyword, symbols::Keyword, TypedValue)>,
+    {
+        let entid_assertions: Result<Vec<(Entid, Entid, TypedValue)>> = assertions
+            .into_iter()
+            .map(|(symbolic_ident, symbolic_attr, value)| {
+                let ident: i64 = *ident_map
+                    .get(&symbolic_ident)
+                    .ok_or(DbErrorKind::UnrecognizedIdent(symbolic_ident.to_string()))?;
+                let attr: i64 = *ident_map
+                    .get(&symbolic_attr)
+                    .ok_or(DbErrorKind::UnrecognizedIdent(symbolic_attr.to_string()))?;
+                Ok((ident, attr, value))
+            })
+            .collect();
 
-        let entid_assertions: Result<Vec<(Entid, Entid, TypedValue)>> = assertions.into_iter().map(|(symbolic_ident, symbolic_attr, value)| {
-            let ident: i64 = *ident_map.get(&symbolic_ident).ok_or(DbErrorKind::UnrecognizedIdent(symbolic_ident.to_string()))?;
-            let attr: i64 = *ident_map.get(&symbolic_attr).ok_or(DbErrorKind::UnrecognizedIdent(symbolic_attr.to_string()))?;
-            Ok((ident, attr, value))
-        }).collect();
-
-        let mut schema = Schema::from_ident_map_and_attribute_map(ident_map, AttributeMap::default())?;
-        let metadata_report = metadata::update_attribute_map_from_entid_triples(&mut schema.attribute_map,
-                                                                                entid_assertions?,
-                                                                                // No retractions.
-                                                                                vec![])?;
+        let mut schema =
+            Schema::from_ident_map_and_attribute_map(ident_map, AttributeMap::default())?;
+        let metadata_report = metadata::update_attribute_map_from_entid_triples(
+            &mut schema.attribute_map,
+            entid_assertions?,
+            // No retractions.
+            vec![],
+        )?;
 
         // Rebuild the component attributes list if necessary.
         if metadata_report.attributes_did_change() {
@@ -302,11 +339,19 @@ pub trait SchemaTypeChecking {
     ///
     /// Either assert that the given value is in the value type's value set, or (in limited cases)
     /// coerce the given value into the value type's value set.
-    fn to_typed_value(&self, value: &edn::ValueAndSpan, value_type: ValueType) -> Result<TypedValue>;
+    fn to_typed_value(
+        &self,
+        value: &edn::ValueAndSpan,
+        value_type: ValueType,
+    ) -> Result<TypedValue>;
 }
 
 impl SchemaTypeChecking for Schema {
-    fn to_typed_value(&self, value: &edn::ValueAndSpan, value_type: ValueType) -> Result<TypedValue> {
+    fn to_typed_value(
+        &self,
+        value: &edn::ValueAndSpan,
+        value_type: ValueType,
+    ) -> Result<TypedValue> {
         // TODO: encapsulate entid-ident-attribute for better error messages, perhaps by including
         // the attribute (rather than just the attribute's value type) into this function or a
         // wrapper function.
@@ -324,38 +369,35 @@ impl SchemaTypeChecking for Schema {
                 (ValueType::Keyword, tv @ TypedValue::Keyword(_)) => Ok(tv),
                 // Ref coerces a little: we interpret some things depending on the schema as a Ref.
                 (ValueType::Ref, TypedValue::Long(x)) => Ok(TypedValue::Ref(x)),
-                (ValueType::Ref, TypedValue::Keyword(ref x)) => self.require_entid(&x).map(|entid| entid.into()),
+                (ValueType::Ref, TypedValue::Keyword(ref x)) => {
+                    self.require_entid(&x).map(|entid| entid.into())
+                }
 
                 // Otherwise, we have a type mismatch.
                 // Enumerate all of the types here to allow the compiler to help us.
                 // We don't enumerate all `TypedValue` cases, though: that would multiply this
                 // collection by 8!
-                (vt @ ValueType::Boolean, _) |
-                (vt @ ValueType::Long, _) |
-                (vt @ ValueType::Double, _) |
-                (vt @ ValueType::String, _) |
-                (vt @ ValueType::Uuid, _) |
-                (vt @ ValueType::Instant, _) |
-                (vt @ ValueType::Keyword, _) |
-                (vt @ ValueType::Ref, _)
-                => bail!(DbErrorKind::BadValuePair(format!("{}", value), vt)),
-            }
+                (vt @ ValueType::Boolean, _)
+                | (vt @ ValueType::Long, _)
+                | (vt @ ValueType::Double, _)
+                | (vt @ ValueType::String, _)
+                | (vt @ ValueType::Uuid, _)
+                | (vt @ ValueType::Instant, _)
+                | (vt @ ValueType::Keyword, _)
+                | (vt @ ValueType::Ref, _) => {
+                    bail!(DbErrorKind::BadValuePair(format!("{}", value), vt))
+                }
+            },
         }
     }
 }
 
-
-
 #[cfg(test)]
 mod test {
-    use super::*;
     use self::edn::Keyword;
+    use super::*;
 
-    fn add_attribute(schema: &mut Schema,
-            ident: Keyword,
-            entid: Entid,
-            attribute: Attribute) {
-
+    fn add_attribute(schema: &mut Schema, ident: Keyword, entid: Entid, attribute: Attribute) {
         schema.entid_map.insert(entid, ident.clone());
         schema.ident_map.insert(ident.clone(), entid);
 
@@ -370,55 +412,80 @@ mod test {
     fn validate_attribute_map_success() {
         let mut schema = Schema::default();
         // attribute that is not an index has no uniqueness
-        add_attribute(&mut schema, Keyword::namespaced("foo", "bar"), 97, Attribute {
-            index: false,
-            value_type: ValueType::Boolean,
-            fulltext: false,
-            unique: None,
-            multival: false,
-            component: false,
-            no_history: false,
-        });
+        add_attribute(
+            &mut schema,
+            Keyword::namespaced("foo", "bar"),
+            97,
+            Attribute {
+                index: false,
+                value_type: ValueType::Boolean,
+                fulltext: false,
+                unique: None,
+                multival: false,
+                component: false,
+                no_history: false,
+            },
+        );
         // attribute is unique by value and an index
-        add_attribute(&mut schema, Keyword::namespaced("foo", "baz"), 98, Attribute {
-            index: true,
-            value_type: ValueType::Long,
-            fulltext: false,
-            unique: Some(attribute::Unique::Value),
-            multival: false,
-            component: false,
-            no_history: false,
-        });
+        add_attribute(
+            &mut schema,
+            Keyword::namespaced("foo", "baz"),
+            98,
+            Attribute {
+                index: true,
+                value_type: ValueType::Long,
+                fulltext: false,
+                unique: Some(attribute::Unique::Value),
+                multival: false,
+                component: false,
+                no_history: false,
+            },
+        );
         // attribue is unique by identity and an index
-        add_attribute(&mut schema, Keyword::namespaced("foo", "bat"), 99, Attribute {
-            index: true,
-            value_type: ValueType::Ref,
-            fulltext: false,
-            unique: Some(attribute::Unique::Identity),
-            multival: false,
-            component: false,
-            no_history: false,
-        });
+        add_attribute(
+            &mut schema,
+            Keyword::namespaced("foo", "bat"),
+            99,
+            Attribute {
+                index: true,
+                value_type: ValueType::Ref,
+                fulltext: false,
+                unique: Some(attribute::Unique::Identity),
+                multival: false,
+                component: false,
+                no_history: false,
+            },
+        );
         // attribute is a components and a `Ref`
-        add_attribute(&mut schema, Keyword::namespaced("foo", "bak"), 100, Attribute {
-            index: false,
-            value_type: ValueType::Ref,
-            fulltext: false,
-            unique: None,
-            multival: false,
-            component: true,
-            no_history: false,
-        });
+        add_attribute(
+            &mut schema,
+            Keyword::namespaced("foo", "bak"),
+            100,
+            Attribute {
+                index: false,
+                value_type: ValueType::Ref,
+                fulltext: false,
+                unique: None,
+                multival: false,
+                component: true,
+                no_history: false,
+            },
+        );
         // fulltext attribute is a string and an index
-        add_attribute(&mut schema, Keyword::namespaced("foo", "bap"), 101, Attribute {
-            index: true,
-            value_type: ValueType::String,
-            fulltext: true,
-            unique: None,
-            multival: false,
-            component: false,
-            no_history: false,
-        });
+        add_attribute(
+            &mut schema,
+            Keyword::namespaced("foo", "bap"),
+            101,
+            Attribute {
+                index: true,
+                value_type: ValueType::String,
+                fulltext: true,
+                unique: None,
+                multival: false,
+                component: false,
+                no_history: false,
+            },
+        );
 
         assert!(validate_attribute_map(&schema.entid_map, &schema.attribute_map).is_ok());
     }
@@ -428,88 +495,150 @@ mod test {
         let mut schema = Schema::default();
         // attribute unique by value but not index
         let ident = Keyword::namespaced("foo", "bar");
-        add_attribute(&mut schema, ident , 99, Attribute {
-            index: false,
-            value_type: ValueType::Boolean,
-            fulltext: false,
-            unique: Some(attribute::Unique::Value),
-            multival: false,
-            component: false,
-            no_history: false,
-        });
+        add_attribute(
+            &mut schema,
+            ident,
+            99,
+            Attribute {
+                index: false,
+                value_type: ValueType::Boolean,
+                fulltext: false,
+                unique: Some(attribute::Unique::Value),
+                multival: false,
+                component: false,
+                no_history: false,
+            },
+        );
 
-        let err = validate_attribute_map(&schema.entid_map, &schema.attribute_map).err().map(|e| e.kind());
-        assert_eq!(err, Some(DbErrorKind::BadSchemaAssertion(":db/unique :db/unique_value without :db/index true for entid: :foo/bar".into())));
+        let err = validate_attribute_map(&schema.entid_map, &schema.attribute_map)
+            .err()
+            .map(|e| e.kind());
+        assert_eq!(
+            err,
+            Some(DbErrorKind::BadSchemaAssertion(
+                ":db/unique :db/unique_value without :db/index true for entid: :foo/bar".into()
+            ))
+        );
     }
 
     #[test]
     fn invalid_schema_unique_identity_not_index() {
         let mut schema = Schema::default();
         // attribute is unique by identity but not index
-        add_attribute(&mut schema, Keyword::namespaced("foo", "bar"), 99, Attribute {
-            index: false,
-            value_type: ValueType::Long,
-            fulltext: false,
-            unique: Some(attribute::Unique::Identity),
-            multival: false,
-            component: false,
-            no_history: false,
-        });
+        add_attribute(
+            &mut schema,
+            Keyword::namespaced("foo", "bar"),
+            99,
+            Attribute {
+                index: false,
+                value_type: ValueType::Long,
+                fulltext: false,
+                unique: Some(attribute::Unique::Identity),
+                multival: false,
+                component: false,
+                no_history: false,
+            },
+        );
 
-        let err = validate_attribute_map(&schema.entid_map, &schema.attribute_map).err().map(|e| e.kind());
-        assert_eq!(err, Some(DbErrorKind::BadSchemaAssertion(":db/unique :db/unique_identity without :db/index true for entid: :foo/bar".into())));
+        let err = validate_attribute_map(&schema.entid_map, &schema.attribute_map)
+            .err()
+            .map(|e| e.kind());
+        assert_eq!(
+            err,
+            Some(DbErrorKind::BadSchemaAssertion(
+                ":db/unique :db/unique_identity without :db/index true for entid: :foo/bar".into()
+            ))
+        );
     }
 
     #[test]
     fn invalid_schema_component_not_ref() {
         let mut schema = Schema::default();
         // attribute that is a component is not a `Ref`
-        add_attribute(&mut schema, Keyword::namespaced("foo", "bar"), 99, Attribute {
-            index: false,
-            value_type: ValueType::Boolean,
-            fulltext: false,
-            unique: None,
-            multival: false,
-            component: true,
-            no_history: false,
-        });
+        add_attribute(
+            &mut schema,
+            Keyword::namespaced("foo", "bar"),
+            99,
+            Attribute {
+                index: false,
+                value_type: ValueType::Boolean,
+                fulltext: false,
+                unique: None,
+                multival: false,
+                component: true,
+                no_history: false,
+            },
+        );
 
-        let err = validate_attribute_map(&schema.entid_map, &schema.attribute_map).err().map(|e| e.kind());
-        assert_eq!(err, Some(DbErrorKind::BadSchemaAssertion(":db/isComponent true without :db/valueType :db.type/ref for entid: :foo/bar".into())));
+        let err = validate_attribute_map(&schema.entid_map, &schema.attribute_map)
+            .err()
+            .map(|e| e.kind());
+        assert_eq!(
+            err,
+            Some(DbErrorKind::BadSchemaAssertion(
+                ":db/isComponent true without :db/valueType :db.type/ref for entid: :foo/bar"
+                    .into()
+            ))
+        );
     }
 
     #[test]
     fn invalid_schema_fulltext_not_index() {
         let mut schema = Schema::default();
         // attribute that is fulltext is not an index
-        add_attribute(&mut schema, Keyword::namespaced("foo", "bar"), 99, Attribute {
-            index: false,
-            value_type: ValueType::String,
-            fulltext: true,
-            unique: None,
-            multival: false,
-            component: false,
-            no_history: false,
-        });
+        add_attribute(
+            &mut schema,
+            Keyword::namespaced("foo", "bar"),
+            99,
+            Attribute {
+                index: false,
+                value_type: ValueType::String,
+                fulltext: true,
+                unique: None,
+                multival: false,
+                component: false,
+                no_history: false,
+            },
+        );
 
-        let err = validate_attribute_map(&schema.entid_map, &schema.attribute_map).err().map(|e| e.kind());
-        assert_eq!(err, Some(DbErrorKind::BadSchemaAssertion(":db/fulltext true without :db/index true for entid: :foo/bar".into())));
+        let err = validate_attribute_map(&schema.entid_map, &schema.attribute_map)
+            .err()
+            .map(|e| e.kind());
+        assert_eq!(
+            err,
+            Some(DbErrorKind::BadSchemaAssertion(
+                ":db/fulltext true without :db/index true for entid: :foo/bar".into()
+            ))
+        );
     }
 
     fn invalid_schema_fulltext_index_not_string() {
         let mut schema = Schema::default();
         // attribute that is fulltext and not a `String`
-        add_attribute(&mut schema, Keyword::namespaced("foo", "bar"), 99, Attribute {
-            index: true,
-            value_type: ValueType::Long,
-            fulltext: true,
-            unique: None,
-            multival: false,
-            component: false,
-            no_history: false,
-        });
+        add_attribute(
+            &mut schema,
+            Keyword::namespaced("foo", "bar"),
+            99,
+            Attribute {
+                index: true,
+                value_type: ValueType::Long,
+                fulltext: true,
+                unique: None,
+                multival: false,
+                component: false,
+                no_history: false,
+            },
+        );
 
-        let err = validate_attribute_map(&schema.entid_map, &schema.attribute_map).err().map(|e| e.kind());
-        assert_eq!(err, Some(DbErrorKind::BadSchemaAssertion(":db/fulltext true without :db/valueType :db.type/string for entid: :foo/bar".into())));
+        let err = validate_attribute_map(&schema.entid_map, &schema.attribute_map)
+            .err()
+            .map(|e| e.kind());
+        assert_eq!(
+            err,
+            Some(DbErrorKind::BadSchemaAssertion(
+                ":db/fulltext true without :db/valueType :db.type/string for entid: :foo/bar"
+                    .into()
+            ))
+        );
     }
 }

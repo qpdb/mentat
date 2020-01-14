@@ -8,33 +8,17 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use core_traits::{
-    ValueType,
-    TypedValue,
-};
+use core_traits::{TypedValue, ValueType};
 
-use mentat_core::{
-    HasSchema,
-    Schema,
-};
+use mentat_core::{HasSchema, Schema};
 
-use edn::query::{
-    FnArg,
-    NonIntegerConstant,
-    PlainSymbol,
-};
+use edn::query::{FnArg, NonIntegerConstant, PlainSymbol};
 
 use clauses::ConjoiningClauses;
 
-use query_algebrizer_traits::errors::{
-    AlgebrizerError,
-    Result,
-};
+use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
-use types::{
-    EmptyBecause,
-    QueryValue,
-};
+use types::{EmptyBecause, QueryValue};
 
 /// Argument resolution.
 impl ConjoiningClauses {
@@ -43,7 +27,12 @@ impl ConjoiningClauses {
     /// Additionally, do two things:
     /// - Mark the pattern as known-empty if any argument is known non-numeric.
     /// - Mark any variables encountered as numeric.
-    pub(crate) fn resolve_numeric_argument(&mut self, function: &PlainSymbol, position: usize, arg: FnArg) -> Result<QueryValue> {
+    pub(crate) fn resolve_numeric_argument(
+        &mut self,
+        function: &PlainSymbol,
+        position: usize,
+        arg: FnArg,
+    ) -> Result<QueryValue> {
         use self::FnArg::*;
         match arg {
             FnArg::Variable(var) => {
@@ -80,45 +69,62 @@ impl ConjoiningClauses {
     }
 
     /// Just like `resolve_numeric_argument`, but for `ValueType::Instant`.
-    pub(crate) fn resolve_instant_argument(&mut self, function: &PlainSymbol, position: usize, arg: FnArg) -> Result<QueryValue> {
+    pub(crate) fn resolve_instant_argument(
+        &mut self,
+        function: &PlainSymbol,
+        position: usize,
+        arg: FnArg,
+    ) -> Result<QueryValue> {
         use self::FnArg::*;
         match arg {
-            FnArg::Variable(var) => {
-                match self.bound_value(&var) {
-                    Some(TypedValue::Instant(v)) => Ok(QueryValue::TypedValue(TypedValue::Instant(v))),
-                    Some(v) => bail!(AlgebrizerError::InputTypeDisagreement(var.name().clone(), ValueType::Instant, v.value_type())),
-                    None => {
-                        self.constrain_var_to_type(var.clone(), ValueType::Instant);
-                        self.column_bindings
-                            .get(&var)
-                            .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
-                            .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into())
-                    },
+            FnArg::Variable(var) => match self.bound_value(&var) {
+                Some(TypedValue::Instant(v)) => Ok(QueryValue::TypedValue(TypedValue::Instant(v))),
+                Some(v) => bail!(AlgebrizerError::InputTypeDisagreement(
+                    var.name().clone(),
+                    ValueType::Instant,
+                    v.value_type()
+                )),
+                None => {
+                    self.constrain_var_to_type(var.clone(), ValueType::Instant);
+                    self.column_bindings
+                        .get(&var)
+                        .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
+                        .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into())
                 }
             },
             Constant(NonIntegerConstant::Instant(v)) => {
                 Ok(QueryValue::TypedValue(TypedValue::Instant(v)))
-            },
+            }
 
             // TODO: should we allow integers if they seem to be timestamps? It's ambiguous…
-            EntidOrInteger(_) |
-            IdentOrKeyword(_) |
-            SrcVar(_) |
-            Constant(NonIntegerConstant::Boolean(_)) |
-            Constant(NonIntegerConstant::Float(_)) |
-            Constant(NonIntegerConstant::Text(_)) |
-            Constant(NonIntegerConstant::Uuid(_)) |
-            Constant(NonIntegerConstant::BigInteger(_)) |
-            Vector(_) => {
+            EntidOrInteger(_)
+            | IdentOrKeyword(_)
+            | SrcVar(_)
+            | Constant(NonIntegerConstant::Boolean(_))
+            | Constant(NonIntegerConstant::Float(_))
+            | Constant(NonIntegerConstant::Text(_))
+            | Constant(NonIntegerConstant::Uuid(_))
+            | Constant(NonIntegerConstant::BigInteger(_))
+            | Vector(_) => {
                 self.mark_known_empty(EmptyBecause::NonInstantArgument);
-                bail!(AlgebrizerError::InvalidArgumentType(function.clone(), ValueType::Instant.into(), position))
-            },
+                bail!(AlgebrizerError::InvalidArgumentType(
+                    function.clone(),
+                    ValueType::Instant.into(),
+                    position
+                ))
+            }
         }
     }
 
     /// Take a function argument and turn it into a `QueryValue` suitable for use in a concrete
     /// constraint.
-    pub(crate) fn resolve_ref_argument(&mut self, schema: &Schema, function: &PlainSymbol, position: usize, arg: FnArg) -> Result<QueryValue> {
+    pub(crate) fn resolve_ref_argument(
+        &mut self,
+        schema: &Schema,
+        function: &PlainSymbol,
+        position: usize,
+        arg: FnArg,
+    ) -> Result<QueryValue> {
         use self::FnArg::*;
         match arg {
             FnArg::Variable(var) => {
@@ -132,31 +138,39 @@ impl ConjoiningClauses {
                         .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
                         .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into())
                 }
-            },
+            }
             EntidOrInteger(i) => Ok(QueryValue::TypedValue(TypedValue::Ref(i))),
-            IdentOrKeyword(i) => {
-                schema.get_entid(&i)
-                      .map(|known_entid| QueryValue::Entid(known_entid.into()))
-                      .ok_or_else(|| AlgebrizerError::UnrecognizedIdent(i.to_string()).into())
-            },
-            Constant(NonIntegerConstant::Boolean(_)) |
-            Constant(NonIntegerConstant::Float(_)) |
-            Constant(NonIntegerConstant::Text(_)) |
-            Constant(NonIntegerConstant::Uuid(_)) |
-            Constant(NonIntegerConstant::Instant(_)) |
-            Constant(NonIntegerConstant::BigInteger(_)) |
-            SrcVar(_) |
-            Vector(_) => {
+            IdentOrKeyword(i) => schema
+                .get_entid(&i)
+                .map(|known_entid| QueryValue::Entid(known_entid.into()))
+                .ok_or_else(|| AlgebrizerError::UnrecognizedIdent(i.to_string()).into()),
+            Constant(NonIntegerConstant::Boolean(_))
+            | Constant(NonIntegerConstant::Float(_))
+            | Constant(NonIntegerConstant::Text(_))
+            | Constant(NonIntegerConstant::Uuid(_))
+            | Constant(NonIntegerConstant::Instant(_))
+            | Constant(NonIntegerConstant::BigInteger(_))
+            | SrcVar(_)
+            | Vector(_) => {
                 self.mark_known_empty(EmptyBecause::NonEntityArgument);
-                bail!(AlgebrizerError::InvalidArgumentType(function.clone(), ValueType::Ref.into(), position))
-            },
-
+                bail!(AlgebrizerError::InvalidArgumentType(
+                    function.clone(),
+                    ValueType::Ref.into(),
+                    position
+                ))
+            }
         }
     }
 
     /// Take a transaction ID function argument and turn it into a `QueryValue` suitable for use in
     /// a concrete constraint.
-    pub(crate) fn resolve_tx_argument(&mut self, schema: &Schema, function: &PlainSymbol, position: usize, arg: FnArg) -> Result<QueryValue> {
+    pub(crate) fn resolve_tx_argument(
+        &mut self,
+        schema: &Schema,
+        function: &PlainSymbol,
+        position: usize,
+        arg: FnArg,
+    ) -> Result<QueryValue> {
         // Under the hood there's nothing special about a transaction ID -- it's just another ref.
         // In the future, we might handle instants specially.
         self.resolve_ref_argument(schema, function, position, arg)
@@ -168,27 +182,34 @@ impl ConjoiningClauses {
     fn resolve_argument(&self, arg: FnArg) -> Result<QueryValue> {
         use self::FnArg::*;
         match arg {
-            FnArg::Variable(var) => {
-                match self.bound_value(&var) {
-                    Some(v) => Ok(QueryValue::TypedValue(v)),
-                    None => {
-                        self.column_bindings
-                            .get(&var)
-                            .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
-                            .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into())
-                    },
-                }
+            FnArg::Variable(var) => match self.bound_value(&var) {
+                Some(v) => Ok(QueryValue::TypedValue(v)),
+                None => self
+                    .column_bindings
+                    .get(&var)
+                    .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
+                    .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into()),
             },
             EntidOrInteger(i) => Ok(QueryValue::PrimitiveLong(i)),
-            IdentOrKeyword(_) => unimplemented!(),     // TODO
-            Constant(NonIntegerConstant::Boolean(val)) => Ok(QueryValue::TypedValue(TypedValue::Boolean(val))),
-            Constant(NonIntegerConstant::Float(f)) => Ok(QueryValue::TypedValue(TypedValue::Double(f))),
-            Constant(NonIntegerConstant::Text(s)) => Ok(QueryValue::TypedValue(TypedValue::typed_string(s.as_str()))),
-            Constant(NonIntegerConstant::Uuid(u)) => Ok(QueryValue::TypedValue(TypedValue::Uuid(u))),
-            Constant(NonIntegerConstant::Instant(u)) => Ok(QueryValue::TypedValue(TypedValue::Instant(u))),
+            IdentOrKeyword(_) => unimplemented!(), // TODO
+            Constant(NonIntegerConstant::Boolean(val)) => {
+                Ok(QueryValue::TypedValue(TypedValue::Boolean(val)))
+            }
+            Constant(NonIntegerConstant::Float(f)) => {
+                Ok(QueryValue::TypedValue(TypedValue::Double(f)))
+            }
+            Constant(NonIntegerConstant::Text(s)) => {
+                Ok(QueryValue::TypedValue(TypedValue::typed_string(s.as_str())))
+            }
+            Constant(NonIntegerConstant::Uuid(u)) => {
+                Ok(QueryValue::TypedValue(TypedValue::Uuid(u)))
+            }
+            Constant(NonIntegerConstant::Instant(u)) => {
+                Ok(QueryValue::TypedValue(TypedValue::Instant(u)))
+            }
             Constant(NonIntegerConstant::BigInteger(_)) => unimplemented!(),
             SrcVar(_) => unimplemented!(),
-            Vector(_) => unimplemented!(),    // TODO
+            Vector(_) => unimplemented!(), // TODO
         }
     }
 }

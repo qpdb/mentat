@@ -56,85 +56,72 @@
 ///!     (pull ?person [:person/friend])
 ///      [*]))
 ///! ```
-
 extern crate failure;
 extern crate rusqlite;
 
+extern crate core_traits;
 extern crate edn;
 extern crate mentat_core;
-extern crate core_traits;
 extern crate mentat_db;
 extern crate query_pull_traits;
 
-use std::collections::{
-    BTreeMap,
-    BTreeSet,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
-use std::iter::{
-    once,
-};
+use std::iter::once;
 
-use core_traits::{
-    Binding,
-    Entid,
-    TypedValue,
-    StructuredMap,
-};
+use core_traits::{Binding, Entid, StructuredMap, TypedValue};
 
-use mentat_core::{
-    Cloned,
-    HasSchema,
-    Keyword,
-    Schema,
-    ValueRc,
-};
+use mentat_core::{Cloned, HasSchema, Keyword, Schema, ValueRc};
 
 use mentat_db::cache;
 
-use edn::query::{
-    NamedPullAttribute,
-    PullAttributeSpec,
-    PullConcreteAttribute,
-};
+use edn::query::{NamedPullAttribute, PullAttributeSpec, PullConcreteAttribute};
 
-use query_pull_traits::errors::{
-    PullError,
-    Result,
-};
+use query_pull_traits::errors::{PullError, Result};
 
 type PullResults = BTreeMap<Entid, ValueRc<StructuredMap>>;
 
-pub fn pull_attributes_for_entity<A>(schema: &Schema,
-                                     db: &rusqlite::Connection,
-                                     entity: Entid,
-                                     attributes: A) -> Result<StructuredMap>
-    where A: IntoIterator<Item=Entid> {
-    let attrs = attributes.into_iter()
-                          .map(|e| PullAttributeSpec::Attribute(PullConcreteAttribute::Entid(e).into()))
-                          .collect();
+pub fn pull_attributes_for_entity<A>(
+    schema: &Schema,
+    db: &rusqlite::Connection,
+    entity: Entid,
+    attributes: A,
+) -> Result<StructuredMap>
+where
+    A: IntoIterator<Item = Entid>,
+{
+    let attrs = attributes
+        .into_iter()
+        .map(|e| PullAttributeSpec::Attribute(PullConcreteAttribute::Entid(e).into()))
+        .collect();
     Puller::prepare(schema, attrs)?
         .pull(schema, db, once(entity))
-        .map(|m| m.into_iter()
-                  .next()
-                  .map(|(k, vs)| {
-                      assert_eq!(k, entity);
-                      vs.cloned()
-                  })
-                  .unwrap_or_else(StructuredMap::default))
+        .map(|m| {
+            m.into_iter()
+                .next()
+                .map(|(k, vs)| {
+                    assert_eq!(k, entity);
+                    vs.cloned()
+                })
+                .unwrap_or_else(StructuredMap::default)
+        })
 }
 
-pub fn pull_attributes_for_entities<E, A>(schema: &Schema,
-                                          db: &rusqlite::Connection,
-                                          entities: E,
-                                          attributes: A) -> Result<PullResults>
-    where E: IntoIterator<Item=Entid>,
-          A: IntoIterator<Item=Entid> {
-    let attrs = attributes.into_iter()
-                          .map(|e| PullAttributeSpec::Attribute(PullConcreteAttribute::Entid(e).into()))
-                          .collect();
-    Puller::prepare(schema, attrs)?
-        .pull(schema, db, entities)
+pub fn pull_attributes_for_entities<E, A>(
+    schema: &Schema,
+    db: &rusqlite::Connection,
+    entities: E,
+    attributes: A,
+) -> Result<PullResults>
+where
+    E: IntoIterator<Item = Entid>,
+    A: IntoIterator<Item = Entid>,
+{
+    let attrs = attributes
+        .into_iter()
+        .map(|e| PullAttributeSpec::Attribute(PullConcreteAttribute::Entid(e).into()))
+        .collect();
+    Puller::prepare(schema, attrs)?.pull(schema, db, entities)
 }
 
 /// A `Puller` constructs on demand a map from a provided set of entity IDs to a set of structured maps.
@@ -159,9 +146,10 @@ impl Puller {
 
         let lookup_name = |i: &Entid| {
             // In the unlikely event that we have an attribute with no name, we bail.
-            schema.get_ident(*i)
-                    .map(|ident| ValueRc::new(ident.clone()))
-                    .ok_or_else(|| PullError::UnnamedAttribute(*i))
+            schema
+                .get_ident(*i)
+                .map(|ident| ValueRc::new(ident.clone()))
+                .ok_or_else(|| PullError::UnnamedAttribute(*i))
         };
 
         let mut names: BTreeMap<Entid, ValueRc<Keyword>> = Default::default();
@@ -178,13 +166,12 @@ impl Puller {
                         attrs.insert(*id);
                     }
                     break;
-                },
+                }
                 &PullAttributeSpec::Attribute(NamedPullAttribute {
                     ref attribute,
                     ref alias,
                 }) => {
-                    let alias = alias.as_ref()
-                                     .map(|ref r| r.to_value_rc());
+                    let alias = alias.as_ref().map(|ref r| r.to_value_rc());
                     match attribute {
                         // Handle :db/id.
                         &PullConcreteAttribute::Ident(ref i) if i.as_ref() == db_id.as_ref() => {
@@ -193,21 +180,21 @@ impl Puller {
                                 Err(PullError::RepeatedDbId)?
                             }
                             db_id_alias = Some(alias.unwrap_or_else(|| db_id.to_value_rc()));
-                        },
+                        }
                         &PullConcreteAttribute::Ident(ref i) => {
                             if let Some(entid) = schema.get_entid(i) {
                                 let name = alias.unwrap_or_else(|| i.to_value_rc());
                                 names.insert(entid.into(), name);
                                 attrs.insert(entid.into());
                             }
-                        },
+                        }
                         &PullConcreteAttribute::Entid(ref entid) => {
                             let name = alias.map(Ok).unwrap_or_else(|| lookup_name(entid))?;
                             names.insert(*entid, name);
                             attrs.insert(*entid);
-                        },
+                        }
                     }
-                },
+                }
             }
         }
 
@@ -218,11 +205,15 @@ impl Puller {
         })
     }
 
-    pub fn pull<E>(&self,
-                   schema: &Schema,
-                   db: &rusqlite::Connection,
-                   entities: E) -> Result<PullResults>
-        where E: IntoIterator<Item=Entid> {
+    pub fn pull<E>(
+        &self,
+        schema: &Schema,
+        db: &rusqlite::Connection,
+        entities: E,
+    ) -> Result<PullResults>
+    where
+        E: IntoIterator<Item = Entid>,
+    {
         // We implement pull by:
         // - Generating `AttributeCaches` for the provided attributes and entities.
         //   TODO: it would be nice to invert the cache as we build it, rather than have to invert it here.
@@ -238,7 +229,8 @@ impl Puller {
             schema,
             db,
             self.attribute_spec.clone(),
-            &entities)?;
+            &entities,
+        )?;
 
         // Now construct the appropriate result format.
         // TODO: should we walk `e` then `a`, or `a` then `e`? Possibly the right answer
@@ -248,21 +240,24 @@ impl Puller {
         // Collect :db/id if requested.
         if let Some(ref alias) = self.db_id_alias {
             for e in entities.iter() {
-                let r = maps.entry(*e)
-                                .or_insert(ValueRc::new(StructuredMap::default()));
+                let r = maps
+                    .entry(*e)
+                    .or_insert(ValueRc::new(StructuredMap::default()));
                 let m = ValueRc::get_mut(r).unwrap();
                 m.insert(alias.clone(), Binding::Scalar(TypedValue::Ref(*e)));
             }
         }
 
-        for (name, cache) in self.attributes.iter().filter_map(|(a, name)|
-            caches.forward_attribute_cache_for_attribute(schema, *a)
-                  .map(|cache| (name.clone(), cache))) {
-
+        for (name, cache) in self.attributes.iter().filter_map(|(a, name)| {
+            caches
+                .forward_attribute_cache_for_attribute(schema, *a)
+                .map(|cache| (name.clone(), cache))
+        }) {
             for e in entities.iter() {
                 if let Some(binding) = cache.binding_for_e(*e) {
-                    let r = maps.entry(*e)
-                                    .or_insert(ValueRc::new(StructuredMap::default()));
+                    let r = maps
+                        .entry(*e)
+                        .or_insert(ValueRc::new(StructuredMap::default()));
 
                     // Get into the inner map so we can accumulate a value.
                     // We can unwrap here because we created all of these maps…
@@ -275,5 +270,4 @@ impl Puller {
 
         Ok(maps)
     }
-
 }

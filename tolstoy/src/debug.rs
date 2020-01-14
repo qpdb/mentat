@@ -8,48 +8,29 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-// TODO could hide this behind #[cfg(test)], since this is only for test use.
+// TODO: could hide this behind #[cfg(test)], since this is only for test use.
 
 use rusqlite;
 
 use uuid::Uuid;
 
-use edn::entities::{
-    EntidOrIdent,
-};
+use edn::entities::EntidOrIdent;
 
-use core_traits::{
-    Entid,
-    TypedValue,
-};
+use core_traits::{Entid, TypedValue};
 
-use mentat_core::{
-    HasSchema,
-    Schema,
-};
+use mentat_core::{HasSchema, Schema};
 
-use mentat_db::{
-    TypedSQLValue,
-};
+use mentat_db::TypedSQLValue;
 
-use mentat_db::debug::{
-    Datom,
-    Datoms,
-    transactions_after,
-};
+use mentat_db::debug::{transactions_after, Datom, Datoms};
 
-use types::{
-    Tx,
-    TxPart,
-};
+use crate::types::{Tx, TxPart};
 
 /// A rough equivalent of mentat_db::debug::transactions_after
 /// for Tolstoy's Tx type.
 pub fn txs_after(sqlite: &rusqlite::Connection, schema: &Schema, after: Entid) -> Vec<Tx> {
-    let transactions = transactions_after(
-        sqlite, schema, after
-    ).expect("remote transactions");
-    
+    let transactions = transactions_after(sqlite, schema, after).expect("remote transactions");
+
     let mut txs = vec![];
 
     for transaction in transactions.0 {
@@ -74,7 +55,7 @@ pub fn txs_after(sqlite: &rusqlite::Connection, schema: &Schema, after: Entid) -
                 a: a,
                 v: TypedValue::from_edn_value(&datom.v).unwrap(),
                 tx: datom.tx,
-                added: datom.added.unwrap()
+                added: datom.added.unwrap(),
             });
         }
 

@@ -14,8 +14,8 @@ extern crate ordered_float;
 extern crate rusqlite;
 
 extern crate core_traits;
-extern crate sql_traits;
 extern crate mentat_core;
+extern crate sql_traits;
 
 use std::rc::Rc;
 
@@ -23,19 +23,11 @@ use std::collections::HashMap;
 
 use ordered_float::OrderedFloat;
 
-use core_traits::{
-    TypedValue,
-};
+use core_traits::TypedValue;
 
-use sql_traits::errors::{
-    BuildQueryResult,
-    SQLError,
-};
+use sql_traits::errors::{BuildQueryResult, SQLError};
 
-use mentat_core::{
-    ToMicros,
-    ValueRc,
-};
+use mentat_core::{ToMicros, ValueRc};
 
 /// We want to accumulate values that will later be substituted into a SQL statement execution.
 /// This struct encapsulates the generated string and the _initial_ argument list.
@@ -59,23 +51,23 @@ pub trait QueryBuilder {
 }
 
 pub trait QueryFragment {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult;
+    fn push_sql(&self, out: &mut dyn QueryBuilder) -> BuildQueryResult;
 }
 
-impl QueryFragment for Box<QueryFragment> {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+impl QueryFragment for Box<dyn QueryFragment> {
+    fn push_sql(&self, out: &mut dyn QueryBuilder) -> BuildQueryResult {
         QueryFragment::push_sql(&**self, out)
     }
 }
 
-impl<'a> QueryFragment for &'a QueryFragment {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+impl<'a> QueryFragment for &'a dyn QueryFragment {
+    fn push_sql(&self, out: &mut dyn QueryBuilder) -> BuildQueryResult {
         QueryFragment::push_sql(&**self, out)
     }
 }
 
 impl QueryFragment for () {
-    fn push_sql(&self, _out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, _out: &mut dyn QueryBuilder) -> BuildQueryResult {
         Ok(())
     }
 }
@@ -89,10 +81,10 @@ pub struct SQLiteQueryBuilder {
 
     // We can't just use an InternSet on the rusqlite::types::Value instances, because that
     // includes f64, so it's not Hash or Eq.
-    // Instead we track byte and String arguments separately, mapping them to their argument name,
+    // Instead, we track the byte and String arguments separately, mapping them to their argument name,
     // in order to dedupe. We'll add these to the regular argument vector later.
-    byte_args: HashMap<Vec<u8>, String>,             // From value to argument name.
-    string_args: HashMap<ValueRc<String>, String>,   // From value to argument name.
+    byte_args: HashMap<Vec<u8>, String>, // From value to argument name.
+    string_args: HashMap<ValueRc<String>, String>, // From value to argument name.
     args: Vec<(String, Rc<rusqlite::types::Value>)>, // (arg, value).
 }
 
@@ -156,20 +148,21 @@ impl QueryBuilder for SQLiteQueryBuilder {
                 // floats and not integers. This is most noticeable for fulltext scores, which
                 // will currently (2017-06) always be 0, and need to round-trip as doubles.
                 self.push_sql(format!("{:e}", v).as_str());
-            },
+            }
             &Instant(dt) => {
-                self.push_sql(format!("{}", dt.to_micros()).as_str());      // TODO: argument instead?
-            },
+                self.push_sql(format!("{}", dt.to_micros()).as_str()); // TODO: argument instead?
+            }
             &Uuid(ref u) => {
                 let bytes = u.as_bytes();
-                if let Some(arg) = self.byte_args.get(bytes.as_ref()).cloned() {        // Why, borrow checker, why?!
+                if let Some(arg) = self.byte_args.get(bytes.as_ref()).cloned() {
+                    // Why, borrow checker, why?!
                     self.push_named_arg(arg.as_str());
                 } else {
                     let arg = self.next_argument_name();
                     self.push_named_arg(arg.as_str());
                     self.byte_args.insert(bytes.clone().to_vec(), arg);
                 }
-            },
+            }
             // These are both `Rc`. Unfortunately, we can't use that fact when
             // turning these into rusqlite Values.
             // However, we can check to see whether there's an existing var that matches…
@@ -181,12 +174,12 @@ impl QueryBuilder for SQLiteQueryBuilder {
                     self.push_named_arg(arg.as_str());
                     self.string_args.insert(s.clone(), arg);
                 }
-            },
+            }
             &Keyword(ref s) => {
                 // TODO: intern.
                 let v = Rc::new(rusqlite::types::Value::Text(s.as_ref().to_string()));
                 self.push_static_arg(v);
-            },
+            }
         }
         Ok(())
     }
@@ -201,12 +194,16 @@ impl QueryBuilder for SQLiteQueryBuilder {
         // Do some validation first.
         // This is not free, but it's probably worth it for now.
         if !name.chars().all(|c| char::is_alphanumeric(c) || c == '_') {
-            return Err(SQLError::InvalidParameterName(name.to_string()))
+            return Err(SQLError::InvalidParameterName(name.to_string()));
         }
 
-        if name.starts_with(self.arg_prefix.as_str()) &&
-           name.chars().skip(self.arg_prefix.len()).all(char::is_numeric) {
-               return Err(SQLError::BindParamCouldBeGenerated(name.to_string()))
+        if name.starts_with(self.arg_prefix.as_str())
+            && name
+                .chars()
+                .skip(self.arg_prefix.len())
+                .all(char::is_numeric)
+        {
+            return Err(SQLError::BindParamCouldBeGenerated(name.to_string()));
         }
 
         self.push_sql("$");
@@ -219,11 +216,15 @@ impl QueryBuilder for SQLiteQueryBuilder {
         // dedupe them. Now we need to turn them into rusqlite Values.
         let mut args = self.args;
         let string_args = self.string_args.into_iter().map(|(val, arg)| {
-             (arg, Rc::new(rusqlite::types::Value::Text(val.as_ref().clone())))
+            (
+                arg,
+                Rc::new(rusqlite::types::Value::Text(val.as_ref().clone())),
+            )
         });
-        let byte_args = self.byte_args.into_iter().map(|(val, arg)| {
-            (arg, Rc::new(rusqlite::types::Value::Blob(val)))
-        });
+        let byte_args = self
+            .byte_args
+            .into_iter()
+            .map(|(val, arg)| (arg, Rc::new(rusqlite::types::Value::Blob(val))));
 
         args.extend(string_args);
         args.extend(byte_args);
@@ -262,9 +263,16 @@ mod tests {
         s.push_typed_value(&TypedValue::Double(1.0.into())).unwrap();
         let q = s.finish();
 
-        assert_eq!(q.sql.as_str(), "SELECT `foo` WHERE `bar` = $v0 OR $v1 OR `bar` = 1e0");
-        assert_eq!(q.args,
-                   vec![("$v0".to_string(), string_arg("frobnicate")),
-                        ("$v1".to_string(), string_arg("swoogle"))]);
+        assert_eq!(
+            q.sql.as_str(),
+            "SELECT `foo` WHERE `bar` = $v0 OR $v1 OR `bar` = 1e0"
+        );
+        assert_eq!(
+            q.args,
+            vec![
+                ("$v0".to_string(), string_arg("frobnicate")),
+                ("$v1".to_string(), string_arg("swoogle"))
+            ]
+        );
     }
 }

@@ -8,44 +8,26 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use std::collections::{
-    BTreeMap,
-    BTreeSet,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
-use core_traits::{
-    Binding,
-    Entid,
-    StructuredMap,
-    TypedValue,
-};
+use core_traits::{Binding, Entid, StructuredMap, TypedValue};
 
-use mentat_core::{
-    Schema,
-    ValueRc,
-};
+use mentat_core::{Schema, ValueRc};
 
-use edn::query::{
-    PullAttributeSpec,
-};
+use edn::query::PullAttributeSpec;
 
-use mentat_query_pull::{
-    Puller,
-};
+use mentat_query_pull::Puller;
 
 use query_projector_traits::errors::Result;
 
-use super::{
-    Index,
-    rusqlite,
-};
+use super::{rusqlite, Index};
 
 #[derive(Clone, Debug)]
 pub(crate) struct PullOperation(pub(crate) Vec<PullAttributeSpec>);
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct PullIndices {
-    pub(crate) sql_index: Index,                   // SQLite column index.
+    pub(crate) sql_index: Index, // SQLite column index.
     pub(crate) output_index: usize,
 }
 
@@ -73,7 +55,11 @@ pub(crate) struct PullConsumer<'schema> {
 }
 
 impl<'schema> PullConsumer<'schema> {
-    pub(crate) fn for_puller(puller: Puller, schema: &'schema Schema, indices: PullIndices) -> PullConsumer<'schema> {
+    pub(crate) fn for_puller(
+        puller: Puller,
+        schema: &'schema Schema,
+        indices: PullIndices,
+    ) -> PullConsumer<'schema> {
         PullConsumer {
             indices: indices,
             schema: schema,
@@ -83,14 +69,24 @@ impl<'schema> PullConsumer<'schema> {
         }
     }
 
-    pub(crate) fn for_template(schema: &'schema Schema, template: &PullTemplate) -> Result<PullConsumer<'schema>> {
+    pub(crate) fn for_template(
+        schema: &'schema Schema,
+        template: &PullTemplate,
+    ) -> Result<PullConsumer<'schema>> {
         let puller = Puller::prepare(schema, template.op.0.clone())?;
         Ok(PullConsumer::for_puller(puller, schema, template.indices))
     }
 
-    pub(crate) fn for_operation(schema: &'schema Schema, operation: &PullOperation) -> Result<PullConsumer<'schema>> {
+    pub(crate) fn for_operation(
+        schema: &'schema Schema,
+        operation: &PullOperation,
+    ) -> Result<PullConsumer<'schema>> {
         let puller = Puller::prepare(schema, operation.0.clone())?;
-        Ok(PullConsumer::for_puller(puller, schema, PullIndices::zero()))
+        Ok(PullConsumer::for_puller(
+            puller,
+            schema,
+            PullIndices::zero(),
+        ))
     }
 
     pub(crate) fn collect_entity<'a>(&mut self, row: &rusqlite::Row<'a>) -> Entid {
@@ -110,13 +106,18 @@ impl<'schema> PullConsumer<'schema> {
             if let Some(pulled) = self.results.get(&id).cloned() {
                 bindings[self.indices.output_index] = Binding::Map(pulled);
             } else {
-                bindings[self.indices.output_index] = Binding::Map(ValueRc::new(Default::default()));
+                bindings[self.indices.output_index] =
+                    Binding::Map(ValueRc::new(Default::default()));
             }
         }
     }
 
     // TODO: do we need to include empty maps for entities that didn't match any pull?
     pub(crate) fn into_coll_results(self) -> Vec<Binding> {
-        self.results.values().cloned().map(|vrc| Binding::Map(vrc)).collect()
+        self.results
+            .values()
+            .cloned()
+            .map(|vrc| Binding::Map(vrc))
+            .collect()
     }
 }

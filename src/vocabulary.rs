@@ -8,7 +8,6 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-
 //! This module exposes an interface for programmatic management of vocabularies.
 //!
 //! A vocabulary is defined by a name, a version number, and a collection of attribute definitions.
@@ -93,41 +92,20 @@
 
 use std::collections::BTreeMap;
 
-use core_traits::{
-    KnownEntid,
-};
+use core_traits::KnownEntid;
 
-use core_traits::attribute::{
-    Unique,
-};
+use core_traits::attribute::Unique;
 
-use ::{
+use super::{
+    Attribute, Binding, Entid, HasSchema, IntoResult, Keyword, TypedValue, ValueType,
     CORE_SCHEMA_VERSION,
-    Attribute,
-    Entid,
-    HasSchema,
-    IntoResult,
-    Keyword,
-    Binding,
-    TypedValue,
-    ValueType,
 };
 
-use ::errors::{
-    MentatError,
-    Result,
-};
+use super::errors::{MentatError, Result};
 
-use mentat_transaction::{
-    InProgress,
-    Queryable,
-};
+use mentat_transaction::{InProgress, Queryable};
 
-use mentat_transaction::entity_builder::{
-    BuildTerms,
-    TermBuilder,
-    Terms,
-};
+use mentat_transaction::entity_builder::{BuildTerms, TermBuilder, Terms};
 
 /// AttributeBuilder is how you build vocabulary definitions to apply to a store.
 pub use mentat_db::AttributeBuilder;
@@ -158,8 +136,8 @@ pub struct Definition {
     pub name: Keyword,
     pub version: Version,
     pub attributes: Vec<(Keyword, Attribute)>,
-    pub pre: fn(&mut InProgress, &Vocabulary) -> Result<()>,
-    pub post: fn(&mut InProgress, &Vocabulary) -> Result<()>,
+    pub pre: fn(&mut InProgress<'_, '_>, &Vocabulary) -> Result<()>,
+    pub post: fn(&mut InProgress<'_, '_>, &Vocabulary) -> Result<()>,
 }
 
 /// ```
@@ -245,13 +223,15 @@ pub struct Definition {
 /// }
 /// ```
 impl Definition {
-    pub fn no_op(_ip: &mut InProgress, _from: &Vocabulary) -> Result<()> {
+    pub fn no_op(_ip: &mut InProgress<'_, '_>, _from: &Vocabulary) -> Result<()> {
         Ok(())
     }
 
     pub fn new<N, A>(name: N, version: Version, attributes: A) -> Definition
-    where N: Into<Keyword>,
-          A: Into<Vec<(Keyword, Attribute)>> {
+    where
+        N: Into<Keyword>,
+        A: Into<Vec<(Keyword, Attribute)>>,
+    {
         Definition {
             name: name.into(),
             version: version,
@@ -263,13 +243,13 @@ impl Definition {
 
     /// Called with an in-progress transaction and the previous vocabulary version
     /// if the definition's version is later than that of the vocabulary in the store.
-    fn pre(&self, ip: &mut InProgress, from: &Vocabulary) -> Result<()> {
+    fn pre(&self, ip: &mut InProgress<'_, '_>, from: &Vocabulary) -> Result<()> {
         (self.pre)(ip, from)
     }
 
     /// Called with an in-progress transaction and the previous vocabulary version
     /// if the definition's version is later than that of the vocabulary in the store.
-    fn post(&self, ip: &mut InProgress, from: &Vocabulary) -> Result<()> {
+    fn post(&self, ip: &mut InProgress<'_, '_>, from: &Vocabulary) -> Result<()> {
         (self.post)(ip, from)
     }
 }
@@ -293,7 +273,7 @@ impl Vocabulary {
 
 /// A collection of named `Vocabulary` instances, as retrieved from the store.
 #[derive(Debug, Default, Clone)]
-pub struct Vocabularies(pub BTreeMap<Keyword, Vocabulary>);   // N.B., this has a copy of the attributes in Schema!
+pub struct Vocabularies(pub BTreeMap<Keyword, Vocabulary>); // N.B., this has a copy of the attributes in Schema!
 
 impl Vocabularies {
     pub fn len(&self) -> usize {
@@ -304,58 +284,27 @@ impl Vocabularies {
         self.0.get(name)
     }
 
-    pub fn iter(&self) -> ::std::collections::btree_map::Iter<Keyword, Vocabulary> {
+    pub fn iter(&self) -> ::std::collections::btree_map::Iter<'_, Keyword, Vocabulary> {
         self.0.iter()
     }
 }
 
 lazy_static! {
-    static ref DB_SCHEMA_CORE: Keyword = {
-        kw!(:db.schema/core)
-    };
-    static ref DB_SCHEMA_ATTRIBUTE: Keyword = {
-        kw!(:db.schema/attribute)
-    };
-    static ref DB_SCHEMA_VERSION: Keyword = {
-        kw!(:db.schema/version)
-    };
-    static ref DB_IDENT: Keyword = {
-        kw!(:db/ident)
-    };
-    static ref DB_UNIQUE: Keyword = {
-        kw!(:db/unique)
-    };
-    static ref DB_UNIQUE_VALUE: Keyword = {
-        kw!(:db.unique/value)
-    };
-    static ref DB_UNIQUE_IDENTITY: Keyword = {
-        kw!(:db.unique/identity)
-    };
-    static ref DB_IS_COMPONENT: Keyword = {
-        Keyword::namespaced("db", "isComponent")
-    };
-    static ref DB_VALUE_TYPE: Keyword = {
-        Keyword::namespaced("db", "valueType")
-    };
-    static ref DB_INDEX: Keyword = {
-        kw!(:db/index)
-    };
-    static ref DB_FULLTEXT: Keyword = {
-        kw!(:db/fulltext)
-    };
-    static ref DB_CARDINALITY: Keyword = {
-        kw!(:db/cardinality)
-    };
-    static ref DB_CARDINALITY_ONE: Keyword = {
-        kw!(:db.cardinality/one)
-    };
-    static ref DB_CARDINALITY_MANY: Keyword = {
-        kw!(:db.cardinality/many)
-    };
-
-    static ref DB_NO_HISTORY: Keyword = {
-        Keyword::namespaced("db", "noHistory")
-    };
+    static ref DB_SCHEMA_CORE: Keyword = { kw!(:db.schema/core) };
+    static ref DB_SCHEMA_ATTRIBUTE: Keyword = { kw!(:db.schema/attribute) };
+    static ref DB_SCHEMA_VERSION: Keyword = { kw!(:db.schema/version) };
+    static ref DB_IDENT: Keyword = { kw!(:db/ident) };
+    static ref DB_UNIQUE: Keyword = { kw!(:db/unique) };
+    static ref DB_UNIQUE_VALUE: Keyword = { kw!(:db.unique/value) };
+    static ref DB_UNIQUE_IDENTITY: Keyword = { kw!(:db.unique/identity) };
+    static ref DB_IS_COMPONENT: Keyword = { Keyword::namespaced("db", "isComponent") };
+    static ref DB_VALUE_TYPE: Keyword = { Keyword::namespaced("db", "valueType") };
+    static ref DB_INDEX: Keyword = { kw!(:db/index) };
+    static ref DB_FULLTEXT: Keyword = { kw!(:db/fulltext) };
+    static ref DB_CARDINALITY: Keyword = { kw!(:db/cardinality) };
+    static ref DB_CARDINALITY_ONE: Keyword = { kw!(:db.cardinality/one) };
+    static ref DB_CARDINALITY_MANY: Keyword = { kw!(:db.cardinality/many) };
+    static ref DB_NO_HISTORY: Keyword = { Keyword::namespaced("db", "noHistory") };
 }
 
 trait HasCoreSchema {
@@ -370,7 +319,10 @@ trait HasCoreSchema {
     fn core_attribute(&self, ident: &Keyword) -> Result<KnownEntid>;
 }
 
-impl<T> HasCoreSchema for T where T: HasSchema {
+impl<T> HasCoreSchema for T
+where
+    T: HasSchema,
+{
     fn core_type(&self, t: ValueType) -> Result<KnownEntid> {
         self.entid_for_type(t)
             .ok_or_else(|| MentatError::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()).into())
@@ -389,10 +341,16 @@ impl<T> HasCoreSchema for T where T: HasSchema {
 }
 
 impl Definition {
-    fn description_for_attributes<'s, T, R>(&'s self, attributes: &[R], via: &T, diff: Option<BTreeMap<Keyword, Attribute>>) -> Result<Terms>
-     where T: HasCoreSchema,
-           R: ::std::borrow::Borrow<(Keyword, Attribute)> {
-
+    fn description_for_attributes<'s, T, R>(
+        &'s self,
+        attributes: &[R],
+        via: &T,
+        diff: Option<BTreeMap<Keyword, Attribute>>,
+    ) -> Result<Terms>
+    where
+        T: HasCoreSchema,
+        R: ::std::borrow::Borrow<(Keyword, Attribute)>,
+    {
         // The attributes we'll need to describe this vocabulary.
         let a_version = via.core_attribute(&DB_SCHEMA_VERSION)?;
         let a_ident = via.core_attribute(&DB_IDENT)?;
@@ -445,9 +403,21 @@ impl Definition {
             // These are all unconditional because we use attribute descriptions to _alter_, not
             // just to _add_, and so absence is distinct from negation!
             builder.add(tempid.clone(), a_index, TypedValue::Boolean(attr.index))?;
-            builder.add(tempid.clone(), a_fulltext, TypedValue::Boolean(attr.fulltext))?;
-            builder.add(tempid.clone(), a_is_component, TypedValue::Boolean(attr.component))?;
-            builder.add(tempid.clone(), a_no_history, TypedValue::Boolean(attr.no_history))?;
+            builder.add(
+                tempid.clone(),
+                a_fulltext,
+                TypedValue::Boolean(attr.fulltext),
+            )?;
+            builder.add(
+                tempid.clone(),
+                a_is_component,
+                TypedValue::Boolean(attr.component),
+            )?;
+            builder.add(
+                tempid.clone(),
+                a_no_history,
+                TypedValue::Boolean(attr.no_history),
+            )?;
 
             if let Some(u) = attr.unique {
                 let uu = match u {
@@ -456,23 +426,22 @@ impl Definition {
                 };
                 builder.add(tempid.clone(), a_unique, uu)?;
             } else {
-                 let existing_unique =
-                    if let Some(ref diff) = diff {
-                        diff.get(kw).and_then(|a| a.unique)
-                    } else {
-                        None
-                    };
-                 match existing_unique {
+                let existing_unique = if let Some(ref diff) = diff {
+                    diff.get(kw).and_then(|a| a.unique)
+                } else {
+                    None
+                };
+                match existing_unique {
                     None => {
                         // Nothing to do.
-                    },
+                    }
                     Some(Unique::Identity) => {
                         builder.retract(tempid.clone(), a_unique, v_unique_identity.clone())?;
-                    },
+                    }
                     Some(Unique::Value) => {
                         builder.retract(tempid.clone(), a_unique, v_unique_value.clone())?;
-                    },
-                 }
+                    }
+                }
             }
         }
 
@@ -480,9 +449,14 @@ impl Definition {
     }
 
     /// Return a sequence of terms that describes this vocabulary definition and its attributes.
-    fn description_diff<T>(&self, via: &T, from: &Vocabulary) -> Result<Terms> where T: HasSchema {
-        let relevant = self.attributes.iter()
-                           .filter_map(|&(ref keyword, _)|
+    fn description_diff<T>(&self, via: &T, from: &Vocabulary) -> Result<Terms>
+    where
+        T: HasSchema,
+    {
+        let relevant = self
+            .attributes
+            .iter()
+            .filter_map(|&(ref keyword, _)|
                                // Look up the keyword to see if it's currently in use.
                                via.get_entid(keyword)
 
@@ -491,12 +465,15 @@ impl Definition {
 
                                // Collect enough that we can do lookups.
                                   .map(|e| (keyword.clone(), e)))
-                           .collect();
+            .collect();
         self.description_for_attributes(self.attributes.as_slice(), via, Some(relevant))
     }
 
     /// Return a sequence of terms that describes this vocabulary definition and its attributes.
-    fn description<T>(&self, via: &T) -> Result<Terms> where T: HasSchema {
+    fn description<T>(&self, via: &T) -> Result<Terms>
+    where
+        T: HasSchema,
+    {
         self.description_for_attributes(self.attributes.as_slice(), via, None)
     }
 }
@@ -518,7 +495,9 @@ pub enum VocabularyCheck<'definition> {
     PresentButTooNew { newer_version: Vocabulary },
 
     /// The provided definition is present in the store, but some of its attributes are not.
-    PresentButMissingAttributes { attributes: Vec<&'definition (Keyword, Attribute)> },
+    PresentButMissingAttributes {
+        attributes: Vec<&'definition (Keyword, Attribute)>,
+    },
 }
 
 /// This enum captures the outcome of attempting to ensure that a vocabulary definition is present
@@ -549,7 +528,10 @@ pub trait HasVocabularies {
 /// This trait captures the ability of a store to check and install/upgrade vocabularies.
 pub trait VersionedStore: HasVocabularies + HasSchema {
     /// Check whether the vocabulary described by the provided metadata is present in the store.
-    fn check_vocabulary<'definition>(&self, definition: &'definition Definition) -> Result<VocabularyCheck<'definition>> {
+    fn check_vocabulary<'definition>(
+        &self,
+        definition: &'definition Definition,
+    ) -> Result<VocabularyCheck<'definition>> {
         if let Some(vocabulary) = self.read_vocabulary_named(&definition.name)? {
             // The name is present.
             // Check the version.
@@ -567,12 +549,12 @@ pub trait VersionedStore: HasVocabularies + HasSchema {
                                 // different definitions for an attribute. That's a coding error.
                                 // We can't accept this vocabulary.
                                 bail!(MentatError::ConflictingAttributeDefinitions(
-                                          definition.name.to_string(),
-                                          definition.version,
-                                          pair.0.to_string(),
-                                          existing.clone(),
-                                          pair.1.clone())
-                                );
+                                    definition.name.to_string(),
+                                    definition.version,
+                                    pair.0.to_string(),
+                                    existing.clone(),
+                                    pair.1.clone()
+                                ));
                             }
                         }
                     }
@@ -582,14 +564,20 @@ pub trait VersionedStore: HasVocabularies + HasSchema {
                 if missing.is_empty() {
                     Ok(VocabularyCheck::Present)
                 } else {
-                    Ok(VocabularyCheck::PresentButMissingAttributes { attributes: missing })
+                    Ok(VocabularyCheck::PresentButMissingAttributes {
+                        attributes: missing,
+                    })
                 }
             } else if vocabulary.version < definition.version {
                 // Ours is newer. Upgrade.
-                Ok(VocabularyCheck::PresentButNeedsUpdate { older_version: vocabulary })
+                Ok(VocabularyCheck::PresentButNeedsUpdate {
+                    older_version: vocabulary,
+                })
             } else {
                 // The vocabulary in the store is newer. We are outdated.
-                Ok(VocabularyCheck::PresentButTooNew { newer_version: vocabulary })
+                Ok(VocabularyCheck::PresentButTooNew {
+                    newer_version: vocabulary,
+                })
             }
         } else {
             // The vocabulary isn't present in the store. Install it.
@@ -607,16 +595,22 @@ pub trait VersionedStore: HasVocabularies + HasSchema {
     ///
     /// Use this function instead of calling `ensure_vocabulary` if you need to have pre/post
     /// functions invoked when vocabulary changes are necessary.
-    fn ensure_vocabularies(&mut self, vocabularies: &mut VocabularySource) -> Result<BTreeMap<Keyword, VocabularyOutcome>>;
+    fn ensure_vocabularies(
+        &mut self,
+        vocabularies: &mut dyn VocabularySource,
+    ) -> Result<BTreeMap<Keyword, VocabularyOutcome>>;
 
     /// Make sure that our expectations of the core vocabulary — basic types and attributes — are met.
     fn verify_core_schema(&self) -> Result<()> {
         if let Some(core) = self.read_vocabulary_named(&DB_SCHEMA_CORE)? {
             if core.version != CORE_SCHEMA_VERSION {
-                bail!(MentatError::UnexpectedCoreSchema(CORE_SCHEMA_VERSION, Some(core.version)));
+                bail!(MentatError::UnexpectedCoreSchema(
+                    CORE_SCHEMA_VERSION,
+                    Some(core.version)
+                ));
             }
 
-            // TODO: check things other than the version.
+        // TODO: check things other than the version.
         } else {
             // This would be seriously messed up.
             bail!(MentatError::UnexpectedCoreSchema(CORE_SCHEMA_VERSION, None));
@@ -630,7 +624,7 @@ pub trait VersionedStore: HasVocabularies + HasSchema {
 /// vocabularies — you can retrieve the requested definition and the resulting `VocabularyCheck`
 /// by name.
 pub trait VocabularyStatus {
-    fn get(&self, name: &Keyword) -> Option<(&Definition, &VocabularyCheck)>;
+    fn get(&self, name: &Keyword) -> Option<(&Definition, &VocabularyCheck<'_>)>;
     fn version(&self, name: &Keyword) -> Option<Version>;
 }
 
@@ -641,7 +635,8 @@ struct CheckedVocabularies<'a> {
 
 impl<'a> CheckedVocabularies<'a> {
     fn add(&mut self, definition: &'a Definition, check: VocabularyCheck<'a>) {
-        self.items.insert(definition.name.clone(), (definition, check));
+        self.items
+            .insert(definition.name.clone(), (definition, check));
     }
 
     fn is_empty(&self) -> bool {
@@ -650,7 +645,7 @@ impl<'a> CheckedVocabularies<'a> {
 }
 
 impl<'a> VocabularyStatus for CheckedVocabularies<'a> {
-    fn get(&self, name: &Keyword) -> Option<(&Definition, &VocabularyCheck)> {
+    fn get(&self, name: &Keyword) -> Option<(&Definition, &VocabularyCheck<'_>)> {
         self.items.get(name).map(|&(ref d, ref c)| (*d, c))
     }
 
@@ -661,15 +656,29 @@ impl<'a> VocabularyStatus for CheckedVocabularies<'a> {
 
 trait VocabularyMechanics {
     fn install_vocabulary(&mut self, definition: &Definition) -> Result<VocabularyOutcome>;
-    fn install_attributes_for<'definition>(&mut self, definition: &'definition Definition, attributes: Vec<&'definition (Keyword, Attribute)>) -> Result<VocabularyOutcome>;
-    fn upgrade_vocabulary(&mut self, definition: &Definition, from_version: Vocabulary) -> Result<VocabularyOutcome>;
+    fn install_attributes_for<'definition>(
+        &mut self,
+        definition: &'definition Definition,
+        attributes: Vec<&'definition (Keyword, Attribute)>,
+    ) -> Result<VocabularyOutcome>;
+    fn upgrade_vocabulary(
+        &mut self,
+        definition: &Definition,
+        from_version: Vocabulary,
+    ) -> Result<VocabularyOutcome>;
 }
 
 impl Vocabulary {
     // TODO: don't do linear search!
-    fn find<T>(&self, entid: T) -> Option<&Attribute> where T: Into<Entid> {
+    fn find<T>(&self, entid: T) -> Option<&Attribute>
+    where
+        T: Into<Entid>,
+    {
         let to_find = entid.into();
-        self.attributes.iter().find(|&&(e, _)| e == to_find).map(|&(_, ref a)| a)
+        self.attributes
+            .iter()
+            .find(|&&(e, _)| e == to_find)
+            .map(|&(_, ref a)| a)
     }
 }
 
@@ -678,16 +687,30 @@ impl<'a, 'c> VersionedStore for InProgress<'a, 'c> {
         match self.check_vocabulary(definition)? {
             VocabularyCheck::Present => Ok(VocabularyOutcome::Existed),
             VocabularyCheck::NotPresent => self.install_vocabulary(definition),
-            VocabularyCheck::PresentButNeedsUpdate { older_version } => self.upgrade_vocabulary(definition, older_version),
-            VocabularyCheck::PresentButMissingAttributes { attributes } => self.install_attributes_for(definition, attributes),
-            VocabularyCheck::PresentButTooNew { newer_version } => Err(MentatError::ExistingVocabularyTooNew(definition.name.to_string(), newer_version.version, definition.version).into()),
+            VocabularyCheck::PresentButNeedsUpdate { older_version } => {
+                self.upgrade_vocabulary(definition, older_version)
+            }
+            VocabularyCheck::PresentButMissingAttributes { attributes } => {
+                self.install_attributes_for(definition, attributes)
+            }
+            VocabularyCheck::PresentButTooNew { newer_version } => {
+                Err(MentatError::ExistingVocabularyTooNew(
+                    definition.name.to_string(),
+                    newer_version.version,
+                    definition.version,
+                )
+                .into())
+            }
         }
     }
 
-    fn ensure_vocabularies(&mut self, vocabularies: &mut VocabularySource) -> Result<BTreeMap<Keyword, VocabularyOutcome>> {
+    fn ensure_vocabularies(
+        &mut self,
+        vocabularies: &mut dyn VocabularySource,
+    ) -> Result<BTreeMap<Keyword, VocabularyOutcome>> {
         let definitions = vocabularies.definitions();
 
-        let mut update  = Vec::new();
+        let mut update = Vec::new();
         let mut missing = Vec::new();
         let mut out = BTreeMap::new();
 
@@ -697,16 +720,20 @@ impl<'a, 'c> VersionedStore for InProgress<'a, 'c> {
             match self.check_vocabulary(definition)? {
                 VocabularyCheck::Present => {
                     out.insert(definition.name.clone(), VocabularyOutcome::Existed);
-                },
+                }
                 VocabularyCheck::PresentButTooNew { newer_version } => {
-                    bail!(MentatError::ExistingVocabularyTooNew(definition.name.to_string(), newer_version.version, definition.version));
-                },
+                    bail!(MentatError::ExistingVocabularyTooNew(
+                        definition.name.to_string(),
+                        newer_version.version,
+                        definition.version
+                    ));
+                }
 
-                c @ VocabularyCheck::NotPresent |
-                c @ VocabularyCheck::PresentButNeedsUpdate { older_version: _ } |
-                c @ VocabularyCheck::PresentButMissingAttributes { attributes: _ } => {
+                c @ VocabularyCheck::NotPresent
+                | c @ VocabularyCheck::PresentButNeedsUpdate { older_version: _ }
+                | c @ VocabularyCheck::PresentButMissingAttributes { attributes: _ } => {
                     work.add(definition, c);
-                },
+                }
             }
         }
 
@@ -722,17 +749,17 @@ impl<'a, 'c> VersionedStore for InProgress<'a, 'c> {
                 VocabularyCheck::NotPresent => {
                     // Install it directly.
                     out.insert(name, self.install_vocabulary(definition)?);
-                },
+                }
                 VocabularyCheck::PresentButNeedsUpdate { older_version } => {
                     // Save this: we'll do it later.
                     update.push((definition, older_version));
-                },
+                }
                 VocabularyCheck::PresentButMissingAttributes { attributes } => {
                     // Save this: we'll do it later.
                     missing.push((definition, attributes));
-                },
-                VocabularyCheck::Present |
-                VocabularyCheck::PresentButTooNew { newer_version: _ } => {
+                }
+                VocabularyCheck::Present
+                | VocabularyCheck::PresentButTooNew { newer_version: _ } => {
                     unreachable!();
                 }
             }
@@ -758,13 +785,17 @@ pub trait VocabularySource {
 
     /// Called before the supplied `Definition`s are transacted. Do not commit the `InProgress`.
     /// If this function returns `Err`, the entire vocabulary operation will fail.
-    fn pre(&mut self, _in_progress: &mut InProgress, _checks: &VocabularyStatus) -> Result<()> {
+    fn pre(
+        &mut self,
+        _in_progress: &mut InProgress<'_, '_>,
+        _checks: &dyn VocabularyStatus,
+    ) -> Result<()> {
         Ok(())
     }
 
     /// Called after the supplied `Definition`s are transacted. Do not commit the `InProgress`.
     /// If this function returns `Err`, the entire vocabulary operation will fail.
-    fn post(&mut self, _in_progress: &mut InProgress) -> Result<()> {
+    fn post(&mut self, _in_progress: &mut InProgress<'_, '_>) -> Result<()> {
         Ok(())
     }
 }
@@ -773,14 +804,16 @@ pub trait VocabularySource {
 /// vocabulary `Definition`s.
 pub struct SimpleVocabularySource {
     pub definitions: Vec<Definition>,
-    pub pre: Option<fn(&mut InProgress) -> Result<()>>,
-    pub post: Option<fn(&mut InProgress) -> Result<()>>,
+    pub pre: Option<fn(&mut InProgress<'_, '_>) -> Result<()>>,
+    pub post: Option<fn(&mut InProgress<'_, '_>) -> Result<()>>,
 }
 
 impl SimpleVocabularySource {
-    pub fn new(definitions: Vec<Definition>,
-               pre: Option<fn(&mut InProgress) -> Result<()>>,
-               post: Option<fn(&mut InProgress) -> Result<()>>) -> SimpleVocabularySource {
+    pub fn new(
+        definitions: Vec<Definition>,
+        pre: Option<fn(&mut InProgress<'_, '_>) -> Result<()>>,
+        post: Option<fn(&mut InProgress<'_, '_>) -> Result<()>>,
+    ) -> SimpleVocabularySource {
         SimpleVocabularySource {
             pre: pre,
             post: post,
@@ -794,11 +827,15 @@ impl SimpleVocabularySource {
 }
 
 impl VocabularySource for SimpleVocabularySource {
-    fn pre(&mut self, in_progress: &mut InProgress, _checks: &VocabularyStatus) -> Result<()> {
+    fn pre(
+        &mut self,
+        in_progress: &mut InProgress<'_, '_>,
+        _checks: &dyn VocabularyStatus,
+    ) -> Result<()> {
         self.pre.map(|pre| (pre)(in_progress)).unwrap_or(Ok(()))
     }
 
-    fn post(&mut self, in_progress: &mut InProgress) -> Result<()> {
+    fn post(&mut self, in_progress: &mut InProgress<'_, '_>) -> Result<()> {
         self.post.map(|pre| (pre)(in_progress)).unwrap_or(Ok(()))
     }
 
@@ -815,7 +852,11 @@ impl<'a, 'c> VocabularyMechanics for InProgress<'a, 'c> {
         Ok(VocabularyOutcome::Installed)
     }
 
-    fn install_attributes_for<'definition>(&mut self, definition: &'definition Definition, attributes: Vec<&'definition (Keyword, Attribute)>) -> Result<VocabularyOutcome> {
+    fn install_attributes_for<'definition>(
+        &mut self,
+        definition: &'definition Definition,
+        attributes: Vec<&'definition (Keyword, Attribute)>,
+    ) -> Result<VocabularyOutcome> {
         let (terms, _tempids) = definition.description_for_attributes(&attributes, self, None)?;
         self.transact_entities(terms)?;
         Ok(VocabularyOutcome::InstalledMissingAttributes)
@@ -823,7 +864,11 @@ impl<'a, 'c> VocabularyMechanics for InProgress<'a, 'c> {
 
     /// Turn the declarative parts of the vocabulary into alterations. Run the 'pre' steps.
     /// Transact the changes. Run the 'post' steps. Return the result and the new `InProgress`!
-    fn upgrade_vocabulary(&mut self, definition: &Definition, from_version: Vocabulary) -> Result<VocabularyOutcome> {
+    fn upgrade_vocabulary(
+        &mut self,
+        definition: &Definition,
+        from_version: Vocabulary,
+    ) -> Result<VocabularyOutcome> {
         // It's sufficient for us to generate the datom form of each attribute and transact that.
         // We trust that the vocabulary will implement a 'pre' function that cleans up data for any
         // failable conversion (e.g., cardinality-many to cardinality-one).
@@ -840,32 +885,35 @@ impl<'a, 'c> VocabularyMechanics for InProgress<'a, 'c> {
     }
 }
 
-impl<T> HasVocabularies for T where T: HasSchema + Queryable {
+impl<T> HasVocabularies for T
+where
+    T: HasSchema + Queryable,
+{
     fn read_vocabulary_named(&self, name: &Keyword) -> Result<Option<Vocabulary>> {
         if let Some(entid) = self.get_entid(name) {
             match self.lookup_value_for_attribute(entid, &DB_SCHEMA_VERSION)? {
                 None => Ok(None),
                 Some(TypedValue::Long(version))
-                    if version > 0 && (version < u32::max_value() as i64) => {
-                        let version = version as u32;
-                        let attributes = self.lookup_values_for_attribute(entid, &DB_SCHEMA_ATTRIBUTE)?
-                                             .into_iter()
-                                             .filter_map(|a| {
-                                                 if let TypedValue::Ref(a) = a {
-                                                     self.attribute_for_entid(a)
-                                                         .cloned()
-                                                         .map(|attr| (a, attr))
-                                                 } else {
-                                                     None
-                                                 }
-                                             })
-                                             .collect();
-                        Ok(Some(Vocabulary {
-                            entity: entid.into(),
-                            version: version,
-                            attributes: attributes,
-                        }))
-                    },
+                    if version > 0 && (version < u32::max_value() as i64) =>
+                {
+                    let version = version as u32;
+                    let attributes = self
+                        .lookup_values_for_attribute(entid, &DB_SCHEMA_ATTRIBUTE)?
+                        .into_iter()
+                        .filter_map(|a| {
+                            if let TypedValue::Ref(a) = a {
+                                self.attribute_for_entid(a).cloned().map(|attr| (a, attr))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    Ok(Some(Vocabulary {
+                        entity: entid.into(),
+                        version: version,
+                        attributes: attributes,
+                    }))
+                }
                 Some(_) => bail!(MentatError::InvalidVocabularyVersion),
             }
         } else {
@@ -875,73 +923,90 @@ impl<T> HasVocabularies for T where T: HasSchema + Queryable {
 
     fn read_vocabularies(&self) -> Result<Vocabularies> {
         // This would be way easier with pull expressions. #110.
-        let versions: BTreeMap<Entid, u32> =
-            self.q_once(r#"[:find ?vocab ?version
-                            :where [?vocab :db.schema/version ?version]]"#, None)
-                .into_rel_result()?
-                .into_iter()
-                .filter_map(|v|
-                    match (&v[0], &v[1]) {
-                        (&Binding::Scalar(TypedValue::Ref(vocab)),
-                         &Binding::Scalar(TypedValue::Long(version)))
-                        if version > 0 && (version < u32::max_value() as i64) => Some((vocab, version as u32)),
-                        (_, _) => None,
-                    })
-                .collect();
+        let versions: BTreeMap<Entid, u32> = self
+            .q_once(
+                r#"[:find ?vocab ?version
+                            :where [?vocab :db.schema/version ?version]]"#,
+                None,
+            )
+            .into_rel_result()?
+            .into_iter()
+            .filter_map(|v| match (&v[0], &v[1]) {
+                (
+                    &Binding::Scalar(TypedValue::Ref(vocab)),
+                    &Binding::Scalar(TypedValue::Long(version)),
+                ) if version > 0 && (version < u32::max_value() as i64) => {
+                    Some((vocab, version as u32))
+                }
+                (_, _) => None,
+            })
+            .collect();
 
         let mut attributes = BTreeMap::<Entid, Vec<(Entid, Attribute)>>::new();
-        let pairs =
-            self.q_once("[:find ?vocab ?attr :where [?vocab :db.schema/attribute ?attr]]", None)
-                .into_rel_result()?
-                .into_iter()
-                .filter_map(|v| {
-                    match (&v[0], &v[1]) {
-                        (&Binding::Scalar(TypedValue::Ref(vocab)),
-                         &Binding::Scalar(TypedValue::Ref(attr))) => Some((vocab, attr)),
-                        (_, _) => None,
-                    }
-                    });
+        let pairs = self
+            .q_once(
+                "[:find ?vocab ?attr :where [?vocab :db.schema/attribute ?attr]]",
+                None,
+            )
+            .into_rel_result()?
+            .into_iter()
+            .filter_map(|v| match (&v[0], &v[1]) {
+                (
+                    &Binding::Scalar(TypedValue::Ref(vocab)),
+                    &Binding::Scalar(TypedValue::Ref(attr)),
+                ) => Some((vocab, attr)),
+                (_, _) => None,
+            });
 
         // TODO: validate that attributes.keys is a subset of versions.keys.
         for (vocab, attr) in pairs {
             if let Some(attribute) = self.attribute_for_entid(attr).cloned() {
-                attributes.entry(vocab).or_insert(Vec::new()).push((attr, attribute));
+                attributes
+                    .entry(vocab)
+                    .or_insert(Vec::new())
+                    .push((attr, attribute));
             }
         }
 
         // TODO: return more errors?
 
         // We walk versions first in order to support vocabularies with no attributes.
-        Ok(Vocabularies(versions.into_iter().filter_map(|(vocab, version)| {
-            // Get the name.
-            self.get_ident(vocab).cloned()
-                .map(|name| {
-                    let attrs = attributes.remove(&vocab).unwrap_or(vec![]);
-                    (name.clone(), Vocabulary {
-                        entity: vocab,
-                        version: version,
-                        attributes: attrs,
+        Ok(Vocabularies(
+            versions
+                .into_iter()
+                .filter_map(|(vocab, version)| {
+                    // Get the name.
+                    self.get_ident(vocab).cloned().map(|name| {
+                        let attrs = attributes.remove(&vocab).unwrap_or(vec![]);
+                        (
+                            name.clone(),
+                            Vocabulary {
+                                entity: vocab,
+                                version: version,
+                                attributes: attrs,
+                            },
+                        )
                     })
                 })
-        }).collect()))
+                .collect(),
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use ::{
-        Store,
-    };
+    use crate::Store;
 
-    use super::{
-        HasVocabularies,
-    };
+    use super::HasVocabularies;
 
     #[test]
     fn test_read_vocabularies() {
         let mut store = Store::open("").expect("opened");
-        let vocabularies = store.begin_read().expect("in progress")
-                                .read_vocabularies().expect("OK");
+        let vocabularies = store
+            .begin_read()
+            .expect("in progress")
+            .read_vocabularies()
+            .expect("OK");
         assert_eq!(vocabularies.len(), 1);
         let core = vocabularies.get(&kw!(:db.schema/core)).expect("exists");
         assert_eq!(core.version, 1);
@@ -953,6 +1018,12 @@ mod tests {
         let in_progress = store.begin_transaction().expect("in progress");
         let vocab = in_progress.read_vocabularies().expect("vocabulary");
         assert_eq!(1, vocab.len());
-        assert_eq!(1, vocab.get(&kw!(:db.schema/core)).expect("core vocab").version);
+        assert_eq!(
+            1,
+            vocab
+                .get(&kw!(:db.schema/core))
+                .expect("core vocab")
+                .version
+        );
     }
 }

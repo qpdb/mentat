@@ -12,20 +12,12 @@ use std; // To refer to std::result::Result.
 
 use rusqlite;
 
-use core_traits::{
-    ValueTypeSet,
-};
+use core_traits::ValueTypeSet;
 use db_traits::errors::DbError;
-use edn::query::{
-    PlainSymbol,
-};
-use query_pull_traits::errors::{
-    PullError,
-};
+use edn::query::PlainSymbol;
+use query_pull_traits::errors::PullError;
 
-use aggregates::{
-    SimpleAggregationOp,
-};
+use aggregates::SimpleAggregationOp;
 
 pub type Result<T> = std::result::Result<T, ProjectorError>;
 
@@ -39,7 +31,10 @@ pub enum ProjectorError {
     #[fail(display = "no possible types for value provided to {:?}", _0)]
     CannotProjectImpossibleBinding(SimpleAggregationOp),
 
-    #[fail(display = "cannot apply projection operation {:?} to types {:?}", _0, _1)]
+    #[fail(
+        display = "cannot apply projection operation {:?} to types {:?}",
+        _0, _1
+    )]
     CannotApplyAggregateOperationToTypes(SimpleAggregationOp, ValueTypeSet),
 
     #[fail(display = "invalid projection: {}", _0)]
@@ -54,7 +49,10 @@ pub enum ProjectorError {
     #[fail(display = "expected {}, got {}", _0, _1)]
     UnexpectedResultsType(&'static str, &'static str),
 
-    #[fail(display = "expected tuple of length {}, got tuple of length {}", _0, _1)]
+    #[fail(
+        display = "expected tuple of length {}, got tuple of length {}",
+        _0, _1
+    )]
     UnexpectedResultsTupleLength(usize, usize),
 
     #[fail(display = "min/max expressions: {} (max 1), corresponding: {}", _0, _1)]

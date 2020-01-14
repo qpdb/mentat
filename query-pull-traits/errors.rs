@@ -10,13 +10,9 @@
 
 use std; // To refer to std::result::Result.
 
-use db_traits::errors::{
-    DbError,
-};
+use db_traits::errors::DbError;
 
-use core_traits::{
-    Entid,
-};
+use core_traits::Entid;
 
 pub type Result<T> = std::result::Result<T, PullError>;
 

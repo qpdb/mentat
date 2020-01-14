@@ -10,29 +10,15 @@
 
 #![allow(dead_code)]
 
-use failure::{
-    Backtrace,
-    Context,
-    Fail,
-};
+use failure::{Backtrace, Context, Fail};
 
-use std::collections::{
-    BTreeMap,
-    BTreeSet,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite;
 
-use edn::entities::{
-    TempId,
-};
+use edn::entities::TempId;
 
-use core_traits::{
-    Entid,
-    KnownEntid,
-    TypedValue,
-    ValueType,
-};
+use core_traits::{Entid, KnownEntid, TypedValue, ValueType};
 
 pub type Result<T> = ::std::result::Result<T, DbError>;
 
@@ -72,40 +58,46 @@ pub enum SchemaConstraintViolation {
     /// A transaction tried to assert a datom or datoms with the wrong value `v` type(s).
     TypeDisagreements {
         /// The key (`[e a v]`) has an invalid value `v`: it is not of the expected value type.
-        conflicting_datoms: BTreeMap<(Entid, Entid, TypedValue), ValueType>
+        conflicting_datoms: BTreeMap<(Entid, Entid, TypedValue), ValueType>,
     },
 
     /// A transaction tried to assert datoms that don't observe the schema's cardinality constraints.
-    CardinalityConflicts {
-        conflicts: Vec<CardinalityConflict>,
-    },
+    CardinalityConflicts { conflicts: Vec<CardinalityConflict> },
 }
 
 impl ::std::fmt::Display for SchemaConstraintViolation {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         use self::SchemaConstraintViolation::*;
         match self {
-            &ConflictingUpserts { ref conflicting_upserts } => {
+            &ConflictingUpserts {
+                ref conflicting_upserts,
+            } => {
                 writeln!(f, "conflicting upserts:")?;
                 for (tempid, entids) in conflicting_upserts {
                     writeln!(f, "  tempid {:?} upserts to {:?}", tempid, entids)?;
                 }
                 Ok(())
-            },
-            &TypeDisagreements { ref conflicting_datoms } => {
+            }
+            &TypeDisagreements {
+                ref conflicting_datoms,
+            } => {
                 writeln!(f, "type disagreements:")?;
                 for (ref datom, expected_type) in conflicting_datoms {
-                    writeln!(f, "  expected value of type {} but got datom [{} {} {:?}]", expected_type, datom.0, datom.1, datom.2)?;
+                    writeln!(
+                        f,
+                        "  expected value of type {} but got datom [{} {} {:?}]",
+                        expected_type, datom.0, datom.1, datom.2
+                    )?;
                 }
                 Ok(())
-            },
+            }
             &CardinalityConflicts { ref conflicts } => {
                 writeln!(f, "cardinality conflicts:")?;
                 for ref conflict in conflicts {
                     writeln!(f, "  {:?}", conflict)?;
                 }
                 Ok(())
-            },
+            }
         }
     }
 }
@@ -146,7 +138,7 @@ impl ::std::fmt::Display for DbError {
 }
 
 impl Fail for DbError {
-    fn cause(&self) -> Option<&Fail> {
+    fn cause(&self) -> Option<&dyn Fail> {
         self.inner.cause()
     }
 
@@ -162,20 +154,24 @@ impl DbError {
 }
 
 impl From<DbErrorKind> for DbError {
-    fn from(kind: DbErrorKind) -> DbError {
-        DbError { inner: Context::new(kind) }
+    fn from(kind: DbErrorKind) -> Self {
+        DbError {
+            inner: Context::new(kind),
+        }
     }
 }
 
 impl From<Context<DbErrorKind>> for DbError {
-    fn from(inner: Context<DbErrorKind>) -> DbError {
+    fn from(inner: Context<DbErrorKind>) -> Self {
         DbError { inner: inner }
     }
 }
 
 impl From<rusqlite::Error> for DbError {
-    fn from(error: rusqlite::Error) -> DbError {
-        DbError { inner: Context::new(DbErrorKind::RusqliteError(error.to_string())) }
+    fn from(error: rusqlite::Error) -> Self {
+        DbError {
+            inner: Context::new(DbErrorKind::RusqliteError(error.to_string())),
+        }
     }
 }
 
@@ -187,7 +183,10 @@ pub enum DbErrorKind {
     NotYetImplemented(String),
 
     /// We've been given a value that isn't the correct Mentat type.
-    #[fail(display = "value '{}' is not the expected Mentat value type {:?}", _0, _1)]
+    #[fail(
+        display = "value '{}' is not the expected Mentat value type {:?}",
+        _0, _1
+    )]
     BadValuePair(String, ValueType),
 
     /// We've got corrupt data in the SQL store: a value and value_type_tag don't line up.
@@ -195,11 +194,10 @@ pub enum DbErrorKind {
     #[fail(display = "bad SQL (value_type_tag, value) pair: ({:?}, {:?})", _0, _1)]
     BadSQLValuePair(rusqlite::types::Value, i32),
 
-    // /// The SQLite store user_version isn't recognized.  This could be an old version of Mentat
-    // /// trying to open a newer version SQLite store; or it could be a corrupt file; or ...
-    // #[fail(display = "bad SQL store user_version: {}", _0)]
-    // BadSQLiteStoreVersion(i32),
-
+    /// The SQLite store user_version isn't recognized.  This could be an old version of Mentat
+    /// trying to open a newer version SQLite store; or it could be a corrupt file; or ...
+    /// #[fail(display = "bad SQL store user_version: {}", _0)]
+    /// BadSQLiteStoreVersion(i32),
     /// A bootstrap definition couldn't be parsed or installed.  This is a programmer error, not
     /// a runtime error.
     #[fail(display = "bad bootstrap definition: {}", _0)]
@@ -239,7 +237,9 @@ pub enum DbErrorKind {
     #[fail(display = "transaction input error: {}", _0)]
     InputError(InputError),
 
-    #[fail(display = "Cannot transact a fulltext assertion with a typed value that is not :db/valueType :db.type/string")]
+    #[fail(
+        display = "Cannot transact a fulltext assertion with a typed value that is not :db/valueType :db.type/string"
+    )]
     WrongTypeValueForFtsAssertion,
 
     // SQL errors.

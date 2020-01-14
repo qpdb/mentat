@@ -10,44 +10,23 @@
 
 #![allow(dead_code)]
 
-use std::collections::{
-    BTreeMap,
-    BTreeSet,
-    HashMap,
-};
-use std::iter::{
-    FromIterator,
-};
-use std::ops::{
-    Deref,
-    DerefMut,
-    Range,
-};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::iter::FromIterator;
+use std::ops::{Deref, DerefMut, Range};
 
 extern crate mentat_core;
 
-use core_traits::{
-    Entid,
-    TypedValue,
-    ValueType,
-};
+use core_traits::{Entid, TypedValue, ValueType};
 
-pub use self::mentat_core::{
-    DateTime,
-    Schema,
-    Utc,
-};
+pub use self::mentat_core::{DateTime, Schema, Utc};
 
-use edn::entities::{
-    EntityPlace,
-    TempId,
-};
+use edn::entities::{EntityPlace, TempId};
 
-use db_traits::errors as errors;
+use db_traits::errors;
 
 /// Represents one partition of the entid space.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
-#[cfg_attr(feature = "syncable", derive(Serialize,Deserialize))]
+#[cfg_attr(feature = "syncable", derive(Serialize, Deserialize))]
 pub struct Partition {
     /// The first entid in the partition.
     pub start: Entid,
@@ -61,12 +40,22 @@ pub struct Partition {
 }
 
 impl Partition {
-    pub fn new(start: Entid, end: Entid, next_entid_to_allocate: Entid, allow_excision: bool) -> Partition {
+    pub fn new(
+        start: Entid,
+        end: Entid,
+        next_entid_to_allocate: Entid,
+        allow_excision: bool,
+    ) -> Partition {
         assert!(
             start <= next_entid_to_allocate && next_entid_to_allocate <= end,
             "A partition represents a monotonic increasing sequence of entids."
         );
-        Partition { start, end, next_entid_to_allocate, allow_excision }
+        Partition {
+            start,
+            end,
+            next_entid_to_allocate,
+            allow_excision,
+        }
     }
 
     pub fn contains_entid(&self, e: Entid) -> bool {
@@ -82,7 +71,10 @@ impl Partition {
     }
 
     pub fn set_next_entid(&mut self, e: Entid) {
-        assert!(self.allows_entid(e), "Partition index must be within its allocated space.");
+        assert!(
+            self.allows_entid(e),
+            "Partition index must be within its allocated space."
+        );
         self.next_entid_to_allocate = e;
     }
 
@@ -95,7 +87,7 @@ impl Partition {
 
 /// Map partition names to `Partition` instances.
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialOrd, PartialEq)]
-#[cfg_attr(feature = "syncable", derive(Serialize,Deserialize))]
+#[cfg_attr(feature = "syncable", derive(Serialize, Deserialize))]
 pub struct PartitionMap(BTreeMap<String, Partition>);
 
 impl Deref for PartitionMap {
@@ -113,7 +105,7 @@ impl DerefMut for PartitionMap {
 }
 
 impl FromIterator<(String, Partition)> for PartitionMap {
-    fn from_iter<T: IntoIterator<Item=(String, Partition)>>(iter: T) -> Self {
+    fn from_iter<T: IntoIterator<Item = (String, Partition)>>(iter: T) -> Self {
         PartitionMap(iter.into_iter().collect())
     }
 }
@@ -121,7 +113,7 @@ impl FromIterator<(String, Partition)> for PartitionMap {
 /// Represents the metadata required to query from, or apply transactions to, a Mentat store.
 ///
 /// See https://github.com/mozilla/mentat/wiki/Thoughts:-modeling-db-conn-in-Rust.
-#[derive(Clone,Debug,Default,Eq,Hash,Ord,PartialOrd,PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub struct DB {
     /// Map partition name->`Partition`.
     ///
@@ -136,7 +128,7 @@ impl DB {
     pub fn new(partition_map: PartitionMap, schema: Schema) -> DB {
         DB {
             partition_map: partition_map,
-            schema: schema
+            schema: schema,
         }
     }
 }
@@ -163,7 +155,8 @@ pub type AttributeSet = BTreeSet<Entid>;
 pub trait TransactableValue: Clone {
     /// Coerce this value place into the given type.  This is where we perform schema-aware
     /// coercion, for example coercing an integral value into a ref where appropriate.
-    fn into_typed_value(self, schema: &Schema, value_type: ValueType) -> errors::Result<TypedValue>;
+    fn into_typed_value(self, schema: &Schema, value_type: ValueType)
+        -> errors::Result<TypedValue>;
 
     /// Make an entity place out of this value place.  This is where we limit values in nested maps
     /// to valid entity places.

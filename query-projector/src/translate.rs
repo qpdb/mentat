@@ -8,67 +8,27 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use core_traits::{
-    TypedValue,
-    ValueType,
-    ValueTypeSet,
-};
+use core_traits::{TypedValue, ValueType, ValueTypeSet};
 
-use mentat_core::{
-    Schema,
-    SQLTypeAffinity,
-    SQLValueType,
-    SQLValueTypeSet,
-    ValueTypeTag,
-};
+use mentat_core::{SQLTypeAffinity, SQLValueType, SQLValueTypeSet, Schema, ValueTypeTag};
 
-use mentat_core::util::{
-    Either,
-};
+use mentat_core::util::Either;
 
-use edn::query::{
-    Limit,
-};
+use edn::query::Limit;
 
 use mentat_query_algebrizer::{
-    AlgebraicQuery,
-    ColumnAlternation,
-    ColumnConstraint,
-    ColumnConstraintOrAlternation,
-    ColumnIntersection,
-    ColumnName,
-    ComputedTable,
-    ConjoiningClauses,
-    DatomsColumn,
-    DatomsTable,
-    OrderBy,
-    QualifiedAlias,
-    QueryValue,
-    SourceAlias,
-    TableAlias,
-    VariableColumn,
+    AlgebraicQuery, ColumnAlternation, ColumnConstraint, ColumnConstraintOrAlternation,
+    ColumnIntersection, ColumnName, ComputedTable, ConjoiningClauses, DatomsColumn, DatomsTable,
+    OrderBy, QualifiedAlias, QueryValue, SourceAlias, TableAlias, VariableColumn,
 };
 
-use ::{
-    CombinedProjection,
-    ConstantProjector,
-    Projector,
-    projected_column_for_var,
-    query_projection,
+use {
+    projected_column_for_var, query_projection, CombinedProjection, ConstantProjector, Projector,
 };
 
 use mentat_query_sql::{
-    ColumnOrExpression,
-    Constraint,
-    FromClause,
-    GroupBy,
-    Op,
-    ProjectedColumn,
-    Projection,
-    SelectQuery,
-    TableList,
-    TableOrSubquery,
-    Values,
+    ColumnOrExpression, Constraint, FromClause, GroupBy, Op, ProjectedColumn, Projection,
+    SelectQuery, TableList, TableOrSubquery, Values,
 };
 
 use std::collections::HashMap;
@@ -92,7 +52,7 @@ impl ToColumn for QualifiedAlias {
 impl ToConstraint for ColumnIntersection {
     fn to_constraint(self) -> Constraint {
         Constraint::And {
-            constraints: self.into_iter().map(|x| x.to_constraint()).collect()
+            constraints: self.into_iter().map(|x| x.to_constraint()).collect(),
         }
     }
 }
@@ -100,7 +60,7 @@ impl ToConstraint for ColumnIntersection {
 impl ToConstraint for ColumnAlternation {
     fn to_constraint(self) -> Constraint {
         Constraint::Or {
-            constraints: self.into_iter().map(|x| x.to_constraint()).collect()
+            constraints: self.into_iter().map(|x| x.to_constraint()).collect(),
         }
     }
 }
@@ -116,30 +76,31 @@ impl ToConstraint for ColumnConstraintOrAlternation {
 }
 
 fn affinity_count(tag: i32) -> usize {
-    ValueTypeSet::any().into_iter()
-                       .filter(|t| t.value_type_tag() == tag)
-                       .count()
+    ValueTypeSet::any()
+        .into_iter()
+        .filter(|t| t.value_type_tag() == tag)
+        .count()
 }
 
-fn type_constraint(table: &TableAlias, tag: i32, to_check: Option<Vec<SQLTypeAffinity>>) -> Constraint {
-    let type_column = QualifiedAlias::new(table.clone(),
-                                          DatomsColumn::ValueTypeTag).to_column();
+fn type_constraint(
+    table: &TableAlias,
+    tag: i32,
+    to_check: Option<Vec<SQLTypeAffinity>>,
+) -> Constraint {
+    let type_column = QualifiedAlias::new(table.clone(), DatomsColumn::ValueTypeTag).to_column();
     let check_type_tag = Constraint::equal(type_column, ColumnOrExpression::Integer(tag));
     if let Some(affinities) = to_check {
         let check_affinities = Constraint::Or {
-            constraints: affinities.into_iter().map(|affinity| {
-                Constraint::TypeCheck {
-                    value: QualifiedAlias::new(table.clone(),
-                                               DatomsColumn::Value).to_column(),
+            constraints: affinities
+                .into_iter()
+                .map(|affinity| Constraint::TypeCheck {
+                    value: QualifiedAlias::new(table.clone(), DatomsColumn::Value).to_column(),
                     affinity,
-                }
-            }).collect()
+                })
+                .collect(),
         };
         Constraint::And {
-            constraints: vec![
-                check_type_tag,
-                check_affinities
-            ]
+            constraints: vec![check_type_tag, check_affinities],
         }
     } else {
         check_type_tag
@@ -164,17 +125,23 @@ impl ToConstraint for ColumnConstraint {
     fn to_constraint(self) -> Constraint {
         use self::ColumnConstraint::*;
         match self {
-            Equals(qa, QueryValue::Entid(entid)) =>
-                Constraint::equal(qa.to_column(), ColumnOrExpression::Entid(entid)),
+            Equals(qa, QueryValue::Entid(entid)) => {
+                Constraint::equal(qa.to_column(), ColumnOrExpression::Entid(entid))
+            }
 
-            Equals(qa, QueryValue::TypedValue(tv)) =>
-                Constraint::equal(qa.to_column(), ColumnOrExpression::Value(tv)),
+            Equals(qa, QueryValue::TypedValue(tv)) => {
+                Constraint::equal(qa.to_column(), ColumnOrExpression::Value(tv))
+            }
 
-            Equals(left, QueryValue::Column(right)) =>
-                Constraint::equal(left.to_column(), right.to_column()),
+            Equals(left, QueryValue::Column(right)) => {
+                Constraint::equal(left.to_column(), right.to_column())
+            }
 
             Equals(qa, QueryValue::PrimitiveLong(value)) => {
-                let tag_column = qa.for_associated_type_tag().expect("an associated type tag alias").to_column();
+                let tag_column = qa
+                    .for_associated_type_tag()
+                    .expect("an associated type tag alias")
+                    .to_column();
                 let value_column = qa.to_column();
 
                 // A bare long in a query might match a ref, an instant, a long (obviously), or a
@@ -194,58 +161,71 @@ impl ToConstraint for ColumnConstraint {
                 if must_exclude_boolean {
                     Constraint::And {
                         constraints: vec![
-                            Constraint::equal(value_column,
-                                              ColumnOrExpression::Value(TypedValue::Long(value))),
-                            Constraint::not_equal(tag_column,
-                                                  ColumnOrExpression::Integer(ValueType::Boolean.value_type_tag())),
+                            Constraint::equal(
+                                value_column,
+                                ColumnOrExpression::Value(TypedValue::Long(value)),
+                            ),
+                            Constraint::not_equal(
+                                tag_column,
+                                ColumnOrExpression::Integer(ValueType::Boolean.value_type_tag()),
+                            ),
                         ],
                     }
                 } else {
-                    Constraint::equal(value_column, ColumnOrExpression::Value(TypedValue::Long(value)))
+                    Constraint::equal(
+                        value_column,
+                        ColumnOrExpression::Value(TypedValue::Long(value)),
+                    )
                 }
+            }
+
+            Inequality {
+                operator,
+                left,
+                right,
+            } => Constraint::Infix {
+                op: Op(operator.to_sql_operator()),
+                left: left.into(),
+                right: right.into(),
             },
 
-            Inequality { operator, left, right } => {
-                Constraint::Infix {
-                    op: Op(operator.to_sql_operator()),
-                    left: left.into(),
-                    right: right.into(),
-                }
+            Matches(left, right) => Constraint::Infix {
+                op: Op("MATCH"),
+                left: ColumnOrExpression::Column(left),
+                right: right.into(),
             },
-
-            Matches(left, right) => {
-                Constraint::Infix {
-                    op: Op("MATCH"),
-                    left: ColumnOrExpression::Column(left),
-                    right: right.into(),
-                }
-            },
-            HasTypes { value: table, value_types, check_value } => {
+            HasTypes {
+                value: table,
+                value_types,
+                check_value,
+            } => {
                 let constraints = if check_value {
                     possible_affinities(value_types)
                         .into_iter()
                         .map(|(tag, affinities)| {
-                            let to_check = if affinities.is_empty() || affinities.len() == affinity_count(tag) {
+                            let to_check = if affinities.is_empty()
+                                || affinities.len() == affinity_count(tag)
+                            {
                                 None
                             } else {
                                 Some(affinities)
                             };
                             type_constraint(&table, tag, to_check)
-                        }).collect()
+                        })
+                        .collect()
                 } else {
-                    value_types.into_iter()
-                               .map(|vt| type_constraint(&table, vt.value_type_tag(), None))
-                               .collect()
+                    value_types
+                        .into_iter()
+                        .map(|vt| type_constraint(&table, vt.value_type_tag(), None))
+                        .collect()
                 };
                 Constraint::Or { constraints }
-            },
+            }
 
             NotExists(computed_table) => {
                 let subquery = table_for_computed(computed_table, TableAlias::new());
-                Constraint::NotExists {
-                    subquery: subquery,
-                }
-            },
+                Constraint::NotExists { subquery: subquery }
+            }
         }
     }
 }
@@ -254,7 +234,7 @@ pub enum ProjectedSelect {
     Constant(ConstantProjector),
     Query {
         query: SelectQuery,
-        projector: Box<Projector>,
+        projector: Box<dyn Projector>,
     },
 }
 
@@ -265,7 +245,9 @@ struct ConsumableVec<T> {
 
 impl<T> From<Vec<T>> for ConsumableVec<T> {
     fn from(vec: Vec<T>) -> ConsumableVec<T> {
-        ConsumableVec { inner: vec.into_iter().map(|x| Some(x)).collect() }
+        ConsumableVec {
+            inner: vec.into_iter().map(|x| Some(x)).collect(),
+        }
     }
 }
 
@@ -278,7 +260,9 @@ impl<T> ConsumableVec<T> {
 fn table_for_computed(computed: ComputedTable, alias: TableAlias) -> TableOrSubquery {
     match computed {
         ComputedTable::Union {
-            projection, type_extraction, arms,
+            projection,
+            type_extraction,
+            arms,
         } => {
             // The projection list for each CC must have the same shape and the same names.
             // The values we project might be fixed or they might be columns.
@@ -329,16 +313,14 @@ fn table_for_computed(computed: ComputedTable, alias: TableAlias) -> TableOrSubq
                         cc_to_select_query(projection, cc, false, vec![], None, Limit::None)
                   }).collect(),
                 alias)
-        },
+        }
         ComputedTable::Subquery(subquery) => {
             TableOrSubquery::Subquery(Box::new(cc_to_exists(subquery)))
-        },
-        ComputedTable::NamedValues {
-            names, values,
-        } => {
+        }
+        ComputedTable::NamedValues { names, values } => {
             // We assume column homogeneity, so we won't have any type tag columns.
             TableOrSubquery::Values(Values::Named(names, values), alias)
-        },
+        }
     }
 }
 
@@ -357,12 +339,14 @@ fn empty_query() -> SelectQuery {
 /// Returns a `SelectQuery` that queries for the provided `cc`. Note that this _always_ returns a
 /// query that runs SQL. The next level up the call stack can check for known-empty queries if
 /// needed.
-fn cc_to_select_query(projection: Projection,
-                      cc: ConjoiningClauses,
-                      distinct: bool,
-                      group_by: Vec<GroupBy>,
-                      order: Option<Vec<OrderBy>>,
-                      limit: Limit) -> SelectQuery {
+fn cc_to_select_query(
+    projection: Projection,
+    cc: ConjoiningClauses,
+    distinct: bool,
+    group_by: Vec<GroupBy>,
+    order: Option<Vec<OrderBy>>,
+    limit: Limit,
+) -> SelectQuery {
     let from = if cc.from.is_empty() {
         FromClause::Nothing
     } else {
@@ -374,33 +358,29 @@ fn cc_to_select_query(projection: Projection,
         // a CTE (`WITH`). They're typically equivalent, but some SQL systems (notably Postgres)
         // treat CTEs as optimization barriers, so a `WITH` can be significantly slower. Given that
         // this is easy enough to change later, we'll opt for using direct inclusion in `FROM`.
-        let tables =
-            from.into_iter().map(|source_alias| {
-                match source_alias {
-                    SourceAlias(DatomsTable::Computed(i), alias) => {
-                        let comp = computed.take_dangerously(i);
-                        table_for_computed(comp, alias)
-                    },
-                    _ => {
-                        TableOrSubquery::Table(source_alias)
-                    }
-                }
-            });
+        let tables = from.into_iter().map(|source_alias| match source_alias {
+            SourceAlias(DatomsTable::Computed(i), alias) => {
+                let comp = computed.take_dangerously(i);
+                table_for_computed(comp, alias)
+            }
+            _ => TableOrSubquery::Table(source_alias),
+        });
 
         FromClause::TableList(TableList(tables.collect()))
     };
 
-    let order = order.map_or(vec![], |vec| { vec.into_iter().map(|o| o.into()).collect() });
-    let limit = if cc.empty_because.is_some() { Limit::Fixed(0) } else { limit };
+    let order = order.map_or(vec![], |vec| vec.into_iter().map(|o| o.into()).collect());
+    let limit = if cc.empty_because.is_some() {
+        Limit::Fixed(0)
+    } else {
+        limit
+    };
     SelectQuery {
         distinct: distinct,
         projection: projection,
         from: from,
         group_by: group_by,
-        constraints: cc.wheres
-                       .into_iter()
-                       .map(|c| c.to_constraint())
-                       .collect(),
+        constraints: cc.wheres.into_iter().map(|c| c.to_constraint()).collect(),
         order: order,
         limit: limit,
     }
@@ -433,18 +413,17 @@ fn re_project(mut inner: SelectQuery, projection: Projection) -> SelectQuery {
     use self::Projection::*;
 
     let nullable = match &projection {
-        &Columns(ref columns) => {
-            columns.iter().filter_map(|pc| {
-                match pc {
-                    &ProjectedColumn(ColumnOrExpression::NullableAggregate(_, _), ref name) => {
-                        Some(Constraint::IsNotNull {
-                            value: ColumnOrExpression::ExistingColumn(name.clone()),
-                        })
-                    },
-                    _ => None,
+        &Columns(ref columns) => columns
+            .iter()
+            .filter_map(|pc| match pc {
+                &ProjectedColumn(ColumnOrExpression::NullableAggregate(_, _), ref name) => {
+                    Some(Constraint::IsNotNull {
+                        value: ColumnOrExpression::ExistingColumn(name.clone()),
+                    })
                 }
-            }).collect()
-        },
+                _ => None,
+            })
+            .collect(),
         &Star => vec![],
         &One => vec![],
     };
@@ -453,7 +432,9 @@ fn re_project(mut inner: SelectQuery, projection: Projection) -> SelectQuery {
         return SelectQuery {
             distinct: outer_distinct,
             projection: projection,
-            from: FromClause::TableList(TableList(vec![TableOrSubquery::Subquery(Box::new(inner))])),
+            from: FromClause::TableList(TableList(vec![TableOrSubquery::Subquery(Box::new(
+                inner,
+            ))])),
             constraints: vec![],
             group_by: group_by,
             order: order_by,
@@ -482,7 +463,9 @@ fn re_project(mut inner: SelectQuery, projection: Projection) -> SelectQuery {
     SelectQuery {
         distinct: false,
         projection: Projection::Star,
-        from: FromClause::TableList(TableList(vec![TableOrSubquery::Subquery(Box::new(subselect))])),
+        from: FromClause::TableList(TableList(vec![TableOrSubquery::Subquery(Box::new(
+            subselect,
+        ))])),
         constraints: nullable,
         group_by: vec![],
         order: order_by,
@@ -508,21 +491,28 @@ pub fn query_to_select(schema: &Schema, query: AlgebraicQuery) -> Result<Project
                 query: match pre_aggregate_projection {
                     // If we know we need a nested query for aggregation, build that first.
                     Some(pre_aggregate) => {
-                        let inner = cc_to_select_query(pre_aggregate,
-                                                       query.cc,
-                                                       distinct,
-                                                       group_by_cols,
-                                                       query.order,
-                                                       query.limit);
+                        let inner = cc_to_select_query(
+                            pre_aggregate,
+                            query.cc,
+                            distinct,
+                            group_by_cols,
+                            query.order,
+                            query.limit,
+                        );
                         let outer = re_project(inner, sql_projection);
                         outer
-                    },
-                    None => {
-                        cc_to_select_query(sql_projection, query.cc, distinct, group_by_cols, query.order, query.limit)
-                    },
+                    }
+                    None => cc_to_select_query(
+                        sql_projection,
+                        query.cc,
+                        distinct,
+                        group_by_cols,
+                        query.order,
+                        query.limit,
+                    ),
                 },
                 projector: datalog_projector,
             }
-        },
+        }
     })
 }

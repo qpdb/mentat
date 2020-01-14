@@ -8,24 +8,25 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-extern crate rustc_version;
-
+use rustc_version::{version, Version};
 use std::io::{self, Write};
 use std::process::exit;
-use rustc_version::{
-    Version,
-    version,
-};
 
 /// MIN_VERSION should be changed when there's a new minimum version of rustc required
 /// to build the project.
-static MIN_VERSION: &'static str  = "1.25.0";
+static MIN_VERSION: &'static str = "1.41.0";
 
 fn main() {
     let ver = version().unwrap();
     let min = Version::parse(MIN_VERSION).unwrap();
     if ver < min {
-        writeln!(&mut io::stderr(), "Mentat requires rustc {} or higher.", MIN_VERSION).unwrap();
+        writeln!(
+            &mut io::stderr(),
+            "Mentat requires rustc {} or higher, you were using version {}.",
+            MIN_VERSION,
+            ver
+        )
+        .unwrap();
         exit(1);
     }
 }
