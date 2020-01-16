@@ -19,63 +19,35 @@ extern crate core_traits;
 
 extern crate edn;
 
-use core_traits::{
-    Attribute,
-    Entid,
-    KnownEntid,
-    ValueType,
-};
+use core_traits::{Attribute, Entid, KnownEntid, ValueType};
 
 mod cache;
 
-use std::collections::{
-    BTreeMap,
-};
+use std::collections::BTreeMap;
 
 pub use uuid::Uuid;
 
 pub use chrono::{
     DateTime,
-    Timelike,       // For truncation.
+    Timelike, // For truncation.
 };
 
-pub use edn::{
-    Cloned,
-    FromMicros,
-    FromRc,
-    Keyword,
-    ToMicros,
-    Utc,
-    ValueRc,
-};
+pub use edn::{Cloned, FromMicros, FromRc, Keyword, ToMicros, Utc, ValueRc};
 
-pub use edn::parse::{
-    parse_query,
-};
+pub use edn::parse::parse_query;
 
-pub use cache::{
-    CachedAttributes,
-    UpdateableCache,
-};
+pub use cache::{CachedAttributes, UpdateableCache};
 
+mod sql_types;
+mod tx_report;
 /// Core types defining a Mentat knowledge base.
 mod types;
-mod tx_report;
-mod sql_types;
 
-pub use tx_report::{
-    TxReport,
-};
+pub use tx_report::TxReport;
 
-pub use types::{
-    ValueTypeTag,
-};
+pub use types::ValueTypeTag;
 
-pub use sql_types::{
-    SQLTypeAffinity,
-    SQLValueType,
-    SQLValueTypeSet,
-};
+pub use sql_types::{SQLTypeAffinity, SQLValueType, SQLValueTypeSet};
 
 /// Map `Keyword` idents (`:db/ident`) to positive integer entids (`1`).
 pub type IdentMap = BTreeMap<Keyword, Entid>;
@@ -119,15 +91,21 @@ pub struct Schema {
 pub trait HasSchema {
     fn entid_for_type(&self, t: ValueType) -> Option<KnownEntid>;
 
-    fn get_ident<T>(&self, x: T) -> Option<&Keyword> where T: Into<Entid>;
+    fn get_ident<T>(&self, x: T) -> Option<&Keyword>
+    where
+        T: Into<Entid>;
     fn get_entid(&self, x: &Keyword) -> Option<KnownEntid>;
-    fn attribute_for_entid<T>(&self, x: T) -> Option<&Attribute> where T: Into<Entid>;
+    fn attribute_for_entid<T>(&self, x: T) -> Option<&Attribute>
+    where
+        T: Into<Entid>;
 
     // Returns the attribute and the entid named by the provided ident.
     fn attribute_for_ident(&self, ident: &Keyword) -> Option<(&Attribute, KnownEntid)>;
 
     /// Return true if the provided entid identifies an attribute in this schema.
-    fn is_attribute<T>(&self, x: T) -> bool where T: Into<Entid>;
+    fn is_attribute<T>(&self, x: T) -> bool
+    where
+        T: Into<Entid>;
 
     /// Return true if the provided ident identifies an attribute in this schema.
     fn identifies_attribute(&self, x: &Keyword) -> bool;
@@ -137,17 +115,24 @@ pub trait HasSchema {
 
 impl Schema {
     pub fn new(ident_map: IdentMap, entid_map: EntidMap, attribute_map: AttributeMap) -> Schema {
-        let mut s = Schema { ident_map, entid_map, attribute_map, component_attributes: Vec::new() };
+        let mut s = Schema {
+            ident_map,
+            entid_map,
+            attribute_map,
+            component_attributes: Vec::new(),
+        };
         s.update_component_attributes();
         s
     }
 
     /// Returns an symbolic representation of the schema suitable for applying across Mentat stores.
     pub fn to_edn_value(&self) -> edn::Value {
-        edn::Value::Vector((&self.attribute_map).iter()
-            .map(|(entid, attribute)|
-                attribute.to_edn_value(self.get_ident(*entid).cloned()))
-            .collect())
+        edn::Value::Vector(
+            (&self.attribute_map)
+                .iter()
+                .map(|(entid, attribute)| attribute.to_edn_value(self.get_ident(*entid).cloned()))
+                .collect(),
+        )
     }
 
     fn get_raw_entid(&self, x: &Keyword) -> Option<Entid> {
@@ -156,10 +141,11 @@ impl Schema {
 
     pub fn update_component_attributes(&mut self) {
         let mut components: Vec<Entid>;
-        components = self.attribute_map
-                         .iter()
-                         .filter_map(|(k, v)| if v.component { Some(*k) } else { None })
-                         .collect();
+        components = self
+            .attribute_map
+            .iter()
+            .filter_map(|(k, v)| if v.component { Some(*k) } else { None })
+            .collect();
         components.sort_unstable();
         self.component_attributes = components;
     }
@@ -171,7 +157,10 @@ impl HasSchema for Schema {
         self.get_entid(&t.into_keyword())
     }
 
-    fn get_ident<T>(&self, x: T) -> Option<&Keyword> where T: Into<Entid> {
+    fn get_ident<T>(&self, x: T) -> Option<&Keyword>
+    where
+        T: Into<Entid>,
+    {
         self.entid_map.get(&x.into())
     }
 
@@ -179,25 +168,33 @@ impl HasSchema for Schema {
         self.get_raw_entid(x).map(KnownEntid)
     }
 
-    fn attribute_for_entid<T>(&self, x: T) -> Option<&Attribute> where T: Into<Entid> {
+    fn attribute_for_entid<T>(&self, x: T) -> Option<&Attribute>
+    where
+        T: Into<Entid>,
+    {
         self.attribute_map.get(&x.into())
     }
 
     fn attribute_for_ident(&self, ident: &Keyword) -> Option<(&Attribute, KnownEntid)> {
-        self.get_raw_entid(&ident)
-            .and_then(|entid| {
-                self.attribute_for_entid(entid).map(|a| (a, KnownEntid(entid)))
-            })
+        self.get_raw_entid(&ident).and_then(|entid| {
+            self.attribute_for_entid(entid)
+                .map(|a| (a, KnownEntid(entid)))
+        })
     }
 
     /// Return true if the provided entid identifies an attribute in this schema.
-    fn is_attribute<T>(&self, x: T) -> bool where T: Into<Entid> {
+    fn is_attribute<T>(&self, x: T) -> bool
+    where
+        T: Into<Entid>,
+    {
         self.attribute_map.contains_key(&x.into())
     }
 
     /// Return true if the provided ident identifies an attribute in this schema.
     fn identifies_attribute(&self, x: &Keyword) -> bool {
-        self.get_raw_entid(x).map(|e| self.is_attribute(e)).unwrap_or(false)
+        self.get_raw_entid(x)
+            .map(|e| self.is_attribute(e))
+            .unwrap_or(false)
     }
 
     fn component_attributes(&self) -> &[Entid] {
@@ -228,7 +225,7 @@ pub mod util;
 macro_rules! interpose {
     ( $name: pat, $across: expr, $body: block, $inter: block ) => {
         interpose_iter!($name, $across.iter(), $body, $inter)
-    }
+    };
 }
 
 /// A helper to bind `name` to values in `across`, running `body` for each value,
@@ -244,7 +241,7 @@ macro_rules! interpose_iter {
                 $body;
             }
         }
-    }
+    };
 }
 
 #[cfg(test)]
@@ -253,10 +250,7 @@ mod test {
 
     use std::str::FromStr;
 
-    use core_traits::{
-        attribute,
-        TypedValue,
-    };
+    use core_traits::{attribute, TypedValue};
 
     fn associate_ident(schema: &mut Schema, i: Keyword, e: Entid) {
         schema.entid_map.insert(e, i.clone());
@@ -269,8 +263,10 @@ mod test {
 
     #[test]
     fn test_datetime_truncation() {
-        let dt: DateTime<Utc> = DateTime::from_str("2018-01-11T00:34:09.273457004Z").expect("parsed");
-        let expected: DateTime<Utc> = DateTime::from_str("2018-01-11T00:34:09.273457Z").expect("parsed");
+        let dt: DateTime<Utc> =
+            DateTime::from_str("2018-01-11T00:34:09.273457004Z").expect("parsed");
+        let expected: DateTime<Utc> =
+            DateTime::from_str("2018-01-11T00:34:09.273457Z").expect("parsed");
 
         let tv: TypedValue = dt.into();
         if let TypedValue::Instant(roundtripped) = tv {
@@ -338,7 +334,9 @@ mod test {
     :db/cardinality :db.cardinality/one
     :db/unique :db.unique/identity
     :db/isComponent true }, ]"#;
-        let expected_value = edn::parse::value(&expected_output).expect("to be able to parse").without_spans();
+        let expected_value = edn::parse::value(&expected_output)
+            .expect("to be able to parse")
+            .without_spans();
         assert_eq!(expected_value, value);
 
         // let's compare the whole thing again, just to make sure we are not changing anything when we convert to edn.

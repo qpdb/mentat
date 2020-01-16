@@ -8,29 +8,15 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use std::io::{
-    stdin,
-    stdout,
-    Write,
-};
+use std::io::{stdin, stdout, Write};
 
-use linefeed::{
-    DefaultTerminal,
-    Interface,
-    ReadResult,
-    Signal,
-};
+use linefeed::{DefaultTerminal, Interface, ReadResult, Signal};
 
-use termion::{
-    color,
-};
+use termion::color;
 
 use self::InputResult::*;
 
-use command_parser::{
-    Command,
-    command,
-};
+use command_parser::{command, Command};
 
 use failure::Error;
 
@@ -88,7 +74,7 @@ impl InputReader {
             r.set_word_break_chars(" \t\n!\"#$%&'(){}*+,-./:;<=>?@[\\]^`");
         }
 
-        InputReader{
+        InputReader {
             buffer: String::new(),
             interface,
             in_process_cmd: None,
@@ -104,11 +90,17 @@ impl InputReader {
     /// Returns `More` if further input is required for a complete result.
     /// In this case, the input received so far is buffered internally.
     pub fn read_input(&mut self) -> Result<InputResult, Error> {
-        let prompt = if self.in_process_cmd.is_some() { MORE_PROMPT } else { DEFAULT_PROMPT };
-        let prompt = format!("{blue}{prompt}{reset}",
-                             blue = color::Fg(::BLUE),
-                             prompt = prompt,
-                             reset = color::Fg(color::Reset));
+        let prompt = if self.in_process_cmd.is_some() {
+            MORE_PROMPT
+        } else {
+            DEFAULT_PROMPT
+        };
+        let prompt = format!(
+            "{blue}{prompt}{reset}",
+            blue = color::Fg(::BLUE),
+            prompt = prompt,
+            reset = color::Fg(color::Reset)
+        );
         let line = match self.read_line(prompt.as_str()) {
             UserAction::TextInput(s) => s,
             UserAction::Interrupt if self.in_process_cmd.is_some() => {
@@ -118,7 +110,7 @@ impl InputReader {
                 // of the previous.
                 println!();
                 String::new()
-            },
+            }
             _ => return Ok(Eof),
         };
 
@@ -140,31 +132,29 @@ impl InputReader {
         let cmd = match &self.in_process_cmd {
             &Some(Command::QueryPrepared(ref args)) => {
                 Ok(Command::QueryPrepared(args.clone() + "\n" + &line))
-            },
-            &Some(Command::Query(ref args)) => {
-                Ok(Command::Query(args.clone() + "\n" + &line))
-            },
+            }
+            &Some(Command::Query(ref args)) => Ok(Command::Query(args.clone() + "\n" + &line)),
             &Some(Command::Transact(ref args)) => {
                 Ok(Command::Transact(args.clone() + "\n" + &line))
-            },
-            _ => {
-                command(&self.buffer)
-            },
+            }
+            _ => command(&self.buffer),
         };
 
         match cmd {
             Ok(cmd) => {
                 match cmd {
-                    Command::Query(_) |
-                    Command::QueryPrepared(_) |
-                    Command::Transact(_) |
-                    Command::QueryExplain(_) if !cmd.is_complete() => {
+                    Command::Query(_)
+                    | Command::QueryPrepared(_)
+                    | Command::Transact(_)
+                    | Command::QueryExplain(_)
+                        if !cmd.is_complete() =>
+                    {
                         // A query or transact is complete if it contains a valid EDN.
                         // if the command is not complete, ask for more from the REPL and remember
                         // which type of command we've found here.
                         self.in_process_cmd = Some(cmd);
                         Ok(More)
-                    },
+                    }
                     _ => {
                         let entry = self.buffer.clone();
                         self.buffer.clear();
@@ -173,37 +163,36 @@ impl InputReader {
                         Ok(InputResult::MetaCommand(cmd))
                     }
                 }
-            },
+            }
             Err(e) => {
                 let entry = self.buffer.clone();
                 self.buffer.clear();
                 self.add_history(entry);
                 self.in_process_cmd = None;
                 Err(e)
-            },
+            }
         }
     }
 
     fn read_line(&mut self, prompt: &str) -> UserAction {
         match self.interface {
             Some(ref mut r) => {
-                r.set_prompt(prompt);
-                r.read_line().ok().map_or(UserAction::Quit, |line|
-                    match line {
+                r.set_prompt(prompt).unwrap();
+                r.read_line()
+                    .ok()
+                    .map_or(UserAction::Quit, |line| match line {
                         ReadResult::Input(s) => UserAction::TextInput(s),
-                        ReadResult::Signal(Signal::Interrupt) =>
-                            UserAction::Interrupt,
+                        ReadResult::Signal(Signal::Interrupt) => UserAction::Interrupt,
                         _ => UserAction::Quit,
                     })
-
-            },
+            }
             None => {
                 print!("{}", prompt);
                 if stdout().flush().is_err() {
                     return UserAction::Quit;
                 }
                 self.read_stdin()
-            },
+            }
         }
     }
 
@@ -218,7 +207,7 @@ impl InputReader {
                     s.truncate(len);
                 }
                 UserAction::TextInput(s)
-            },
+            }
         }
     }
 

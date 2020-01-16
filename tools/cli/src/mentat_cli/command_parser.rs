@@ -8,40 +8,18 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use combine::{
-    Parser,
-    any,
-    eof,
-    look_ahead,
-    many1,
-    satisfy,
-    sep_end_by,
-    token,
-};
-
-use combine::char::{
-    space,
-    spaces,
-    string,
-};
-
-use combine::combinator::{
-    choice,
-    try,
-};
+use combine::parser::char::{space, spaces, string};
+use combine::parser::combinator::attempt;
+use combine::{any, choice, eof, look_ahead, many1, satisfy, sep_end_by, token, Parser};
 
 use CliError;
 
 use edn;
 
-use failure::{
-    Compat,
-    Error,
-};
+use failure::Error;
 
-use mentat::{
-    CacheDirection,
-};
+use combine::error::StringStreamError;
+use mentat::CacheDirection;
 
 pub static COMMAND_CACHE: &'static str = &"cache";
 pub static COMMAND_CLOSE: &'static str = &"close";
@@ -88,46 +66,40 @@ impl Command {
     /// TODO: for query and transact commands, they will be considered complete if a parsable EDN has been entered as an argument
     pub fn is_complete(&self) -> bool {
         match self {
-            &Command::Query(ref args) |
-            &Command::QueryExplain(ref args) |
-            &Command::QueryPrepared(ref args) |
-            &Command::Transact(ref args)
-            => {
-                edn::parse::value(&args).is_ok()
-            },
-            &Command::Cache(_, _) |
-            &Command::Close |
-            &Command::Exit |
-            &Command::Help(_) |
-            &Command::Import(_) |
-            &Command::Open(_) |
-            &Command::OpenEncrypted(_, _) |
-            &Command::Timer(_) |
-            &Command::Schema |
-            &Command::Sync(_)
-            => true,
+            &Command::Query(ref args)
+            | &Command::QueryExplain(ref args)
+            | &Command::QueryPrepared(ref args)
+            | &Command::Transact(ref args) => edn::parse::value(&args).is_ok(),
+            &Command::Cache(_, _)
+            | &Command::Close
+            | &Command::Exit
+            | &Command::Help(_)
+            | &Command::Import(_)
+            | &Command::Open(_)
+            | &Command::OpenEncrypted(_, _)
+            | &Command::Timer(_)
+            | &Command::Schema
+            | &Command::Sync(_) => true,
         }
     }
 
     pub fn is_timed(&self) -> bool {
         match self {
-            &Command::Import(_) |
-            &Command::Query(_) |
-            &Command::QueryPrepared(_) |
-            &Command::Transact(_)
-            => true,
+            &Command::Import(_)
+            | &Command::Query(_)
+            | &Command::QueryPrepared(_)
+            | &Command::Transact(_) => true,
 
-            &Command::Cache(_, _) |
-            &Command::Close |
-            &Command::Exit |
-            &Command::Help(_) |
-            &Command::Open(_) |
-            &Command::OpenEncrypted(_, _) |
-            &Command::QueryExplain(_) |
-            &Command::Timer(_) |
-            &Command::Schema |
-            &Command::Sync(_)
-            => false,
+            &Command::Cache(_, _)
+            | &Command::Close
+            | &Command::Exit
+            | &Command::Help(_)
+            | &Command::Open(_)
+            | &Command::OpenEncrypted(_, _)
+            | &Command::QueryExplain(_)
+            | &Command::Timer(_)
+            | &Command::Schema
+            | &Command::Sync(_) => false,
         }
     }
 
@@ -135,72 +107,58 @@ impl Command {
         match self {
             &Command::Cache(ref attr, ref direction) => {
                 format!(".{} {} {:?}", COMMAND_CACHE, attr, direction)
-            },
-            &Command::Close => {
-                format!(".{}", COMMAND_CLOSE)
-            },
-            &Command::Exit => {
-                format!(".{}", COMMAND_EXIT_LONG)
-            },
-            &Command::Help(ref args) => {
-                format!(".{} {:?}", COMMAND_HELP, args)
-            },
-            &Command::Import(ref args) => {
-               format!(".{} {}", COMMAND_IMPORT_LONG, args)
-            },
-            &Command::Open(ref args) => {
-                format!(".{} {}", COMMAND_OPEN, args)
-            },
+            }
+            &Command::Close => format!(".{}", COMMAND_CLOSE),
+            &Command::Exit => format!(".{}", COMMAND_EXIT_LONG),
+            &Command::Help(ref args) => format!(".{} {:?}", COMMAND_HELP, args),
+            &Command::Import(ref args) => format!(".{} {}", COMMAND_IMPORT_LONG, args),
+            &Command::Open(ref args) => format!(".{} {}", COMMAND_OPEN, args),
             &Command::OpenEncrypted(ref db, ref key) => {
                 format!(".{} {} {}", COMMAND_OPEN_ENCRYPTED, db, key)
-            },
-            &Command::Query(ref args) => {
-                format!(".{} {}", COMMAND_QUERY_LONG, args)
-            },
-            &Command::QueryExplain(ref args) => {
-                format!(".{} {}", COMMAND_QUERY_EXPLAIN_LONG, args)
-            },
+            }
+            &Command::Query(ref args) => format!(".{} {}", COMMAND_QUERY_LONG, args),
+            &Command::QueryExplain(ref args) => format!(".{} {}", COMMAND_QUERY_EXPLAIN_LONG, args),
             &Command::QueryPrepared(ref args) => {
                 format!(".{} {}", COMMAND_QUERY_PREPARED_LONG, args)
-            },
-            &Command::Schema => {
-                format!(".{}", COMMAND_SCHEMA)
-            },
-            &Command::Sync(ref args) => {
-                format!(".{} {:?}", COMMAND_SYNC, args)
-            },
-            &Command::Timer(on) => {
-                format!(".{} {}", COMMAND_TIMER_LONG, on)
-            },
-            &Command::Transact(ref args) => {
-                format!(".{} {}", COMMAND_TRANSACT_LONG, args)
-            },
+            }
+            &Command::Schema => format!(".{}", COMMAND_SCHEMA),
+            &Command::Sync(ref args) => format!(".{} {:?}", COMMAND_SYNC, args),
+            &Command::Timer(on) => format!(".{} {}", COMMAND_TIMER_LONG, on),
+            &Command::Transact(ref args) => format!(".{} {}", COMMAND_TRANSACT_LONG, args),
         }
     }
 }
 
 pub fn command(s: &str) -> Result<Command, Error> {
-    let path = || many1::<String, _>(satisfy(|c: char| !c.is_whitespace()));
-    let argument = || many1::<String, _>(satisfy(|c: char| !c.is_whitespace()));
-    let arguments = || sep_end_by::<Vec<_>, _, _>(many1(satisfy(|c: char| !c.is_whitespace())), many1::<Vec<_>, _>(space())).expected("arguments");
+    let path = || many1::<String, _, _>(satisfy(|c: char| !c.is_whitespace()));
+    let argument = || many1::<String, _, _>(satisfy(|c: char| !c.is_whitespace()));
+    let arguments = || {
+        sep_end_by::<Vec<_>, _, _, _>(
+            many1(satisfy(|c: char| !c.is_whitespace())),
+            many1::<Vec<_>, _, _>(space()),
+        )
+        .expected("arguments")
+    };
 
     // Helpers.
-    let direction_parser = || string("forward")
-                                .map(|_| CacheDirection::Forward)
-                           .or(string("reverse").map(|_| CacheDirection::Reverse))
-                           .or(string("both").map(|_| CacheDirection::Both));
+    let direction_parser = || {
+        string("forward")
+            .map(|_| CacheDirection::Forward)
+            .or(string("reverse").map(|_| CacheDirection::Reverse))
+            .or(string("both").map(|_| CacheDirection::Both))
+    };
 
-    let edn_arg_parser = || spaces()
-                            .with(look_ahead(string("[").or(string("{")))
-                                .with(many1::<Vec<_>, _>(try(any())))
-                                .and_then(|args| -> Result<String, Compat<Error>> {
-                                    Ok(args.iter().collect())
-                                })
-                            );
+    let edn_arg_parser = || {
+        spaces().with(
+            look_ahead(string("[").or(string("{")))
+                .with(many1::<Vec<_>, _, _>(attempt(any())))
+                .and_then(|args| -> Result<String, StringStreamError> {
+                    Ok(args.iter().collect())
+                }),
+        )
+    };
 
-    let no_arg_parser = || arguments()
-                        .skip(spaces())
-                        .skip(eof());
+    let no_arg_parser = || arguments().skip(spaces()).skip(eof());
 
     let opener = |command, num_args| {
         string(command)
@@ -208,135 +166,146 @@ pub fn command(s: &str) -> Result<Command, Error> {
             .with(arguments())
             .map(move |args| {
                 if args.len() < num_args {
-                    bail!(CliError::CommandParse("Missing required argument".to_string()));
+                    bail!(CliError::CommandParse(
+                        "Missing required argument".to_string()
+                    ));
                 }
                 if args.len() > num_args {
-                    bail!(CliError::CommandParse(format!("Unrecognized argument {:?}", args[num_args])));
+                    bail!(CliError::CommandParse(format!(
+                        "Unrecognized argument {:?}",
+                        args[num_args]
+                    )));
                 }
                 Ok(args)
             })
     };
 
     // Commands.
-    let cache_parser = string(COMMAND_CACHE)
-                    .with(spaces())
-                    .with(argument().skip(spaces()).and(direction_parser())
-                    .map(|(arg, direction)| {
-                        Ok(Command::Cache(arg, direction))
-                    }));
+    let cache_parser = string(COMMAND_CACHE).with(spaces()).with(
+        argument()
+            .skip(spaces())
+            .and(direction_parser())
+            .map(|(arg, direction)| Ok(Command::Cache(arg, direction))),
+    );
 
+    let close_parser = string(COMMAND_CLOSE).with(no_arg_parser()).map(|args| {
+        if !args.is_empty() {
+            bail!(CliError::CommandParse(format!(
+                "Unrecognized argument {:?}",
+                args[0]
+            )));
+        }
+        Ok(Command::Close)
+    });
 
-    let close_parser = string(COMMAND_CLOSE)
-                    .with(no_arg_parser())
-                    .map(|args| {
-                        if !args.is_empty() {
-                            bail!(CliError::CommandParse(format!("Unrecognized argument {:?}", args[0])) );
-                        }
-                        Ok(Command::Close)
-                    });
+    let exit_parser = attempt(string(COMMAND_EXIT_LONG))
+        .or(attempt(string(COMMAND_EXIT_SHORT)))
+        .with(no_arg_parser())
+        .map(|args| {
+            if !args.is_empty() {
+                bail!(CliError::CommandParse(format!(
+                    "Unrecognized argument {:?}",
+                    args[0]
+                )));
+            }
+            Ok(Command::Exit)
+        });
 
-    let exit_parser = try(string(COMMAND_EXIT_LONG)).or(try(string(COMMAND_EXIT_SHORT)))
-                    .with(no_arg_parser())
-                    .map(|args| {
-                        if !args.is_empty() {
-                            bail!(CliError::CommandParse(format!("Unrecognized argument {:?}", args[0])) );
-                        }
-                        Ok(Command::Exit)
-                    });
-
-    let explain_query_parser = try(string(COMMAND_QUERY_EXPLAIN_LONG))
-                           .or(try(string(COMMAND_QUERY_EXPLAIN_SHORT)))
-                        .with(edn_arg_parser())
-                        .map(|x| {
-                            Ok(Command::QueryExplain(x))
-                        });
+    let explain_query_parser = attempt(string(COMMAND_QUERY_EXPLAIN_LONG))
+        .or(attempt(string(COMMAND_QUERY_EXPLAIN_SHORT)))
+        .with(edn_arg_parser())
+        .map(|x| Ok(Command::QueryExplain(x)));
 
     let help_parser = string(COMMAND_HELP)
-                    .with(spaces())
-                    .with(arguments())
-                    .map(|args| {
-                        Ok(Command::Help(args.clone()))
-                    });
+        .with(spaces())
+        .with(arguments())
+        .map(|args| Ok(Command::Help(args.clone())));
 
-    let import_parser = try(string(COMMAND_IMPORT_LONG)).or(try(string(COMMAND_IMPORT_SHORT)))
-                    .with(spaces())
-                    .with(path())
-                    .map(|x| {
-                        Ok(Command::Import(x))
-                    });
+    let import_parser = attempt(string(COMMAND_IMPORT_LONG))
+        .or(attempt(string(COMMAND_IMPORT_SHORT)))
+        .with(spaces())
+        .with(path())
+        .map(|x| Ok(Command::Import(x)));
 
-    let open_parser = opener(COMMAND_OPEN, 1).map(|args_res|
-        args_res.map(|args| Command::Open(args[0].clone())));
+    let open_parser =
+        opener(COMMAND_OPEN, 1).map(|args_res| args_res.map(|args| Command::Open(args[0].clone())));
 
-    let open_encrypted_parser = opener(COMMAND_OPEN_ENCRYPTED, 2).map(|args_res|
-        args_res.map(|args| Command::OpenEncrypted(args[0].clone(), args[1].clone())));
+    let open_encrypted_parser = opener(COMMAND_OPEN_ENCRYPTED, 2).map(|args_res| {
+        args_res.map(|args| Command::OpenEncrypted(args[0].clone(), args[1].clone()))
+    });
 
-    let query_parser = try(string(COMMAND_QUERY_LONG)).or(try(string(COMMAND_QUERY_SHORT)))
-                        .with(edn_arg_parser())
-                        .map(|x| {
-                            Ok(Command::Query(x))
-                        });
+    let query_parser = attempt(string(COMMAND_QUERY_LONG))
+        .or(attempt(string(COMMAND_QUERY_SHORT)))
+        .with(edn_arg_parser())
+        .map(|x| Ok(Command::Query(x)));
 
     let query_prepared_parser = string(COMMAND_QUERY_PREPARED_LONG)
-                        .with(edn_arg_parser())
-                        .map(|x| {
-                            Ok(Command::QueryPrepared(x))
-                        });
+        .with(edn_arg_parser())
+        .map(|x| Ok(Command::QueryPrepared(x)));
 
-    let schema_parser = string(COMMAND_SCHEMA)
-                    .with(no_arg_parser())
-                    .map(|args| {
-                        if !args.is_empty() {
-                            bail!(CliError::CommandParse(format!("Unrecognized argument {:?}", args[0])) );
-                        }
-                        Ok(Command::Schema)
-                    });
+    let schema_parser = string(COMMAND_SCHEMA).with(no_arg_parser()).map(|args| {
+        if !args.is_empty() {
+            bail!(CliError::CommandParse(format!(
+                "Unrecognized argument {:?}",
+                args[0]
+            )));
+        }
+        Ok(Command::Schema)
+    });
 
     let sync_parser = string(COMMAND_SYNC)
-                    .with(spaces())
-                    .with(arguments())
-                    .map(|args| {
-                        if args.len() < 1 {
-                            bail!(CliError::CommandParse("Missing required argument".to_string()));
-                        }
-                        if args.len() > 2 {
-                            bail!(CliError::CommandParse(format!("Unrecognized argument {:?}", args[2])));
-                        }
-                        Ok(Command::Sync(args.clone()))
-                    });
+        .with(spaces())
+        .with(arguments())
+        .map(|args| {
+            if args.len() < 1 {
+                bail!(CliError::CommandParse(
+                    "Missing required argument".to_string()
+                ));
+            }
+            if args.len() > 2 {
+                bail!(CliError::CommandParse(format!(
+                    "Unrecognized argument {:?}",
+                    args[2]
+                )));
+            }
+            Ok(Command::Sync(args.clone()))
+        });
 
     let timer_parser = string(COMMAND_TIMER_LONG)
-                    .with(spaces())
-                    .with(string("on").map(|_| true).or(string("off").map(|_| false)))
-                    .map(|args| {
-                        Ok(Command::Timer(args))
-                    });
+        .with(spaces())
+        .with(string("on").map(|_| true).or(string("off").map(|_| false)))
+        .map(|args| Ok(Command::Timer(args)));
 
-    let transact_parser = try(string(COMMAND_TRANSACT_LONG)).or(try(string(COMMAND_TRANSACT_SHORT)))
-                    .with(edn_arg_parser())
-                    .map(|x| {
-                        Ok(Command::Transact(x))
-                    });
+    let transact_parser = attempt(string(COMMAND_TRANSACT_LONG))
+        .or(attempt(string(COMMAND_TRANSACT_SHORT)))
+        .with(edn_arg_parser())
+        .map(|x| Ok(Command::Transact(x)));
 
+    let parsers = choice((
+        attempt(help_parser),
+        attempt(import_parser),
+        attempt(timer_parser),
+        attempt(cache_parser),
+        attempt(open_encrypted_parser),
+        attempt(open_parser),
+        attempt(close_parser),
+        attempt(explain_query_parser),
+        attempt(exit_parser),
+        attempt(query_prepared_parser),
+        attempt(query_parser),
+        attempt(schema_parser),
+        attempt(sync_parser),
+        attempt(transact_parser),
+    ));
     spaces()
-    .skip(token('.'))
-    .with(choice::<[&mut Parser<Input = _, Output = Result<Command, Error>>; 14], _>
-          ([&mut try(help_parser),
-            &mut try(import_parser),
-            &mut try(timer_parser),
-            &mut try(cache_parser),
-            &mut try(open_encrypted_parser),
-            &mut try(open_parser),
-            &mut try(close_parser),
-            &mut try(explain_query_parser),
-            &mut try(exit_parser),
-            &mut try(query_prepared_parser),
-            &mut try(query_parser),
-            &mut try(schema_parser),
-            &mut try(sync_parser),
-            &mut try(transact_parser)]))
+        .skip(token('.'))
+        .with(parsers)
         .parse(s)
-        .unwrap_or((Err(CliError::CommandParse(format!("Invalid command {:?}", s)).into()), "")).0
+        .unwrap_or((
+            Err(CliError::CommandParse(format!("Invalid command {:?}", s)).into()),
+            "",
+        ))
+        .0
 }
 
 #[cfg(test)]
@@ -350,8 +319,8 @@ mod tests {
         match cmd {
             Command::Help(args) => {
                 assert_eq!(args, vec!["command1", "command2"]);
-            },
-            _ => assert!(false)
+            }
+            _ => assert!(false),
         }
     }
 
@@ -362,8 +331,8 @@ mod tests {
         match cmd {
             Command::Help(args) => {
                 assert_eq!(args, vec![".command1"]);
-            },
-            _ => assert!(false)
+            }
+            _ => assert!(false),
         }
     }
 
@@ -375,8 +344,8 @@ mod tests {
             Command::Help(args) => {
                 let empty: Vec<String> = vec![];
                 assert_eq!(args, empty);
-            },
-            _ => assert!(false)
+            }
+            _ => assert!(false),
         }
     }
 
@@ -388,8 +357,8 @@ mod tests {
             Command::Help(args) => {
                 let empty: Vec<String> = vec![];
                 assert_eq!(args, empty);
-            },
-            _ => assert!(false)
+            }
+            _ => assert!(false),
         }
     }
 
@@ -407,8 +376,8 @@ mod tests {
         match cmd {
             Command::Open(arg) => {
                 assert_eq!(arg, "database1".to_string());
-            },
-            _ => assert!(false)
+            }
+            _ => assert!(false),
         }
     }
 
@@ -419,8 +388,8 @@ mod tests {
         match cmd {
             Command::Open(arg) => {
                 assert_eq!(arg, "/path/to/my.db".to_string());
-            },
-            _ => assert!(false)
+            }
+            _ => assert!(false),
         }
     }
 
@@ -432,8 +401,8 @@ mod tests {
             Command::OpenEncrypted(path, key) => {
                 assert_eq!(path, "/path/to/my.db".to_string());
                 assert_eq!(key, "hunter2".to_string());
-            },
-            _ => assert!(false)
+            }
+            _ => assert!(false),
         }
     }
 
@@ -452,8 +421,8 @@ mod tests {
             Command::Sync(args) => {
                 assert_eq!(args[0], "https://example.com/api/".to_string());
                 assert_eq!(args[1], "316ea470-ce35-4adf-9c61-e0de6e289c59".to_string());
-            },
-            _ => assert!(false)
+            }
+            _ => assert!(false),
         }
     }
 
@@ -464,8 +433,8 @@ mod tests {
         match cmd {
             Command::Open(arg) => {
                 assert_eq!(arg, "my.db".to_string());
-            },
-            _ => assert!(false)
+            }
+            _ => assert!(false),
         }
     }
 
@@ -496,7 +465,7 @@ mod tests {
         let cmd = command(&input).expect("Expected close command");
         match cmd {
             Command::Close => assert!(true),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -506,7 +475,7 @@ mod tests {
         let cmd = command(&input).expect("Expected close command");
         match cmd {
             Command::Close => assert!(true),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -523,7 +492,7 @@ mod tests {
         let cmd = command(&input).expect("Expected exit command");
         match cmd {
             Command::Exit => assert!(true),
-                        _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -533,7 +502,7 @@ mod tests {
         let cmd = command(&input).expect("Expected exit command");
         match cmd {
             Command::Exit => assert!(true),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -543,7 +512,7 @@ mod tests {
         let cmd = command(&input).expect("Expected exit command");
         match cmd {
             Command::Exit => assert!(true),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -560,7 +529,7 @@ mod tests {
         let cmd = command(&input).expect("Expected schema command");
         match cmd {
             Command::Schema => assert!(true),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -570,7 +539,7 @@ mod tests {
         let cmd = command(&input).expect("Expected schema command");
         match cmd {
             Command::Schema => assert!(true),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -580,7 +549,7 @@ mod tests {
         let cmd = command(&input).expect("Expected query command");
         match cmd {
             Command::Query(edn) => assert_eq!(edn, "[:find ?x :where [?x foo/bar ?y]]"),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -590,7 +559,7 @@ mod tests {
         let cmd = command(&input).expect("Expected query command");
         match cmd {
             Command::Query(edn) => assert_eq!(edn, "[:find ?x :where [?x foo/bar ?y]]"),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -600,7 +569,7 @@ mod tests {
         let cmd = command(&input).expect("Expected query command");
         match cmd {
             Command::Query(edn) => assert_eq!(edn, "[:find ?x\r\n"),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -610,7 +579,7 @@ mod tests {
         let cmd = command(&input).expect("Expected query command");
         match cmd {
             Command::Query(edn) => assert_eq!(edn, "{}"),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -634,7 +603,7 @@ mod tests {
         let cmd = command(&input).expect("Expected import command");
         match cmd {
             Command::Import(path) => assert_eq!(path, "/foo/bar/"),
-            _ => panic!("Wrong command!")
+            _ => panic!("Wrong command!"),
         }
     }
 
@@ -643,18 +612,25 @@ mod tests {
         let input = ".t [[:db/add \"s\" :db/ident :foo/uuid] [:db/add \"r\" :db/ident :bar/uuid]]";
         let cmd = command(&input).expect("Expected transact command");
         match cmd {
-            Command::Transact(edn) => assert_eq!(edn, "[[:db/add \"s\" :db/ident :foo/uuid] [:db/add \"r\" :db/ident :bar/uuid]]"),
-            _ => assert!(false)
+            Command::Transact(edn) => assert_eq!(
+                edn,
+                "[[:db/add \"s\" :db/ident :foo/uuid] [:db/add \"r\" :db/ident :bar/uuid]]"
+            ),
+            _ => assert!(false),
         }
     }
 
     #[test]
     fn test_transact_parser_alt_command() {
-        let input = ".transact [[:db/add \"s\" :db/ident :foo/uuid] [:db/add \"r\" :db/ident :bar/uuid]]";
+        let input =
+            ".transact [[:db/add \"s\" :db/ident :foo/uuid] [:db/add \"r\" :db/ident :bar/uuid]]";
         let cmd = command(&input).expect("Expected transact command");
         match cmd {
-            Command::Transact(edn) => assert_eq!(edn, "[[:db/add \"s\" :db/ident :foo/uuid] [:db/add \"r\" :db/ident :bar/uuid]]"),
-            _ => assert!(false)
+            Command::Transact(edn) => assert_eq!(
+                edn,
+                "[[:db/add \"s\" :db/ident :foo/uuid] [:db/add \"r\" :db/ident :bar/uuid]]"
+            ),
+            _ => assert!(false),
         }
     }
 
@@ -664,7 +640,7 @@ mod tests {
         let cmd = command(&input).expect("Expected transact command");
         match cmd {
             Command::Transact(edn) => assert_eq!(edn, "{\r\n"),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -674,7 +650,7 @@ mod tests {
         let cmd = command(&input).expect("Expected transact command");
         match cmd {
             Command::Transact(edn) => assert_eq!(edn, "{}"),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -698,7 +674,7 @@ mod tests {
         let cmd = command(&input).expect("Expected close command");
         match cmd {
             Command::Close => assert!(true),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 

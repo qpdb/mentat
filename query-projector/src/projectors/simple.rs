@@ -10,29 +10,14 @@
 
 use std::rc::Rc;
 
-use ::{
-    Binding,
-    CombinedProjection,
-    Element,
-    FindSpec,
-    ProjectedElements,
-    QueryOutput,
-    QueryResults,
-    RelResult,
-    Row,
-    Rows,
-    Schema,
-    TypedIndex,
-    rusqlite,
+use {
+    rusqlite, Binding, CombinedProjection, Element, FindSpec, ProjectedElements, QueryOutput,
+    QueryResults, RelResult, Row, Rows, Schema, TypedIndex,
 };
 
-use query_projector_traits::errors::{
-    Result,
-};
+use query_projector_traits::errors::Result;
 
-use super::{
-    Projector,
-};
+use super::Projector;
 
 pub(crate) struct ScalarProjector {
     spec: Rc<FindSpec>,
@@ -47,8 +32,14 @@ impl ScalarProjector {
         }
     }
 
-    pub(crate) fn combine(spec: Rc<FindSpec>, mut elements: ProjectedElements) -> Result<CombinedProjection> {
-        let template = elements.templates.pop().expect("Expected a single template");
+    pub(crate) fn combine(
+        spec: Rc<FindSpec>,
+        mut elements: ProjectedElements,
+    ) -> Result<CombinedProjection> {
+        let template = elements
+            .templates
+            .pop()
+            .expect("Expected a single template");
         let projector = Box::new(ScalarProjector::with_template(spec, template));
         let distinct = false;
         elements.combine(projector, distinct)
@@ -56,22 +47,26 @@ impl ScalarProjector {
 }
 
 impl Projector for ScalarProjector {
-    fn project<'stmt, 's>(&self, _schema: &Schema, _sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
-        let results =
-            if let Some(r) = rows.next() {
-                let row = r?;
-                let binding = self.template.lookup(&row)?;
-                QueryResults::Scalar(Some(binding))
-            } else {
-                QueryResults::Scalar(None)
-            };
+    fn project<'stmt, 's>(
+        &self,
+        _schema: &Schema,
+        _sqlite: &'s rusqlite::Connection,
+        mut rows: Rows<'stmt>,
+    ) -> Result<QueryOutput> {
+        let results = if let Some(r) = rows.next().unwrap() {
+            let row = r;
+            let binding = self.template.lookup(&row)?;
+            QueryResults::Scalar(Some(binding))
+        } else {
+            QueryResults::Scalar(None)
+        };
         Ok(QueryOutput {
             spec: self.spec.clone(),
             results: results,
         })
     }
 
-    fn columns<'s>(&'s self) -> Box<Iterator<Item=&Element> + 's> {
+    fn columns<'s>(&'s self) -> Box<dyn Iterator<Item = &Element> + 's> {
         self.spec.columns()
     }
 }
@@ -84,7 +79,11 @@ pub(crate) struct TupleProjector {
 }
 
 impl TupleProjector {
-    fn with_templates(spec: Rc<FindSpec>, len: usize, templates: Vec<TypedIndex>) -> TupleProjector {
+    fn with_templates(
+        spec: Rc<FindSpec>,
+        len: usize,
+        templates: Vec<TypedIndex>,
+    ) -> TupleProjector {
         TupleProjector {
             spec: spec,
             len: len,
@@ -93,41 +92,53 @@ impl TupleProjector {
     }
 
     // This is just like we do for `rel`, but into a vec of its own.
-    fn collect_bindings<'a, 'stmt>(&self, row: Row<'a, 'stmt>) -> Result<Vec<Binding>> {
+    fn collect_bindings<'a>(&self, row: &Row<'a>) -> Result<Vec<Binding>> {
         // There will be at least as many SQL columns as Datalog columns.
         // gte 'cos we might be querying extra columns for ordering.
         // The templates will take care of ignoring columns.
-        assert!(row.column_count() >= self.len as i32);
+        assert!(row.column_count() >= self.len);
         self.templates
             .iter()
             .map(|ti| ti.lookup(&row))
             .collect::<Result<Vec<Binding>>>()
     }
 
-    pub(crate) fn combine(spec: Rc<FindSpec>, column_count: usize, mut elements: ProjectedElements) -> Result<CombinedProjection> {
-        let projector = Box::new(TupleProjector::with_templates(spec, column_count, elements.take_templates()));
+    pub(crate) fn combine(
+        spec: Rc<FindSpec>,
+        column_count: usize,
+        mut elements: ProjectedElements,
+    ) -> Result<CombinedProjection> {
+        let projector = Box::new(TupleProjector::with_templates(
+            spec,
+            column_count,
+            elements.take_templates(),
+        ));
         let distinct = false;
         elements.combine(projector, distinct)
     }
 }
 
 impl Projector for TupleProjector {
-    fn project<'stmt, 's>(&self, _schema: &Schema, _sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
-        let results =
-            if let Some(r) = rows.next() {
-                let row = r?;
-                let bindings = self.collect_bindings(row)?;
-                QueryResults::Tuple(Some(bindings))
-            } else {
-                QueryResults::Tuple(None)
-            };
+    fn project<'stmt, 's>(
+        &self,
+        _schema: &Schema,
+        _sqlite: &'s rusqlite::Connection,
+        mut rows: Rows<'stmt>,
+    ) -> Result<QueryOutput> {
+        let results = if let Some(r) = rows.next().unwrap() {
+            let row = r;
+            let bindings = self.collect_bindings(row)?;
+            QueryResults::Tuple(Some(bindings))
+        } else {
+            QueryResults::Tuple(None)
+        };
         Ok(QueryOutput {
             spec: self.spec.clone(),
             results: results,
         })
     }
 
-    fn columns<'s>(&'s self) -> Box<Iterator<Item=&Element> + 's> {
+    fn columns<'s>(&'s self) -> Box<dyn Iterator<Item = &Element> + 's> {
         self.spec.columns()
     }
 }
@@ -151,15 +162,13 @@ impl RelProjector {
         }
     }
 
-    fn collect_bindings_into<'a, 'stmt, 'out>(&self, row: Row<'a, 'stmt>, out: &mut Vec<Binding>) -> Result<()> {
+    fn collect_bindings_into<'a>(&self, row: &Row<'a>, out: &mut Vec<Binding>) -> Result<()> {
         // There will be at least as many SQL columns as Datalog columns.
         // gte 'cos we might be querying extra columns for ordering.
         // The templates will take care of ignoring columns.
-        assert!(row.column_count() >= self.len as i32);
+        assert!(row.column_count() >= self.len);
         let mut count = 0;
-        for binding in self.templates
-                           .iter()
-                           .map(|ti| ti.lookup(&row)) {
+        for binding in self.templates.iter().map(|ti| ti.lookup(&row)) {
             out.push(binding?);
             count += 1;
         }
@@ -167,29 +176,42 @@ impl RelProjector {
         Ok(())
     }
 
-    pub(crate) fn combine(spec: Rc<FindSpec>, column_count: usize, mut elements: ProjectedElements) -> Result<CombinedProjection> {
-        let projector = Box::new(RelProjector::with_templates(spec, column_count, elements.take_templates()));
+    pub(crate) fn combine(
+        spec: Rc<FindSpec>,
+        column_count: usize,
+        mut elements: ProjectedElements,
+    ) -> Result<CombinedProjection> {
+        let projector = Box::new(RelProjector::with_templates(
+            spec,
+            column_count,
+            elements.take_templates(),
+        ));
 
         // If every column yields only one value, or if this is an aggregate query
         // (because by definition every column in an aggregate query is either
         // aggregated or is a variable _upon which we group_), then don't bother
         // with DISTINCT.
-        let already_distinct = elements.pre_aggregate_projection.is_some() ||
-                               projector.columns().all(|e| e.is_unit());
+        let already_distinct =
+            elements.pre_aggregate_projection.is_some() || projector.columns().all(|e| e.is_unit());
         elements.combine(projector, !already_distinct)
     }
 }
 
 impl Projector for RelProjector {
-    fn project<'stmt, 's>(&self, _schema: &Schema, _sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
+    fn project<'stmt, 's>(
+        &self,
+        _schema: &Schema,
+        _sqlite: &'s rusqlite::Connection,
+        mut rows: Rows<'stmt>,
+    ) -> Result<QueryOutput> {
         // Allocate space for five rows to start.
         // This is better than starting off by doubling the buffer a couple of times, and will
         // rapidly grow to support larger query results.
         let width = self.len;
         let mut values: Vec<_> = Vec::with_capacity(5 * width);
 
-        while let Some(r) = rows.next() {
-            let row = r?;
+        while let Some(r) = rows.next().unwrap() {
+            let row = r;
             self.collect_bindings_into(row, &mut values)?;
         }
 
@@ -199,7 +221,7 @@ impl Projector for RelProjector {
         })
     }
 
-    fn columns<'s>(&'s self) -> Box<Iterator<Item=&Element> + 's> {
+    fn columns<'s>(&'s self) -> Box<dyn Iterator<Item = &Element> + 's> {
         self.spec.columns()
     }
 }
@@ -219,25 +241,36 @@ impl CollProjector {
         }
     }
 
-    pub(crate) fn combine(spec: Rc<FindSpec>, mut elements: ProjectedElements) -> Result<CombinedProjection> {
-        let template = elements.templates.pop().expect("Expected a single template");
+    pub(crate) fn combine(
+        spec: Rc<FindSpec>,
+        mut elements: ProjectedElements,
+    ) -> Result<CombinedProjection> {
+        let template = elements
+            .templates
+            .pop()
+            .expect("Expected a single template");
         let projector = Box::new(CollProjector::with_template(spec, template));
 
         // If every column yields only one value, or if this is an aggregate query
         // (because by definition every column in an aggregate query is either
         // aggregated or is a variable _upon which we group_), then don't bother
         // with DISTINCT.
-        let already_distinct = elements.pre_aggregate_projection.is_some() ||
-                               projector.columns().all(|e| e.is_unit());
+        let already_distinct =
+            elements.pre_aggregate_projection.is_some() || projector.columns().all(|e| e.is_unit());
         elements.combine(projector, !already_distinct)
     }
 }
 
 impl Projector for CollProjector {
-    fn project<'stmt, 's>(&self, _schema: &Schema, _sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
+    fn project<'stmt, 's>(
+        &self,
+        _schema: &Schema,
+        _sqlite: &'s rusqlite::Connection,
+        mut rows: Rows<'stmt>,
+    ) -> Result<QueryOutput> {
         let mut out: Vec<_> = vec![];
-        while let Some(r) = rows.next() {
-            let row = r?;
+        while let Some(r) = rows.next().unwrap() {
+            let row = r;
             let binding = self.template.lookup(&row)?;
             out.push(binding);
         }
@@ -247,7 +280,7 @@ impl Projector for CollProjector {
         })
     }
 
-    fn columns<'s>(&'s self) -> Box<Iterator<Item=&Element> + 's> {
+    fn columns<'s>(&'s self) -> Box<dyn Iterator<Item = &Element> + 's> {
         self.spec.columns()
     }
 }

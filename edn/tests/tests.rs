@@ -14,26 +14,18 @@ extern crate num;
 extern crate ordered_float;
 extern crate uuid;
 
-use std::collections::{BTreeSet, BTreeMap, LinkedList};
-use std::iter::FromIterator;
+use std::collections::{BTreeMap, BTreeSet, LinkedList};
 use std::f64;
+use std::iter::FromIterator;
 
 use num::bigint::ToBigInt;
-use num::traits::{Zero, One};
+use num::traits::{One, Zero};
 use ordered_float::OrderedFloat;
 
+use chrono::{TimeZone, Utc};
 use edn::parse::{self, ParseError};
-use edn::types::{
-    Value,
-    ValueAndSpan,
-    Span,
-    SpannedValue,
-};
-use chrono::{
-    TimeZone,
-    Utc,
-};
 use edn::symbols;
+use edn::types::{Span, SpannedValue, Value, ValueAndSpan};
 use edn::utils;
 
 // Helper for making wrapped keywords with a namespace.
@@ -59,10 +51,13 @@ fn s_plain(name: &str) -> Value {
 // Helpers for parsing strings and converting them into edn::Value.
 macro_rules! fn_parse_into_value {
     ($name: ident) => {
-        fn $name<'a, T>(src: T) -> Result<Value, ParseError> where T: Into<&'a str> {
+        fn $name<'a, T>(src: T) -> Result<Value, ParseError>
+        where
+            T: Into<&'a str>,
+        {
             parse::$name(src.into()).map(|x| x.into())
         }
-    }
+    };
 }
 
 // These look exactly like their `parse::foo` counterparts, but
@@ -98,10 +93,13 @@ fn test_nil() {
 
 #[test]
 fn test_span_nil() {
-    assert_eq!(parse::value("nil").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Nil,
-        span: Span(0, 3)
-    });
+    assert_eq!(
+        parse::value("nil").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Nil,
+            span: Span(0, 3)
+        }
+    );
 }
 
 #[test]
@@ -120,10 +118,13 @@ fn test_nan() {
 
 #[test]
 fn test_span_nan() {
-    assert_eq!(parse::value("#f NaN").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Float(OrderedFloat(f64::NAN)),
-        span: Span(0, 6)
-    });
+    assert_eq!(
+        parse::value("#f NaN").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Float(OrderedFloat(f64::NAN)),
+            span: Span(0, 6)
+        }
+    );
 }
 
 #[test]
@@ -136,28 +137,52 @@ fn test_infinity() {
     assert!(infinity("#f;x\n-Infinity").is_err());
     assert!(infinity("#f;x\n+Infinity").is_err());
 
-    assert_eq!(infinity("#f -Infinity").unwrap(), Float(OrderedFloat(f64::NEG_INFINITY)));
-    assert_eq!(infinity("#f +Infinity").unwrap(), Float(OrderedFloat(f64::INFINITY)));
+    assert_eq!(
+        infinity("#f -Infinity").unwrap(),
+        Float(OrderedFloat(f64::NEG_INFINITY))
+    );
+    assert_eq!(
+        infinity("#f +Infinity").unwrap(),
+        Float(OrderedFloat(f64::INFINITY))
+    );
 
-    assert_eq!(infinity("#f\t -Infinity").unwrap(), Float(OrderedFloat(f64::NEG_INFINITY)));
-    assert_eq!(infinity("#f\t +Infinity").unwrap(), Float(OrderedFloat(f64::INFINITY)));
+    assert_eq!(
+        infinity("#f\t -Infinity").unwrap(),
+        Float(OrderedFloat(f64::NEG_INFINITY))
+    );
+    assert_eq!(
+        infinity("#f\t +Infinity").unwrap(),
+        Float(OrderedFloat(f64::INFINITY))
+    );
 
-    assert_eq!(infinity("#f,-Infinity").unwrap(), Float(OrderedFloat(f64::NEG_INFINITY)));
-    assert_eq!(infinity("#f,+Infinity").unwrap(), Float(OrderedFloat(f64::INFINITY)));
+    assert_eq!(
+        infinity("#f,-Infinity").unwrap(),
+        Float(OrderedFloat(f64::NEG_INFINITY))
+    );
+    assert_eq!(
+        infinity("#f,+Infinity").unwrap(),
+        Float(OrderedFloat(f64::INFINITY))
+    );
 
     assert!(infinity("true").is_err());
 }
 
 #[test]
 fn test_span_infinity() {
-    assert_eq!(parse::value("#f -Infinity").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Float(OrderedFloat(f64::NEG_INFINITY)),
-        span: Span(0, 12)
-    });
-    assert_eq!(parse::value("#f +Infinity").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Float(OrderedFloat(f64::INFINITY)),
-        span: Span(0, 12)
-    });
+    assert_eq!(
+        parse::value("#f -Infinity").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Float(OrderedFloat(f64::NEG_INFINITY)),
+            span: Span(0, 12)
+        }
+    );
+    assert_eq!(
+        parse::value("#f +Infinity").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Float(OrderedFloat(f64::INFINITY)),
+            span: Span(0, 12)
+        }
+    );
 }
 
 #[test]
@@ -172,15 +197,21 @@ fn test_boolean() {
 
 #[test]
 fn test_span_boolean() {
-    assert_eq!(parse::value("true").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Boolean(true),
-        span: Span(0, 4)
-    });
+    assert_eq!(
+        parse::value("true").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Boolean(true),
+            span: Span(0, 4)
+        }
+    );
 
-    assert_eq!(parse::value("false").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Boolean(false),
-        span: Span(0, 5)
-    });
+    assert_eq!(
+        parse::value("false").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Boolean(false),
+            span: Span(0, 5)
+        }
+    );
 }
 
 #[test]
@@ -235,39 +266,49 @@ fn test_octalinteger() {
 
 #[test]
 fn test_span_integer() {
-    assert_eq!(parse::value("42").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Integer(42),
-        span: Span(0, 2)
-    });
-    assert_eq!(parse::value("0xabc111").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Integer(11256081),
-        span: Span(0, 8)
-    });
-    assert_eq!(parse::value("2r111").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Integer(7),
-        span: Span(0, 5)
-    });
-    assert_eq!(parse::value("011").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Integer(9),
-        span: Span(0, 3)
-    });
+    assert_eq!(
+        parse::value("42").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Integer(42),
+            span: Span(0, 2)
+        }
+    );
+    assert_eq!(
+        parse::value("0xabc111").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Integer(11256081),
+            span: Span(0, 8)
+        }
+    );
+    assert_eq!(
+        parse::value("2r111").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Integer(7),
+            span: Span(0, 5)
+        }
+    );
+    assert_eq!(
+        parse::value("011").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Integer(9),
+            span: Span(0, 3)
+        }
+    );
 }
 
 #[test]
 fn test_uuid() {
-    assert!(parse::uuid("#uuid\"550e8400-e29b-41d4-a716-446655440000\"").is_err());   // No whitespace.
-    assert!(parse::uuid("#uuid \"z50e8400-e29b-41d4-a716-446655440000\"").is_err());  // Not hex.
-    assert!(parse::uuid("\"z50e8400-e29b-41d4-a716-446655440000\"").is_err());        // No tag.
-    assert!(parse::uuid("#uuid \"aaaaaaaae29b-41d4-a716-446655440000\"").is_err());   // Hyphens.
-    assert!(parse::uuid("#uuid \"aaaaaaaa-e29b-41d4-a716-446655440\"").is_err());     // Truncated.
-    assert!(parse::uuid("#uuid \"A50e8400-e29b-41d4-a716-446655440000\"").is_err());  // Capital.
+    assert!(parse::uuid("#uuid\"550e8400-e29b-41d4-a716-446655440000\"").is_err()); // No whitespace.
+    assert!(parse::uuid("#uuid \"z50e8400-e29b-41d4-a716-446655440000\"").is_err()); // Not hex.
+    assert!(parse::uuid("\"z50e8400-e29b-41d4-a716-446655440000\"").is_err()); // No tag.
+    assert!(parse::uuid("#uuid \"aaaaaaaae29b-41d4-a716-446655440000\"").is_err()); // Hyphens.
+    assert!(parse::uuid("#uuid \"aaaaaaaa-e29b-41d4-a716-446655440\"").is_err()); // Truncated.
+    assert!(parse::uuid("#uuid \"A50e8400-e29b-41d4-a716-446655440000\"").is_err()); // Capital.
 
-    let expected = uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")
-                       .expect("valid UUID");
+    let expected =
+        uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").expect("valid UUID");
     let s = "#uuid \"550e8400-e29b-41d4-a716-446655440000\"";
-    let actual = parse::uuid(s)
-                       .expect("parse success")
-                       .into();
+    let actual = parse::uuid(s).expect("parse success").into();
     let value = self::Value::Uuid(expected);
     assert_eq!(value, actual);
     assert_eq!(format!("{}", value), s);
@@ -276,15 +317,13 @@ fn test_uuid() {
 
 #[test]
 fn test_inst() {
-    assert!(parse::value("#inst\"2016-01-01T11:00:00.000Z\"").is_err());   // No whitespace.
-    assert!(parse::value("#inst \"2016-01-01T11:00:00.000\"").is_err());   // No timezone.
-    assert!(parse::value("#inst \"2016-01-01T11:00:00.000z\"").is_err());  // Lowercase timezone.
+    assert!(parse::value("#inst\"2016-01-01T11:00:00.000Z\"").is_err()); // No whitespace.
+    assert!(parse::value("#inst \"2016-01-01T11:00:00.000\"").is_err()); // No timezone.
+    assert!(parse::value("#inst \"2016-01-01T11:00:00.000z\"").is_err()); // Lowercase timezone.
 
     let expected = Utc.timestamp(1493410985, 187000000);
     let s = "#inst \"2017-04-28T20:23:05.187Z\"";
-    let actual = parse::value(s)
-                       .expect("parse success")
-                       .into();
+    let actual = parse::value(s).expect("parse success").into();
     let value = self::Value::Instant(expected);
     assert_eq!(value, actual);
     assert_eq!(format!("{}", value), s);
@@ -301,7 +340,10 @@ fn test_bigint() {
     assert_eq!(bigint("0N").unwrap(), BigInteger(Zero::zero()));
     assert_eq!(bigint("1N").unwrap(), BigInteger(One::one()));
     assert_eq!(bigint("9223372036854775807N").unwrap(), BigInteger(max_i64));
-    assert_eq!(bigint("85070591730234615847396907784232501249N").unwrap(), BigInteger(bigger));
+    assert_eq!(
+        bigint("85070591730234615847396907784232501249N").unwrap(),
+        BigInteger(bigger)
+    );
 
     assert!(bigint("nil").is_err());
 }
@@ -311,10 +353,13 @@ fn test_span_bigint() {
     let max_i64 = i64::max_value().to_bigint().unwrap();
     let bigger = &max_i64 * &max_i64;
 
-    assert_eq!(parse::value("85070591730234615847396907784232501249N").unwrap(), ValueAndSpan {
-        inner: SpannedValue::BigInteger(bigger),
-        span: Span(0, 39)
-    });
+    assert_eq!(
+        parse::value("85070591730234615847396907784232501249N").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::BigInteger(bigger),
+            span: Span(0, 39)
+        }
+    );
 }
 
 #[test]
@@ -333,17 +378,23 @@ fn test_float() {
 
 #[test]
 fn test_span_float() {
-    assert_eq!(parse::value("42.0").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Float(OrderedFloat(42f64)),
-        span: Span(0, 4)
-    });
+    assert_eq!(
+        parse::value("42.0").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Float(OrderedFloat(42f64)),
+            span: Span(0, 4)
+        }
+    );
 }
 
 #[test]
 fn test_text() {
     use self::Value::*;
 
-    assert_eq!(text("\"hello world\"").unwrap(), Text("hello world".to_string()));
+    assert_eq!(
+        text("\"hello world\"").unwrap(),
+        Text("hello world".to_string())
+    );
     assert_eq!(text("\"\"").unwrap(), Text("".to_string()));
 
     assert!(text("\"").is_err());
@@ -351,19 +402,24 @@ fn test_text() {
 
     let raw_edn = r#""This string contains a \" and a \\""#;
     let raw_string = r#"This string contains a " and a \"#;
-    assert_eq!(parse::value(raw_edn).unwrap(),
-               ValueAndSpan {
-                   inner: SpannedValue::Text(raw_string.to_string()),
-                   span: Span(0, raw_edn.len() as u32)
-               });
+    assert_eq!(
+        parse::value(raw_edn).unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Text(raw_string.to_string()),
+            span: Span(0, raw_edn.len() as u32)
+        }
+    );
 }
 
 #[test]
 fn test_span_text() {
-    assert_eq!(parse::value("\"hello world\"").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Text("hello world".to_string()),
-        span: Span(0, 13)
-    });
+    assert_eq!(
+        parse::value("\"hello world\"").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Text("hello world".to_string()),
+            span: Span(0, 13)
+        }
+    );
 }
 
 #[test]
@@ -373,11 +429,23 @@ fn test_symbol() {
     assert_eq!(symbol("...").unwrap(), s_plain("..."));
 
     assert_eq!(symbol("hello/world").unwrap(), s_ns("hello", "world"));
-    assert_eq!(symbol("foo-bar/baz-boz").unwrap(), s_ns("foo-bar", "baz-boz"));
+    assert_eq!(
+        symbol("foo-bar/baz-boz").unwrap(),
+        s_ns("foo-bar", "baz-boz")
+    );
 
-    assert_eq!(symbol("foo-bar/baz_boz").unwrap(), s_ns("foo-bar", "baz_boz"));
-    assert_eq!(symbol("foo_bar/baz-boz").unwrap(), s_ns("foo_bar", "baz-boz"));
-    assert_eq!(symbol("foo_bar/baz_boz").unwrap(), s_ns("foo_bar", "baz_boz"));
+    assert_eq!(
+        symbol("foo-bar/baz_boz").unwrap(),
+        s_ns("foo-bar", "baz_boz")
+    );
+    assert_eq!(
+        symbol("foo_bar/baz-boz").unwrap(),
+        s_ns("foo_bar", "baz-boz")
+    );
+    assert_eq!(
+        symbol("foo_bar/baz_boz").unwrap(),
+        s_ns("foo_bar", "baz_boz")
+    );
 
     assert_eq!(symbol("symbol").unwrap(), s_plain("symbol"));
     assert_eq!(symbol("hello").unwrap(), s_plain("hello"));
@@ -387,24 +455,42 @@ fn test_symbol() {
 
 #[test]
 fn test_span_symbol() {
-    assert_eq!(parse::value("hello").unwrap(), ValueAndSpan {
-        inner: SpannedValue::from_symbol(None, "hello"),
-        span: Span(0, 5)
-    });
-    assert_eq!(parse::value("hello/world").unwrap(), ValueAndSpan {
-        inner: SpannedValue::from_symbol("hello", "world"),
-        span: Span(0, 11)
-    });
+    assert_eq!(
+        parse::value("hello").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::from_symbol(None, "hello"),
+            span: Span(0, 5)
+        }
+    );
+    assert_eq!(
+        parse::value("hello/world").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::from_symbol("hello", "world"),
+            span: Span(0, 11)
+        }
+    );
 }
 
 #[test]
 fn test_keyword() {
     assert_eq!(keyword(":hello/world").unwrap(), k_ns("hello", "world"));
-    assert_eq!(keyword(":foo-bar/baz-boz").unwrap(), k_ns("foo-bar", "baz-boz"));
+    assert_eq!(
+        keyword(":foo-bar/baz-boz").unwrap(),
+        k_ns("foo-bar", "baz-boz")
+    );
 
-    assert_eq!(keyword(":foo-bar/baz_boz").unwrap(), k_ns("foo-bar", "baz_boz"));
-    assert_eq!(keyword(":foo_bar/baz-boz").unwrap(), k_ns("foo_bar", "baz-boz"));
-    assert_eq!(keyword(":foo_bar/baz_boz").unwrap(), k_ns("foo_bar", "baz_boz"));
+    assert_eq!(
+        keyword(":foo-bar/baz_boz").unwrap(),
+        k_ns("foo-bar", "baz_boz")
+    );
+    assert_eq!(
+        keyword(":foo_bar/baz-boz").unwrap(),
+        k_ns("foo_bar", "baz-boz")
+    );
+    assert_eq!(
+        keyword(":foo_bar/baz_boz").unwrap(),
+        k_ns("foo_bar", "baz_boz")
+    );
 
     assert_eq!(keyword(":symbol").unwrap(), k_plain("symbol"));
     assert_eq!(keyword(":hello").unwrap(), k_plain("hello"));
@@ -414,20 +500,32 @@ fn test_keyword() {
     assert!(keyword(":").is_err());
     assert!(keyword(":foo/").is_err());
 
-    assert_eq!(keyword(":foo*!_?$%&=<>-+").unwrap(), k_plain("foo*!_?$%&=<>-+"));
-    assert_eq!(keyword(":foo/bar*!_?$%&=<>-+").unwrap(), k_ns("foo", "bar*!_?$%&=<>-+"));
+    assert_eq!(
+        keyword(":foo*!_?$%&=<>-+").unwrap(),
+        k_plain("foo*!_?$%&=<>-+")
+    );
+    assert_eq!(
+        keyword(":foo/bar*!_?$%&=<>-+").unwrap(),
+        k_ns("foo", "bar*!_?$%&=<>-+")
+    );
 }
 
 #[test]
 fn test_span_keyword() {
-    assert_eq!(parse::value(":hello").unwrap(), ValueAndSpan {
-        inner: SpannedValue::from_keyword(None, "hello"),
-        span: Span(0, 6)
-    });
-    assert_eq!(parse::value(":hello/world").unwrap(), ValueAndSpan {
-        inner: SpannedValue::from_keyword("hello", "world"),
-        span: Span(0, 12)
-    });
+    assert_eq!(
+        parse::value(":hello").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::from_keyword(None, "hello"),
+            span: Span(0, 6)
+        }
+    );
+    assert_eq!(
+        parse::value(":hello/world").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::from_keyword("hello", "world"),
+            span: Span(0, 12)
+        }
+    );
 }
 
 #[test]
@@ -443,23 +541,48 @@ fn test_value() {
     assert_eq!(value("0xabc111").unwrap(), Integer(11256081));
     assert_eq!(value("2r111").unwrap(), Integer(7));
     assert_eq!(value("011").unwrap(), Integer(9));
-    assert_eq!(value("85070591730234615847396907784232501249N").unwrap(), BigInteger(bigger));
+    assert_eq!(
+        value("85070591730234615847396907784232501249N").unwrap(),
+        BigInteger(bigger)
+    );
     assert_eq!(value("111.222").unwrap(), Float(OrderedFloat(111.222f64)));
-    assert_eq!(value("\"hello world\"").unwrap(), Text("hello world".to_string()));
+    assert_eq!(
+        value("\"hello world\"").unwrap(),
+        Text("hello world".to_string())
+    );
     assert_eq!(value("$").unwrap(), s_plain("$"));
     assert_eq!(value(".").unwrap(), s_plain("."));
     assert_eq!(value("$symbol").unwrap(), s_plain("$symbol"));
     assert_eq!(value(":hello").unwrap(), k_plain("hello"));
     assert_eq!(value("[1]").unwrap(), Vector(vec![Integer(1)]));
-    assert_eq!(value("(1)").unwrap(), List(LinkedList::from_iter(vec![Integer(1)])));
-    assert_eq!(value("#{1}").unwrap(), Set(BTreeSet::from_iter(vec![Integer(1)])));
-    assert_eq!(value("{1 2}").unwrap(), Map(BTreeMap::from_iter(vec![(Integer(1), Integer(2))])));
-    assert_eq!(value("#uuid \"e43c6f3e-3123-49b7-8098-9b47a7bc0fa4\"").unwrap(),
-               Uuid(uuid::Uuid::parse_str("e43c6f3e-3123-49b7-8098-9b47a7bc0fa4").unwrap()));
-    assert_eq!(value("#instmillis 1493410985187").unwrap(), Instant(Utc.timestamp(1493410985, 187000000)));
-    assert_eq!(value("#instmicros 1493410985187123").unwrap(), Instant(Utc.timestamp(1493410985, 187123000)));
-    assert_eq!(value("#inst \"2017-04-28T20:23:05.187Z\"").unwrap(),
-               Instant(Utc.timestamp(1493410985, 187000000)));
+    assert_eq!(
+        value("(1)").unwrap(),
+        List(LinkedList::from_iter(vec![Integer(1)]))
+    );
+    assert_eq!(
+        value("#{1}").unwrap(),
+        Set(BTreeSet::from_iter(vec![Integer(1)]))
+    );
+    assert_eq!(
+        value("{1 2}").unwrap(),
+        Map(BTreeMap::from_iter(vec![(Integer(1), Integer(2))]))
+    );
+    assert_eq!(
+        value("#uuid \"e43c6f3e-3123-49b7-8098-9b47a7bc0fa4\"").unwrap(),
+        Uuid(uuid::Uuid::parse_str("e43c6f3e-3123-49b7-8098-9b47a7bc0fa4").unwrap())
+    );
+    assert_eq!(
+        value("#instmillis 1493410985187").unwrap(),
+        Instant(Utc.timestamp(1493410985, 187000000))
+    );
+    assert_eq!(
+        value("#instmicros 1493410985187123").unwrap(),
+        Instant(Utc.timestamp(1493410985, 187123000))
+    );
+    assert_eq!(
+        value("#inst \"2017-04-28T20:23:05.187Z\"").unwrap(),
+        Instant(Utc.timestamp(1493410985, 187000000))
+    );
 }
 
 #[test]
@@ -467,86 +590,122 @@ fn test_span_value() {
     let max_i64 = i64::max_value().to_bigint().unwrap();
     let bigger = &max_i64 * &max_i64;
 
-    assert_eq!(parse::value("nil").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Nil,
-        span: Span(0,3)
-    });
-    assert_eq!(parse::value("true").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Boolean(true),
-        span: Span(0,4)
-    });
-    assert_eq!(parse::value("1").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Integer(1i64),
-        span: Span(0,1)
-    });
-    assert_eq!(parse::value("85070591730234615847396907784232501249N").unwrap(), ValueAndSpan {
-        inner: SpannedValue::BigInteger(bigger),
-        span: Span(0,39)
-    });
-    assert_eq!(parse::value("111.222").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Float(OrderedFloat(111.222f64)),
-        span: Span(0,7)
-    });
-    assert_eq!(parse::value("\"hello world\"").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Text("hello world".to_string()),
-        span: Span(0,13)
-    });
-    assert_eq!(parse::value("$").unwrap(), ValueAndSpan {
-        inner: SpannedValue::from_symbol(None, "$"),
-        span: Span(0,1)
-    });
-    assert_eq!(parse::value(".").unwrap(), ValueAndSpan {
-        inner: SpannedValue::from_symbol(None, "."),
-        span: Span(0,1)
-    });
-    assert_eq!(parse::value("$symbol").unwrap(), ValueAndSpan {
-        inner: SpannedValue::from_symbol(None, "$symbol"),
-        span: Span(0,7)
-    });
-    assert_eq!(parse::value(":hello").unwrap(), ValueAndSpan {
-        inner: SpannedValue::from_keyword(None, "hello"),
-        span: Span(0,6)
-    });
-    assert_eq!(parse::value("[1]").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Vector(vec![
-            ValueAndSpan {
+    assert_eq!(
+        parse::value("nil").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Nil,
+            span: Span(0, 3)
+        }
+    );
+    assert_eq!(
+        parse::value("true").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Boolean(true),
+            span: Span(0, 4)
+        }
+    );
+    assert_eq!(
+        parse::value("1").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Integer(1i64),
+            span: Span(0, 1)
+        }
+    );
+    assert_eq!(
+        parse::value("85070591730234615847396907784232501249N").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::BigInteger(bigger),
+            span: Span(0, 39)
+        }
+    );
+    assert_eq!(
+        parse::value("111.222").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Float(OrderedFloat(111.222f64)),
+            span: Span(0, 7)
+        }
+    );
+    assert_eq!(
+        parse::value("\"hello world\"").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Text("hello world".to_string()),
+            span: Span(0, 13)
+        }
+    );
+    assert_eq!(
+        parse::value("$").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::from_symbol(None, "$"),
+            span: Span(0, 1)
+        }
+    );
+    assert_eq!(
+        parse::value(".").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::from_symbol(None, "."),
+            span: Span(0, 1)
+        }
+    );
+    assert_eq!(
+        parse::value("$symbol").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::from_symbol(None, "$symbol"),
+            span: Span(0, 7)
+        }
+    );
+    assert_eq!(
+        parse::value(":hello").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::from_keyword(None, "hello"),
+            span: Span(0, 6)
+        }
+    );
+    assert_eq!(
+        parse::value("[1]").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Vector(vec![ValueAndSpan {
                 inner: SpannedValue::Integer(1),
-                span: Span(1,2)
-            }
-        ]),
-        span: Span(0,3)
-    });
-    assert_eq!(parse::value("(1)").unwrap(), ValueAndSpan {
-        inner: SpannedValue::List(LinkedList::from_iter(vec![
-            ValueAndSpan {
+                span: Span(1, 2)
+            }]),
+            span: Span(0, 3)
+        }
+    );
+    assert_eq!(
+        parse::value("(1)").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::List(LinkedList::from_iter(vec![ValueAndSpan {
                 inner: SpannedValue::Integer(1),
-                span: Span(1,2)
-            }
-        ])),
-        span: Span(0,3)
-    });
-    assert_eq!(parse::value("#{1}").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Set(BTreeSet::from_iter(vec![
-            ValueAndSpan {
+                span: Span(1, 2)
+            }])),
+            span: Span(0, 3)
+        }
+    );
+    assert_eq!(
+        parse::value("#{1}").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Set(BTreeSet::from_iter(vec![ValueAndSpan {
                 inner: SpannedValue::Integer(1),
-                span: Span(2,3)
-            }
-        ])),
-        span: Span(0,4)
-    });
-    assert_eq!(parse::value("{1 2}").unwrap(), ValueAndSpan {
-        inner: SpannedValue::Map(BTreeMap::from_iter(vec![
-            (ValueAndSpan {
-                inner: SpannedValue::Integer(1),
-                span: Span(1,2)
-            },
-            ValueAndSpan {
-                inner: SpannedValue::Integer(2),
-                span: Span(3,4)
-            })
-        ])),
-        span: Span(0,5)
-    });
+                span: Span(2, 3)
+            }])),
+            span: Span(0, 4)
+        }
+    );
+    assert_eq!(
+        parse::value("{1 2}").unwrap(),
+        ValueAndSpan {
+            inner: SpannedValue::Map(BTreeMap::from_iter(vec![(
+                ValueAndSpan {
+                    inner: SpannedValue::Integer(1),
+                    span: Span(1, 2)
+                },
+                ValueAndSpan {
+                    inner: SpannedValue::Integer(2),
+                    span: Span(3, 4)
+                }
+            )])),
+            span: Span(0, 5)
+        }
+    );
 }
 
 #[test]
@@ -557,38 +716,27 @@ fn test_vector() {
     let bigger = &max_i64 * &max_i64;
 
     let test = "[]";
-    let value = Vector(vec![
-    ]);
+    let value = Vector(vec![]);
     assert_eq!(vector(test).unwrap(), value);
 
     let test = "[ ]";
-    let value = Vector(vec![
-    ]);
+    let value = Vector(vec![]);
     assert_eq!(vector(test).unwrap(), value);
 
     let test = "[1]";
-    let value = Vector(vec![
-        Integer(1),
-    ]);
+    let value = Vector(vec![Integer(1)]);
     assert_eq!(vector(test).unwrap(), value);
 
     let test = "[ 1 ]";
-    let value = Vector(vec![
-        Integer(1),
-    ]);
+    let value = Vector(vec![Integer(1)]);
     assert_eq!(vector(test).unwrap(), value);
 
     let test = "[nil]";
-    let value = Vector(vec![
-        Nil,
-    ]);
+    let value = Vector(vec![Nil]);
     assert_eq!(vector(test).unwrap(), value);
 
     let test = "[1 2]";
-    let value = Vector(vec![
-        Integer(1),
-        Integer(2),
-    ]);
+    let value = Vector(vec![Integer(1), Integer(2)]);
     assert_eq!(vector(test).unwrap(), value);
 
     let test = "[1 2 3.4 85070591730234615847396907784232501249N]";
@@ -601,21 +749,13 @@ fn test_vector() {
     assert_eq!(vector(test).unwrap(), value);
 
     let test = "[1 0 nil \"nil\"]";
-    let value = Vector(vec![
-        Integer(1),
-        Integer(0),
-        Nil,
-        Text("nil".to_string()),
-    ]);
+    let value = Vector(vec![Integer(1), Integer(0), Nil, Text("nil".to_string())]);
     assert_eq!(vector(test).unwrap(), value);
 
     let test = "[1 [0 nil] \"nil\"]";
     let value = Vector(vec![
         Integer(1),
-        Vector(vec![
-            Integer(0),
-            Nil,
-        ]),
+        Vector(vec![Integer(0), Nil]),
         Text("nil".to_string()),
     ]);
     assert_eq!(vector(test).unwrap(), value);
@@ -631,38 +771,27 @@ fn test_list() {
     use self::Value::*;
 
     let test = "()";
-    let value = List(LinkedList::from_iter(vec![
-    ]));
+    let value = List(LinkedList::from_iter(vec![]));
     assert_eq!(list(test).unwrap(), value);
 
     let test = "( )";
-    let value = List(LinkedList::from_iter(vec![
-    ]));
+    let value = List(LinkedList::from_iter(vec![]));
     assert_eq!(list(test).unwrap(), value);
 
     let test = "(1)";
-    let value = List(LinkedList::from_iter(vec![
-        Integer(1),
-    ]));
+    let value = List(LinkedList::from_iter(vec![Integer(1)]));
     assert_eq!(list(test).unwrap(), value);
 
     let test = "( 1 )";
-    let value = List(LinkedList::from_iter(vec![
-        Integer(1),
-    ]));
+    let value = List(LinkedList::from_iter(vec![Integer(1)]));
     assert_eq!(list(test).unwrap(), value);
 
     let test = "(nil)";
-    let value = List(LinkedList::from_iter(vec![
-        Nil,
-    ]));
+    let value = List(LinkedList::from_iter(vec![Nil]));
     assert_eq!(list(test).unwrap(), value);
 
     let test = "(1 2)";
-    let value = List(LinkedList::from_iter(vec![
-        Integer(1),
-        Integer(2),
-    ]));
+    let value = List(LinkedList::from_iter(vec![Integer(1), Integer(2)]));
     assert_eq!(list(test).unwrap(), value);
 
     let test = "(1 2 3.4)";
@@ -685,10 +814,7 @@ fn test_list() {
     let test = "(1 (0 nil) \"nil\")";
     let value = List(LinkedList::from_iter(vec![
         Integer(1),
-        List(LinkedList::from_iter(vec![
-            Integer(0),
-            Nil,
-        ])),
+        List(LinkedList::from_iter(vec![Integer(0), Nil])),
         Text("nil".to_string()),
     ]));
     assert_eq!(list(test).unwrap(), value);
@@ -704,31 +830,23 @@ fn test_set() {
     use self::Value::*;
 
     let test = "#{}";
-    let value = Set(BTreeSet::from_iter(vec![
-    ]));
+    let value = Set(BTreeSet::from_iter(vec![]));
     assert_eq!(set(test).unwrap(), value);
 
     let test = "#{ }";
-    let value = Set(BTreeSet::from_iter(vec![
-    ]));
+    let value = Set(BTreeSet::from_iter(vec![]));
     assert_eq!(set(test).unwrap(), value);
 
     let test = "#{1}";
-    let value = Set(BTreeSet::from_iter(vec![
-        Integer(1),
-    ]));
+    let value = Set(BTreeSet::from_iter(vec![Integer(1)]));
     assert_eq!(set(test).unwrap(), value);
 
     let test = "#{ 1 }";
-    let value = Set(BTreeSet::from_iter(vec![
-        Integer(1),
-    ]));
+    let value = Set(BTreeSet::from_iter(vec![Integer(1)]));
     assert_eq!(set(test).unwrap(), value);
 
     let test = "#{nil}";
-    let value = Set(BTreeSet::from_iter(vec![
-        Nil,
-    ]));
+    let value = Set(BTreeSet::from_iter(vec![Nil]));
     assert_eq!(set(test).unwrap(), value);
 
     // These tests assume the implementation of Ord for Value, (specifically the sort order which
@@ -736,10 +854,7 @@ fn test_set() {
     // (BTreeSet) assumes sorting this seems pointless.
     // See the notes in types.rs for why we use BTreeSet rather than HashSet
     let test = "#{2 1}";
-    let value = Set(BTreeSet::from_iter(vec![
-        Integer(1),
-        Integer(2),
-    ]));
+    let value = Set(BTreeSet::from_iter(vec![Integer(1), Integer(2)]));
     assert_eq!(set(test).unwrap(), value);
 
     let test = "#{3.4 2 1}";
@@ -762,10 +877,7 @@ fn test_set() {
     let test = "#{1 #{0 nil} \"nil\"}";
     let value = Set(BTreeSet::from_iter(vec![
         Integer(1),
-        Set(BTreeSet::from_iter(vec![
-            Nil,
-            Integer(0),
-        ])),
+        Set(BTreeSet::from_iter(vec![Nil, Integer(0)])),
         Text("nil".to_string()),
     ]));
     assert_eq!(set(test).unwrap(), value);
@@ -781,25 +893,25 @@ fn test_map() {
     use self::Value::*;
 
     let test = "{}";
-    let value = Map(BTreeMap::from_iter(vec![
-    ]));
+    let value = Map(BTreeMap::from_iter(vec![]));
     assert_eq!(map(test).unwrap(), value);
 
     let test = "{ }";
-    let value = Map(BTreeMap::from_iter(vec![
-    ]));
+    let value = Map(BTreeMap::from_iter(vec![]));
     assert_eq!(map(test).unwrap(), value);
 
     let test = "{\"a\" 1}";
-    let value = Map(BTreeMap::from_iter(vec![
-        (Text("a".to_string()), Integer(1)),
-    ]));
+    let value = Map(BTreeMap::from_iter(vec![(
+        Text("a".to_string()),
+        Integer(1),
+    )]));
     assert_eq!(map(test).unwrap(), value);
 
     let test = "{ \"a\" 1 }";
-    let value = Map(BTreeMap::from_iter(vec![
-        (Text("a".to_string()), Integer(1)),
-    ]));
+    let value = Map(BTreeMap::from_iter(vec![(
+        Text("a".to_string()),
+        Integer(1),
+    )]));
     assert_eq!(map(test).unwrap(), value);
 
     let test = "{nil 1, \"b\" 2}";
@@ -835,15 +947,21 @@ fn test_map() {
     let test = "{:a 1, $b {:b/a nil, :b/b #{nil 5}}, c [1 2], d (3 4)}";
     let value = Map(BTreeMap::from_iter(vec![
         (Keyword(symbols::Keyword::plain("a")), Integer(1)),
-        (s_plain("$b"), Map(BTreeMap::from_iter(vec![
-            (k_ns("b", "a"), Nil),
-            (k_ns("b", "b"), Set(BTreeSet::from_iter(vec![
-                Nil,
-                Integer(5)
-            ]))),
-        ]))),
-        (s_plain("c"), Vector(vec![Integer(1), Integer(2),])),
-        (s_plain("d"), List(LinkedList::from_iter(vec![Integer(3), Integer(4),]))),
+        (
+            s_plain("$b"),
+            Map(BTreeMap::from_iter(vec![
+                (k_ns("b", "a"), Nil),
+                (
+                    k_ns("b", "b"),
+                    Set(BTreeSet::from_iter(vec![Nil, Integer(5)])),
+                ),
+            ])),
+        ),
+        (s_plain("c"), Vector(vec![Integer(1), Integer(2)])),
+        (
+            s_plain("d"),
+            List(LinkedList::from_iter(vec![Integer(3), Integer(4)])),
+        ),
     ]));
     assert_eq!(map(test).unwrap(), value);
 
@@ -891,9 +1009,7 @@ fn test_query_active_sessions() {
         ]),
         List(LinkedList::from_iter(vec![
             s_plain("not-join"),
-            Vector(vec![
-                s_plain("?id"),
-            ]),
+            Vector(vec![s_plain("?id")]),
             Vector(vec![
                 s_plain("?id"),
                 k_ns("session", "endReason"),
@@ -961,13 +1077,8 @@ fn test_query_starred_pages() {
         List(LinkedList::from_iter(vec![
             s_plain("if"),
             s_plain("since"),
-            Vector(vec![
-                s_plain("$"),
-                s_plain("?since"),
-            ]),
-            Vector(vec![
-                s_plain("$"),
-            ]),
+            Vector(vec![s_plain("$"), s_plain("?since")]),
+            Vector(vec![s_plain("$")]),
         ])),
         k_plain("where"),
         s_plain("where"),
@@ -1009,11 +1120,7 @@ fn test_query_saved_pages() {
             k_ns("save", "savedAt"),
             s_plain("?instant"),
         ]),
-        Vector(vec![
-            s_plain("?page"),
-            k_ns("page", "url"),
-            s_plain("?url"),
-        ]),
+        Vector(vec![s_plain("?page"), k_ns("page", "url"), s_plain("?url")]),
         Vector(vec![
             List(LinkedList::from_iter(vec![
                 s_plain("get-else"),
@@ -1064,14 +1171,9 @@ fn test_query_pages_matching_string_1() {
 
     let reply = Vector(vec![
         k_plain("find"),
-        Vector(vec![
-            s_plain("?url"),
-            s_plain("?title"),
-        ]),
+        Vector(vec![s_plain("?url"), s_plain("?title")]),
         k_plain("in"),
-        Vector(vec![
-            s_plain("$"),
-        ]),
+        Vector(vec![s_plain("$")]),
         k_plain("where"),
         Vector(vec![
             Vector(vec![
@@ -1085,11 +1187,7 @@ fn test_query_pages_matching_string_1() {
                     ])),
                     s_plain("string"),
                 ])),
-                Vector(vec![
-                    Vector(vec![
-                        s_plain("?page"),
-                    ]),
-                ]),
+                Vector(vec![Vector(vec![s_plain("?page")])]),
             ]),
             Vector(vec![
                 List(LinkedList::from_iter(vec![
@@ -1152,9 +1250,7 @@ fn test_query_pages_matching_string_2() {
             s_plain("?excerpt"),
         ]),
         k_plain("in"),
-        Vector(vec![
-            s_plain("$"),
-        ]),
+        Vector(vec![s_plain("$")]),
         k_plain("where"),
         Vector(vec![
             Vector(vec![
@@ -1169,22 +1265,14 @@ fn test_query_pages_matching_string_2() {
                     ])),
                     s_plain("string"),
                 ])),
-                Vector(vec![
-                    Vector(vec![
-                        s_plain("?save"),
-                    ]),
-                ]),
+                Vector(vec![Vector(vec![s_plain("?save")])]),
             ]),
             Vector(vec![
                 s_plain("?save"),
                 k_ns("save", "page"),
                 s_plain("?page"),
             ]),
-            Vector(vec![
-                s_plain("?page"),
-                k_ns("page", "url"),
-                s_plain("?url"),
-            ]),
+            Vector(vec![s_plain("?page"), k_ns("page", "url"), s_plain("?url")]),
             Vector(vec![
                 List(LinkedList::from_iter(vec![
                     s_plain("get-else"),
@@ -1240,13 +1328,8 @@ fn test_query_visited() {
         List(LinkedList::from_iter(vec![
             s_plain("if"),
             s_plain("since"),
-            Vector(vec![
-                s_plain("$"),
-                s_plain("?since"),
-            ]),
-            Vector(vec![
-                s_plain("$"),
-            ]),
+            Vector(vec![s_plain("$"), s_plain("?since")]),
+            Vector(vec![s_plain("$")]),
         ])),
         k_plain("where"),
         s_plain("where"),
@@ -1282,11 +1365,7 @@ fn test_query_find_title() {
         s_plain("$"),
         s_plain("?url"),
         k_plain("where"),
-        Vector(vec![
-            s_plain("?page"),
-            k_ns("page", "url"),
-            s_plain("?url"),
-        ]),
+        Vector(vec![s_plain("?page"), k_ns("page", "url"), s_plain("?url")]),
         Vector(vec![
             List(LinkedList::from_iter(vec![
                 s_plain("get-else"),
@@ -1355,7 +1434,9 @@ fn test_spurious_commas() {
 #[test]
 fn test_utils_merge() {
     // Take BTreeMap instances, wrap into Value::Map instances.
-    let test = |left: &BTreeMap<Value, Value>, right: &BTreeMap<Value, Value>, expected: &BTreeMap<Value, Value>| {
+    let test = |left: &BTreeMap<Value, Value>,
+                right: &BTreeMap<Value, Value>,
+                expected: &BTreeMap<Value, Value>| {
         let l = Value::Map(left.clone());
         let r = Value::Map(right.clone());
         let result = utils::merge(&l, &r).unwrap();
@@ -1394,7 +1475,7 @@ macro_rules! def_test_as_value_type {
             assert_eq!($value.$method().unwrap(), $expected)
         }
         assert_eq!($value.$method().is_some(), $is_some);
-    }
+    };
 }
 macro_rules! def_test_as_type {
     ($value: ident, $method: ident, $is_some: expr, $expected: expr) => {
@@ -1402,7 +1483,7 @@ macro_rules! def_test_as_type {
             assert_eq!(*$value.$method().unwrap(), $expected)
         }
         assert_eq!($value.$method().is_some(), $is_some);
-    }
+    };
 }
 
 macro_rules! def_test_into_type {
@@ -1411,7 +1492,7 @@ macro_rules! def_test_into_type {
             assert_eq!($value.clone().$method().unwrap(), $expected)
         }
         assert_eq!($value.clone().$method().is_some(), $is_some);
-    }
+    };
 }
 
 #[test]
@@ -1434,9 +1515,10 @@ fn test_is_and_as_type_helper_functions() {
         Value::Vector(vec![Value::Integer(1)]),
         Value::List(LinkedList::from_iter(vec![])),
         Value::Set(BTreeSet::from_iter(vec![])),
-        Value::Map(BTreeMap::from_iter(vec![
-            (Value::Text("a".to_string()), Value::Integer(1)),
-        ])),
+        Value::Map(BTreeMap::from_iter(vec![(
+            Value::Text("a".to_string()),
+            Value::Integer(1),
+        )])),
     ];
 
     for (i, value) in values.iter().enumerate() {
@@ -1460,7 +1542,14 @@ fn test_is_and_as_type_helper_functions() {
         assert_eq!(values.len(), is_result.len());
 
         for (j, result) in is_result.iter().enumerate() {
-            assert_eq!(j == i, *result, "Expected {} = {} to equal {}", j, i, result);
+            assert_eq!(
+                j == i,
+                *result,
+                "Expected {} = {} to equal {}",
+                j,
+                i,
+                result
+            );
         }
 
         if i == 0 {
@@ -1477,16 +1566,39 @@ fn test_is_and_as_type_helper_functions() {
         def_test_as_type!(value, as_big_integer, i == 3, &max_i64 * &max_i64);
         def_test_as_type!(value, as_ordered_float, i == 4, OrderedFloat(22.22f64));
         def_test_as_type!(value, as_text, i == 5, "hello world".to_string());
-        def_test_as_type!(value, as_symbol, i == 6, symbols::PlainSymbol::plain("$symbol"));
-        def_test_as_type!(value, as_namespaced_symbol, i == 7, symbols::NamespacedSymbol::namespaced("$ns", "$symbol"));
-        def_test_as_type!(value, as_plain_keyword, i == 8, symbols::Keyword::plain("hello"));
-        def_test_as_type!(value, as_namespaced_keyword, i == 9, symbols::Keyword::namespaced("hello", "world"));
+        def_test_as_type!(
+            value,
+            as_symbol,
+            i == 6,
+            symbols::PlainSymbol::plain("$symbol")
+        );
+        def_test_as_type!(
+            value,
+            as_namespaced_symbol,
+            i == 7,
+            symbols::NamespacedSymbol::namespaced("$ns", "$symbol")
+        );
+        def_test_as_type!(
+            value,
+            as_plain_keyword,
+            i == 8,
+            symbols::Keyword::plain("hello")
+        );
+        def_test_as_type!(
+            value,
+            as_namespaced_keyword,
+            i == 9,
+            symbols::Keyword::namespaced("hello", "world")
+        );
         def_test_as_type!(value, as_vector, i == 10, vec![Value::Integer(1)]);
         def_test_as_type!(value, as_list, i == 11, LinkedList::from_iter(vec![]));
         def_test_as_type!(value, as_set, i == 12, BTreeSet::from_iter(vec![]));
-        def_test_as_type!(value, as_map, i == 13, BTreeMap::from_iter(vec![
-            (Value::Text("a".to_string()), Value::Integer(1)),
-        ]));
+        def_test_as_type!(
+            value,
+            as_map,
+            i == 13,
+            BTreeMap::from_iter(vec![(Value::Text("a".to_string()), Value::Integer(1)),])
+        );
 
         def_test_into_type!(value, into_boolean, i == 1, false);
         def_test_into_type!(value, into_integer, i == 2, 1i64);
@@ -1495,16 +1607,39 @@ fn test_is_and_as_type_helper_functions() {
         def_test_into_type!(value, into_big_integer, i == 3, &max_i64 * &max_i64);
         def_test_into_type!(value, into_ordered_float, i == 4, OrderedFloat(22.22f64));
         def_test_into_type!(value, into_text, i == 5, "hello world".to_string());
-        def_test_into_type!(value, into_symbol, i == 6, symbols::PlainSymbol::plain("$symbol"));
-        def_test_into_type!(value, into_namespaced_symbol, i == 7, symbols::NamespacedSymbol::namespaced("$ns", "$symbol"));
-        def_test_into_type!(value, into_plain_keyword, i == 8, symbols::Keyword::plain("hello"));
-        def_test_into_type!(value, into_namespaced_keyword, i == 9, symbols::Keyword::namespaced("hello", "world"));
+        def_test_into_type!(
+            value,
+            into_symbol,
+            i == 6,
+            symbols::PlainSymbol::plain("$symbol")
+        );
+        def_test_into_type!(
+            value,
+            into_namespaced_symbol,
+            i == 7,
+            symbols::NamespacedSymbol::namespaced("$ns", "$symbol")
+        );
+        def_test_into_type!(
+            value,
+            into_plain_keyword,
+            i == 8,
+            symbols::Keyword::plain("hello")
+        );
+        def_test_into_type!(
+            value,
+            into_namespaced_keyword,
+            i == 9,
+            symbols::Keyword::namespaced("hello", "world")
+        );
         def_test_into_type!(value, into_vector, i == 10, vec![Value::Integer(1)]);
         def_test_into_type!(value, into_list, i == 11, LinkedList::from_iter(vec![]));
         def_test_into_type!(value, into_set, i == 12, BTreeSet::from_iter(vec![]));
-        def_test_into_type!(value, into_map, i == 13, BTreeMap::from_iter(vec![
-            (Value::Text("a".to_string()), Value::Integer(1)),
-        ]));
+        def_test_into_type!(
+            value,
+            into_map,
+            i == 13,
+            BTreeMap::from_iter(vec![(Value::Text("a".to_string()), Value::Integer(1)),])
+        );
     }
 }
 

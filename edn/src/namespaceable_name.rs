@@ -8,25 +8,14 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use std::cmp::{
-    Ord,
-    Ordering,
-    PartialOrd,
-};
+use std::cmp::{Ord, Ordering, PartialOrd};
 
 use std::fmt;
 
 #[cfg(feature = "serde_support")]
-use serde::de::{
-    self,
-    Deserialize,
-    Deserializer
-};
+use serde::de::{self, Deserialize, Deserializer};
 #[cfg(feature = "serde_support")]
-use serde::ser::{
-    Serialize,
-    Serializer,
-};
+use serde::ser::{Serialize, Serializer};
 
 // Data storage for both NamespaceableKeyword and NamespaceableSymbol.
 #[derive(Clone, Eq, Hash, PartialEq)]
@@ -56,7 +45,10 @@ pub struct NamespaceableName {
 
 impl NamespaceableName {
     #[inline]
-    pub fn plain<T>(name: T) -> Self where T: Into<String> {
+    pub fn plain<T>(name: T) -> Self
+    where
+        T: Into<String>,
+    {
         let n = name.into();
         assert!(!n.is_empty(), "Symbols and keywords cannot be unnamed.");
 
@@ -67,14 +59,21 @@ impl NamespaceableName {
     }
 
     #[inline]
-    pub fn namespaced<N, T>(namespace: N, name: T) -> Self where N: AsRef<str>, T: AsRef<str> {
+    pub fn namespaced<N, T>(namespace: N, name: T) -> Self
+    where
+        N: AsRef<str>,
+        T: AsRef<str>,
+    {
         let n = name.as_ref();
         let ns = namespace.as_ref();
 
         // Note: These invariants are not required for safety. That is, if we
         // decide to allow these we can safely remove them.
         assert!(!n.is_empty(), "Symbols and keywords cannot be unnamed.");
-        assert!(!ns.is_empty(), "Symbols and keywords cannot have an empty non-null namespace.");
+        assert!(
+            !ns.is_empty(),
+            "Symbols and keywords cannot have an empty non-null namespace."
+        );
 
         let mut dest = String::with_capacity(n.len() + ns.len());
 
@@ -90,7 +89,11 @@ impl NamespaceableName {
         }
     }
 
-    fn new<N, T>(namespace: Option<N>, name: T) -> Self where N: AsRef<str>, T: AsRef<str> {
+    fn new<N, T>(namespace: Option<N>, name: T) -> Self
+    where
+        N: AsRef<str>,
+        T: AsRef<str>,
+    {
         if let Some(ns) = namespace {
             Self::namespaced(ns, name)
         } else {
@@ -143,11 +146,12 @@ impl NamespaceableName {
     #[inline]
     pub fn components<'a>(&'a self) -> (&'a str, &'a str) {
         if self.boundary > 0 {
-            (&self.components[0..self.boundary],
-             &self.components[(self.boundary + 1)..])
+            (
+                &self.components[0..self.boundary],
+                &self.components[(self.boundary + 1)..],
+            )
         } else {
-            (&self.components[0..0],
-             &self.components)
+            (&self.components[0..0], &self.components)
         }
     }
 }
@@ -163,7 +167,7 @@ impl PartialOrd for NamespaceableName {
             (_, _) => {
                 // Just use a lexicographic ordering.
                 self.components().partial_cmp(&other.components())
-            },
+            }
         }
     }
 }
@@ -178,9 +182,9 @@ impl Ord for NamespaceableName {
 impl fmt::Debug for NamespaceableName {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("NamespaceableName")
-           .field("namespace", &self.namespace())
-           .field("name", &self.name())
-           .finish()
+            .field("namespace", &self.namespace())
+            .field("name", &self.name())
+            .finish()
     }
 }
 
@@ -210,14 +214,19 @@ struct SerializedNamespaceableName<'a> {
 
 #[cfg(feature = "serde_support")]
 impl<'de> Deserialize<'de> for NamespaceableName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
         let separated = SerializedNamespaceableName::deserialize(deserializer)?;
         if separated.name.len() == 0 {
             return Err(de::Error::custom("Empty name in keyword or symbol"));
         }
         if let Some(ns) = separated.namespace {
             if ns.len() == 0 {
-                Err(de::Error::custom("Empty but present namespace in keyword or symbol"))
+                Err(de::Error::custom(
+                    "Empty but present namespace in keyword or symbol",
+                ))
             } else {
                 Ok(NamespaceableName::namespaced(ns, separated.name))
             }
@@ -229,7 +238,10 @@ impl<'de> Deserialize<'de> for NamespaceableName {
 
 #[cfg(feature = "serde_support")]
 impl Serialize for NamespaceableName {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         let ser = SerializedNamespaceableName {
             namespace: self.namespace(),
             name: self.name(),
@@ -245,12 +257,18 @@ mod test {
 
     #[test]
     fn test_new_invariants_maintained() {
-        assert!(panic::catch_unwind(|| NamespaceableName::namespaced("", "foo")).is_err(),
-                "Empty namespace should panic");
-        assert!(panic::catch_unwind(|| NamespaceableName::namespaced("foo", "")).is_err(),
-                "Empty name should panic");
-        assert!(panic::catch_unwind(|| NamespaceableName::namespaced("", "")).is_err(),
-                "Should panic if both fields are empty");
+        assert!(
+            panic::catch_unwind(|| NamespaceableName::namespaced("", "foo")).is_err(),
+            "Empty namespace should panic"
+        );
+        assert!(
+            panic::catch_unwind(|| NamespaceableName::namespaced("foo", "")).is_err(),
+            "Empty name should panic"
+        );
+        assert!(
+            panic::catch_unwind(|| NamespaceableName::namespaced("", "")).is_err(),
+            "Should panic if both fields are empty"
+        );
     }
 
     #[test]
@@ -286,19 +304,22 @@ mod test {
             n3.clone(),
             n2.clone(),
             n1.clone(),
-            n4.clone()
+            n4.clone(),
         ];
 
         arr.sort();
 
-        assert_eq!(arr, [
-            n0.clone(),
-            n2.clone(),
-            n1.clone(),
-            n3.clone(),
-            n4.clone(),
-            n5.clone(),
-            n6.clone(),
-        ]);
+        assert_eq!(
+            arr,
+            [
+                n0.clone(),
+                n2.clone(),
+                n1.clone(),
+                n3.clone(),
+                n4.clone(),
+                n5.clone(),
+                n6.clone(),
+            ]
+        );
     }
 }

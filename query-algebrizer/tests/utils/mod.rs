@@ -13,31 +13,16 @@
 // this module will get warnings otherwise).
 #![allow(dead_code)]
 
-use core_traits::{
-    Attribute,
-    Entid,
-    ValueType,
-};
+use core_traits::{Attribute, Entid, ValueType};
 
-use mentat_core::{
-    Schema,
-};
+use mentat_core::Schema;
 
-use edn::query::{
-    Keyword,
-};
+use edn::query::Keyword;
 
-use query_algebrizer_traits::errors::{
-    AlgebrizerError,
-};
+use query_algebrizer_traits::errors::AlgebrizerError;
 
 use mentat_query_algebrizer::{
-    ConjoiningClauses,
-    Known,
-    QueryInputs,
-    algebrize,
-    algebrize_with_inputs,
-    parse_find_string,
+    algebrize, algebrize_with_inputs, parse_find_string, ConjoiningClauses, Known, QueryInputs,
 };
 
 // Common utility functions used in multiple test files.
@@ -61,7 +46,7 @@ impl SchemaBuilder {
     pub fn new() -> SchemaBuilder {
         SchemaBuilder {
             schema: Schema::default(),
-            counter: 65
+            counter: 65,
         }
     }
 
@@ -72,18 +57,24 @@ impl SchemaBuilder {
         self
     }
 
-    pub fn define_simple_attr<T>(self,
-                                 keyword_ns: T,
-                                 keyword_name: T,
-                                 value_type: ValueType,
-                                 multival: bool) -> Self
-        where T: AsRef<str>
+    pub fn define_simple_attr<T>(
+        self,
+        keyword_ns: T,
+        keyword_name: T,
+        value_type: ValueType,
+        multival: bool,
+    ) -> Self
+    where
+        T: AsRef<str>,
     {
-        self.define_attr(Keyword::namespaced(keyword_ns, keyword_name), Attribute {
-            value_type,
-            multival,
-            ..Default::default()
-        })
+        self.define_attr(
+            Keyword::namespaced(keyword_ns, keyword_name),
+            Attribute {
+                value_type,
+                multival,
+                ..Default::default()
+            },
+        )
     }
 }
 
@@ -99,10 +90,14 @@ pub fn bails_with_inputs(known: Known, input: &str, inputs: QueryInputs) -> Alge
 
 pub fn alg(known: Known, input: &str) -> ConjoiningClauses {
     let parsed = parse_find_string(input).expect("query input to have parsed");
-    algebrize(known, parsed).expect("algebrizing to have succeeded").cc
+    algebrize(known, parsed)
+        .expect("algebrizing to have succeeded")
+        .cc
 }
 
 pub fn alg_with_inputs(known: Known, input: &str, inputs: QueryInputs) -> ConjoiningClauses {
     let parsed = parse_find_string(input).expect("query input to have parsed");
-    algebrize_with_inputs(known, parsed, 0, inputs).expect("algebrizing to have succeeded").cc
+    algebrize_with_inputs(known, parsed, 0, inputs)
+        .expect("algebrizing to have succeeded")
+        .cc
 }

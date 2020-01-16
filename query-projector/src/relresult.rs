@@ -8,10 +8,7 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use core_traits::{
-    Binding,
-    TypedValue,
-};
+use core_traits::{Binding, TypedValue};
 
 /// The result you get from a 'rel' query, like:
 ///
@@ -80,8 +77,12 @@ fn test_rel_result() {
     };
     let two_by_two = StructuredRelResult {
         width: 2,
-        values: vec![TypedValue::Long(5).into(), TypedValue::Boolean(true).into(),
-                     TypedValue::Long(-2).into(), TypedValue::Boolean(false).into()],
+        values: vec![
+            TypedValue::Long(5).into(),
+            TypedValue::Boolean(true).into(),
+            TypedValue::Long(-2).into(),
+            TypedValue::Boolean(false).into(),
+        ],
     };
 
     assert!(empty.is_empty());
@@ -96,13 +97,40 @@ fn test_rel_result() {
     assert_eq!(unit.row(1), None);
     assert_eq!(two_by_two.row(2), None);
 
-    assert_eq!(unit.row(0), Some(vec![TypedValue::Long(5).into()].as_slice()));
-    assert_eq!(two_by_two.row(0), Some(vec![TypedValue::Long(5).into(), TypedValue::Boolean(true).into()].as_slice()));
-    assert_eq!(two_by_two.row(1), Some(vec![TypedValue::Long(-2).into(), TypedValue::Boolean(false).into()].as_slice()));
+    assert_eq!(
+        unit.row(0),
+        Some(vec![TypedValue::Long(5).into()].as_slice())
+    );
+    assert_eq!(
+        two_by_two.row(0),
+        Some(vec![TypedValue::Long(5).into(), TypedValue::Boolean(true).into()].as_slice())
+    );
+    assert_eq!(
+        two_by_two.row(1),
+        Some(
+            vec![
+                TypedValue::Long(-2).into(),
+                TypedValue::Boolean(false).into()
+            ]
+            .as_slice()
+        )
+    );
 
     let mut rr = two_by_two.rows();
-    assert_eq!(rr.next(), Some(vec![TypedValue::Long(5).into(), TypedValue::Boolean(true).into()].as_slice()));
-    assert_eq!(rr.next(), Some(vec![TypedValue::Long(-2).into(), TypedValue::Boolean(false).into()].as_slice()));
+    assert_eq!(
+        rr.next(),
+        Some(vec![TypedValue::Long(5).into(), TypedValue::Boolean(true).into()].as_slice())
+    );
+    assert_eq!(
+        rr.next(),
+        Some(
+            vec![
+                TypedValue::Long(-2).into(),
+                TypedValue::Boolean(false).into()
+            ]
+            .as_slice()
+        )
+    );
     assert_eq!(rr.next(), None);
 }
 
@@ -115,7 +143,10 @@ impl From<Vec<Vec<TypedValue>>> for RelResult<Binding> {
             let width = src.get(0).map(|r| r.len()).unwrap_or(0);
             RelResult {
                 width: width,
-                values: src.into_iter().flat_map(|r| r.into_iter().map(|v| v.into())).collect(),
+                values: src
+                    .into_iter()
+                    .flat_map(|r| r.into_iter().map(|v| v.into()))
+                    .collect(),
             }
         }
     }

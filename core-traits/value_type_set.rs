@@ -8,13 +8,9 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use enum_set::{
-    EnumSet,
-};
+use enum_set::EnumSet;
 
-use ::{
-    ValueType,
-};
+use ValueType;
 
 trait EnumSetExtensions<T: ::enum_set::CLike + Clone> {
     /// Return a set containing both `x` and `y`.
@@ -40,7 +36,6 @@ impl<T: ::enum_set::CLike + Clone> EnumSetExtensions<T> for EnumSet<T> {
         o
     }
 }
-
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ValueTypeSet(pub EnumSet<ValueType>);

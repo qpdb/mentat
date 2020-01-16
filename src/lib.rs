@@ -8,76 +8,28 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-extern crate failure;
-
 #[macro_use]
 extern crate lazy_static;
 
-extern crate rusqlite;
+pub use edn;
 
-extern crate uuid;
-
-pub extern crate edn;
-extern crate mentat_core;
 #[macro_use]
 extern crate core_traits;
-extern crate mentat_db;
-extern crate db_traits;
-extern crate mentat_query_algebrizer;
-extern crate query_algebrizer_traits;
-extern crate mentat_query_projector;
-extern crate query_projector_traits;
-extern crate mentat_query_pull;
-extern crate query_pull_traits;
-extern crate sql_traits;
-extern crate mentat_sql;
-extern crate public_traits;
-extern crate mentat_transaction;
-
-#[cfg(feature = "syncable")]
-extern crate mentat_tolstoy;
-
-#[cfg(feature = "syncable")]
-extern crate tolstoy_traits;
 
 pub use core_traits::{
-    Attribute,
-    Binding,
-    Entid,
-    KnownEntid,
-    StructuredMap,
-    TypedValue,
-    ValueType,
-    now,
+    now, Attribute, Binding, Entid, KnownEntid, StructuredMap, TypedValue, ValueType,
 };
 
-pub use mentat_core::{
-    DateTime,
-    HasSchema,
-    Keyword,
-    Schema,
-    TxReport,
-    Utc,
-    Uuid,
-};
+pub use mentat_core::{DateTime, HasSchema, Keyword, Schema, TxReport, Utc, Uuid};
 
-pub use edn::query::{
-    FindSpec,
-};
+pub use edn::query::FindSpec;
 
 pub use mentat_db::{
-    CORE_SCHEMA_VERSION,
-    DB_SCHEMA_CORE,
-    AttributeSet,
-    TxObserver,
-    new_connection,
+    new_connection, AttributeSet, TxObserver, CORE_SCHEMA_VERSION, DB_SCHEMA_CORE,
 };
 
 #[cfg(feature = "sqlcipher")]
-pub use mentat_db::{
-    new_connection_with_key,
-    change_encryption_key,
-};
+pub use mentat_db::{change_encryption_key, new_connection_with_key};
 
 /// Produce the appropriate `Variable` for the provided valid ?-prefixed name.
 /// This lives here because we can't re-export macros:
@@ -130,47 +82,23 @@ macro_rules! kw {
 }
 
 pub use public_traits::errors;
-pub use public_traits::errors::{
-    MentatError,
-    Result,
-};
+pub use public_traits::errors::{MentatError, Result};
 
-pub use edn::{
-    FromMicros,
-    FromMillis,
-    ParseError,
-    ToMicros,
-    ToMillis,
-};
+pub use edn::{FromMicros, FromMillis, ParseError, ToMicros, ToMillis};
+pub use mentat_query_projector::BindingTuple;
 pub use query_algebrizer_traits::errors::AlgebrizerError;
-pub use query_projector_traits::errors::{
-    ProjectorError,
-};
-pub use mentat_query_projector::{
-    BindingTuple,
-};
+pub use query_projector_traits::errors::ProjectorError;
 pub use query_pull_traits::errors::PullError;
 pub use sql_traits::errors::SQLError;
 
-pub use mentat_transaction::{
-    Metadata,
-};
+pub use mentat_transaction::Metadata;
 
-pub use mentat_transaction::query;
 pub use mentat_transaction::entity_builder;
+pub use mentat_transaction::query;
 
 pub use mentat_transaction::query::{
-    IntoResult,
-    PlainSymbol,
-    QueryExecutionResult,
-    QueryExplanation,
-    QueryInputs,
-    QueryOutput,
-    QueryPlanStep,
-    QueryResults,
-    RelResult,
-    Variable,
-    q_once,
+    q_once, IntoResult, PlainSymbol, QueryExecutionResult, QueryExplanation, QueryInputs,
+    QueryOutput, QueryPlanStep, QueryResults, RelResult, Variable,
 };
 
 pub mod conn;
@@ -182,39 +110,23 @@ pub mod vocabulary;
 mod sync;
 
 #[cfg(feature = "syncable")]
-pub use sync::{
-    Syncable,
-};
+pub use sync::Syncable;
 
 #[cfg(feature = "syncable")]
-pub use mentat_tolstoy::{
-    SyncReport,
-};
+pub use mentat_tolstoy::SyncReport;
 
-pub use query_builder::{
-    QueryBuilder,
-};
+pub use query_builder::QueryBuilder;
 
-pub use conn::{
-    Conn,
-};
+pub use conn::Conn;
 
-pub use mentat_transaction::{
-    CacheAction,
-    CacheDirection,
-    InProgress,
-    Pullable,
-    Queryable,
-};
+pub use mentat_transaction::{CacheAction, CacheDirection, InProgress, Pullable, Queryable};
 
-pub use store::{
-    Store,
-};
+pub use store::Store;
 
 #[cfg(test)]
 mod tests {
-    use edn::symbols::Keyword;
     use super::*;
+    use edn::symbols::Keyword;
 
     #[test]
     fn can_import_edn() {
@@ -224,9 +136,18 @@ mod tests {
     #[test]
     fn test_kw() {
         assert_eq!(kw!(:foo/bar), Keyword::namespaced("foo", "bar"));
-        assert_eq!(kw!(:org.mozilla.foo/bar_baz), Keyword::namespaced("org.mozilla.foo", "bar_baz"));
-        assert_eq!(kw!(:_foo_/_bar_._baz_), Keyword::namespaced("_foo_", "_bar_._baz_"));
-        assert_eq!(kw!(:_org_._mozilla_._foo_/_bar_._baz_), Keyword::namespaced("_org_._mozilla_._foo_", "_bar_._baz_"));
+        assert_eq!(
+            kw!(:org.mozilla.foo/bar_baz),
+            Keyword::namespaced("org.mozilla.foo", "bar_baz")
+        );
+        assert_eq!(
+            kw!(:_foo_/_bar_._baz_),
+            Keyword::namespaced("_foo_", "_bar_._baz_")
+        );
+        assert_eq!(
+            kw!(:_org_._mozilla_._foo_/_bar_._baz_),
+            Keyword::namespaced("_org_._mozilla_._foo_", "_bar_._baz_")
+        );
     }
 
     #[test]

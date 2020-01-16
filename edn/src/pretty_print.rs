@@ -8,15 +8,13 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use chrono::{
-    SecondsFormat,
-};
+use chrono::SecondsFormat;
 
 use itertools::Itertools;
 use pretty;
 
-use std::io;
 use std::borrow::Cow;
+use std::io;
 
 use types::Value;
 
@@ -29,7 +27,10 @@ impl Value {
     }
 
     /// Write a pretty representation of this `Value` to the given writer.
-    fn write_pretty<W>(&self, width: usize, out: &mut W) -> Result<(), io::Error> where W: io::Write {
+    fn write_pretty<W>(&self, width: usize, out: &mut W) -> Result<(), io::Error>
+    where
+        W: io::Write,
+    {
         self.as_doc(&pretty::BoxAllocator).1.render(width, out)
     }
 
@@ -41,28 +42,50 @@ impl Value {
     /// [1,
     ///  2,
     ///  3].
-    fn bracket<'a, A, T, I>(&'a self, allocator: &'a A, open: T, vs: I, close: T) -> pretty::DocBuilder<'a, A>
-    where A: pretty::DocAllocator<'a>, T: Into<Cow<'a, str>>, I: IntoIterator<Item=&'a Value> {
+    fn bracket<'a, A, T, I>(
+        &'a self,
+        allocator: &'a A,
+        open: T,
+        vs: I,
+        close: T,
+    ) -> pretty::DocBuilder<'a, A>
+    where
+        A: pretty::DocAllocator<'a>,
+        <A as pretty::DocAllocator<'a>>::Doc: std::clone::Clone,
+        T: Into<Cow<'a, str>>,
+        I: IntoIterator<Item = &'a Value>,
+    {
         let open = open.into();
-        let n = open.len();
-        let i = vs.into_iter().map(|v| v.as_doc(allocator)).intersperse(allocator.space());
-        allocator.text(open)
+        let n = open.len() as isize;
+        let i = vs
+            .into_iter()
+            .map(|v| v.as_doc(allocator))
+            .intersperse(allocator.space());
+        allocator
+            .text(open)
             .append(allocator.concat(i).nest(n))
             .append(allocator.text(close))
             .group()
     }
 
     /// Recursively traverses this value and creates a pretty.rs document.
-    /// This pretty printing implementation is optimized for edn queries
+    /// A pretty printing implementation for edn queries optimized for
     /// readability and limited whitespace expansion.
     fn as_doc<'a, A>(&'a self, pp: &'a A) -> pretty::DocBuilder<'a, A>
-        where A: pretty::DocAllocator<'a> {
+    where
+        A: pretty::DocAllocator<'a>,
+        <A as pretty::DocAllocator<'a>>::Doc: std::clone::Clone,
+    {
         match *self {
             Value::Vector(ref vs) => self.bracket(pp, "[", vs, "]"),
             Value::List(ref vs) => self.bracket(pp, "(", vs, ")"),
             Value::Set(ref vs) => self.bracket(pp, "#{", vs, "}"),
             Value::Map(ref vs) => {
-                let xs = vs.iter().rev().map(|(k, v)| k.as_doc(pp).append(pp.space()).append(v.as_doc(pp)).group()).intersperse(pp.space());
+                let xs = vs
+                    .iter()
+                    .rev()
+                    .map(|(k, v)| k.as_doc(pp).append(pp.space()).append(v.as_doc(pp)).group())
+                    .intersperse(pp.space());
                 pp.text("{")
                     .append(pp.concat(xs).nest(1))
                     .append(pp.text("}"))
@@ -72,9 +95,15 @@ impl Value {
             Value::PlainSymbol(ref v) => pp.text(v.to_string()),
             Value::Keyword(ref v) => pp.text(v.to_string()),
             Value::Text(ref v) => pp.text("\"").append(v.as_str()).append("\""),
-            Value::Uuid(ref u) => pp.text("#uuid \"").append(u.hyphenated().to_string()).append("\""),
-            Value::Instant(ref v) => pp.text("#inst \"").append(v.to_rfc3339_opts(SecondsFormat::AutoSi, true)).append("\""),
-            _ => pp.text(self.to_string())
+            Value::Uuid(ref u) => pp
+                .text("#uuid \"")
+                .append(u.to_hyphenated().to_string())
+                .append("\""),
+            Value::Instant(ref v) => pp
+                .text("#inst \"")
+                .append(v.to_rfc3339_opts(SecondsFormat::AutoSi, true))
+                .append("\""),
+            _ => pp.text(self.to_string()),
         }
     }
 }
@@ -105,13 +134,16 @@ mod test {
         let data = parse::value(string).unwrap().without_spans();
 
         assert_eq!(data.to_pretty(20).unwrap(), "[1 2 3 4 5 6]");
-        assert_eq!(data.to_pretty(10).unwrap(), "\
+        assert_eq!(
+            data.to_pretty(10).unwrap(),
+            "\
 [1
  2
  3
  4
  5
- 6]");
+ 6]"
+        );
     }
 
     #[test]
@@ -120,10 +152,13 @@ mod test {
         let data = parse::value(string).unwrap().without_spans();
 
         assert_eq!(data.to_pretty(20).unwrap(), "{:a 1 :b 2 :c 3}");
-        assert_eq!(data.to_pretty(10).unwrap(), "\
+        assert_eq!(
+            data.to_pretty(10).unwrap(),
+            "\
 {:a 1
  :b 2
- :c 3}");
+ :c 3}"
+        );
     }
 
     #[test]
@@ -131,7 +166,9 @@ mod test {
         let string = "[ 1 2 ( 3.14 ) #{ 4N } { foo/bar 42 :baz/boz 43 } [ ] :five :six/seven eight nine/ten true false nil #f NaN #f -Infinity #f +Infinity ]";
         let data = parse::value(string).unwrap().without_spans();
 
-        assert_eq!(data.to_pretty(40).unwrap(), "\
+        assert_eq!(
+            data.to_pretty(40).unwrap(),
+            "\
 [1
  2
  (3.14)
@@ -147,7 +184,8 @@ mod test {
  nil
  #f NaN
  #f -Infinity
- #f +Infinity]");
+ #f +Infinity]"
+        );
     }
 
     #[test]
@@ -155,7 +193,9 @@ mod test {
         let string = "[:find ?id ?bar ?baz :in $ :where [?id :session/keyword-foo ?symbol1 ?symbol2 \"some string\"] [?tx :db/tx ?ts]]";
         let data = parse::value(string).unwrap().without_spans();
 
-        assert_eq!(data.to_pretty(40).unwrap(), "\
+        assert_eq!(
+            data.to_pretty(40).unwrap(),
+            "\
 [:find
  ?id
  ?bar
@@ -168,7 +208,8 @@ mod test {
   ?symbol1
   ?symbol2
   \"some string\"]
- [?tx :db/tx ?ts]]");
+ [?tx :db/tx ?ts]]"
+        );
     }
 
     #[test]
@@ -176,7 +217,9 @@ mod test {
         let string = "[:find [?id ?bar ?baz] :in [$] :where [?id :session/keyword-foo ?symbol1 ?symbol2 \"some string\"] [?tx :db/tx ?ts] (not-join [?id] [?id :session/keyword-bar _])]";
         let data = parse::value(string).unwrap().without_spans();
 
-        assert_eq!(data.to_pretty(40).unwrap(), "\
+        assert_eq!(
+            data.to_pretty(40).unwrap(),
+            "\
 [:find
  [?id ?bar ?baz]
  :in
@@ -190,6 +233,7 @@ mod test {
  [?tx :db/tx ?ts]
  (not-join
   [?id]
-  [?id :session/keyword-bar _])]");
+  [?id :session/keyword-bar _])]"
+        );
     }
 }

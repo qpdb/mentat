@@ -10,47 +10,22 @@
 
 use std::rc::Rc;
 
-use std::iter::{
-    once,
+use std::iter::once;
+
+use mentat_query_pull::Puller;
+
+use core_traits::Entid;
+
+use {
+    rusqlite, Binding, CombinedProjection, Element, FindSpec, ProjectedElements, QueryOutput,
+    QueryResults, RelResult, Row, Rows, Schema, TypedIndex,
 };
 
-use mentat_query_pull::{
-    Puller,
-};
+use pull::{PullConsumer, PullOperation, PullTemplate};
 
-use core_traits::{
-    Entid,
-};
+use query_projector_traits::errors::Result;
 
-use ::{
-    Binding,
-    CombinedProjection,
-    Element,
-    FindSpec,
-    ProjectedElements,
-    QueryOutput,
-    QueryResults,
-    RelResult,
-    Row,
-    Rows,
-    Schema,
-    TypedIndex,
-    rusqlite,
-};
-
-use ::pull::{
-    PullConsumer,
-    PullOperation,
-    PullTemplate,
-};
-
-use query_projector_traits::errors::{
-    Result,
-};
-
-use super::{
-    Projector,
-};
+use super::Projector;
 
 pub(crate) struct ScalarTwoStagePullProjector {
     spec: Rc<FindSpec>,
@@ -61,34 +36,53 @@ pub(crate) struct ScalarTwoStagePullProjector {
 // The only output is the pull expression, and so we can directly supply the projected entity
 // to the pull SQL.
 impl ScalarTwoStagePullProjector {
-    fn with_template(schema: &Schema, spec: Rc<FindSpec>, pull: PullOperation) -> Result<ScalarTwoStagePullProjector> {
+    fn with_template(
+        schema: &Schema,
+        spec: Rc<FindSpec>,
+        pull: PullOperation,
+    ) -> Result<ScalarTwoStagePullProjector> {
         Ok(ScalarTwoStagePullProjector {
             spec: spec,
             puller: Puller::prepare(schema, pull.0.clone())?,
         })
     }
 
-    pub(crate) fn combine(schema: &Schema, spec: Rc<FindSpec>, mut elements: ProjectedElements) -> Result<CombinedProjection> {
+    pub(crate) fn combine(
+        schema: &Schema,
+        spec: Rc<FindSpec>,
+        mut elements: ProjectedElements,
+    ) -> Result<CombinedProjection> {
         let pull = elements.pulls.pop().expect("Expected a single pull");
-        let projector = Box::new(ScalarTwoStagePullProjector::with_template(schema, spec, pull.op)?);
+        let projector = Box::new(ScalarTwoStagePullProjector::with_template(
+            schema, spec, pull.op,
+        )?);
         let distinct = false;
         elements.combine(projector, distinct)
     }
 }
 
 impl Projector for ScalarTwoStagePullProjector {
-    fn project<'stmt, 's>(&self, schema: &Schema, sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
+    fn project<'stmt, 's>(
+        &self,
+        schema: &Schema,
+        sqlite: &'s rusqlite::Connection,
+        mut rows: Rows<'stmt>,
+    ) -> Result<QueryOutput> {
         // Scalar is pretty straightforward -- zero or one entity, do the pull directly.
-        let results =
-            if let Some(r) = rows.next() {
-                let row = r?;
-                let entity: Entid = row.get(0);          // This will always be 0 and a ref.
-                let bindings = self.puller.pull(schema, sqlite, once(entity))?;
-                let m = Binding::Map(bindings.get(&entity).cloned().unwrap_or_else(Default::default));
-                QueryResults::Scalar(Some(m))
-            } else {
-                QueryResults::Scalar(None)
-            };
+        let results = if let Some(r) = rows.next().unwrap() {
+            let row = r;
+            let entity: Entid = row.get(0).unwrap(); // This will always be 0 and a ref.
+            let bindings = self.puller.pull(schema, sqlite, once(entity))?;
+            let m = Binding::Map(
+                bindings
+                    .get(&entity)
+                    .cloned()
+                    .unwrap_or_else(Default::default),
+            );
+            QueryResults::Scalar(Some(m))
+        } else {
+            QueryResults::Scalar(None)
+        };
 
         Ok(QueryOutput {
             spec: self.spec.clone(),
@@ -96,7 +90,7 @@ impl Projector for ScalarTwoStagePullProjector {
         })
     }
 
-    fn columns<'s>(&'s self) -> Box<Iterator<Item=&Element> + 's> {
+    fn columns<'s>(&'s self) -> Box<dyn Iterator<Item = &Element> + 's> {
         self.spec.columns()
     }
 }
@@ -110,7 +104,12 @@ pub(crate) struct TupleTwoStagePullProjector {
 }
 
 impl TupleTwoStagePullProjector {
-    fn with_templates(spec: Rc<FindSpec>, len: usize, templates: Vec<TypedIndex>, pulls: Vec<PullTemplate>) -> TupleTwoStagePullProjector {
+    fn with_templates(
+        spec: Rc<FindSpec>,
+        len: usize,
+        templates: Vec<TypedIndex>,
+        pulls: Vec<PullTemplate>,
+    ) -> TupleTwoStagePullProjector {
         TupleTwoStagePullProjector {
             spec: spec,
             len: len,
@@ -120,65 +119,79 @@ impl TupleTwoStagePullProjector {
     }
 
     // This is exactly the same as for rel.
-    fn collect_bindings<'a, 'stmt>(&self, row: Row<'a, 'stmt>) -> Result<Vec<Binding>> {
+    fn collect_bindings<'a>(&self, row: &Row<'a>) -> Result<Vec<Binding>> {
         // There will be at least as many SQL columns as Datalog columns.
         // gte 'cos we might be querying extra columns for ordering.
         // The templates will take care of ignoring columns.
-        assert!(row.column_count() >= self.len as i32);
+        assert!(row.column_count() >= self.len);
         self.templates
             .iter()
-            .map(|ti| ti.lookup(&row))
+            .map(|ti| ti.lookup(row))
             .collect::<Result<Vec<Binding>>>()
     }
 
-    pub(crate) fn combine(spec: Rc<FindSpec>, column_count: usize, mut elements: ProjectedElements) -> Result<CombinedProjection> {
-        let projector = Box::new(TupleTwoStagePullProjector::with_templates(spec, column_count, elements.take_templates(), elements.take_pulls()));
+    pub(crate) fn combine(
+        spec: Rc<FindSpec>,
+        column_count: usize,
+        mut elements: ProjectedElements,
+    ) -> Result<CombinedProjection> {
+        let projector = Box::new(TupleTwoStagePullProjector::with_templates(
+            spec,
+            column_count,
+            elements.take_templates(),
+            elements.take_pulls(),
+        ));
         let distinct = false;
         elements.combine(projector, distinct)
     }
 }
 
 impl Projector for TupleTwoStagePullProjector {
-    fn project<'stmt, 's>(&self, schema: &Schema, sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
-        let results =
-            if let Some(r) = rows.next() {
-                let row = r?;
+    fn project<'stmt, 's>(
+        &self,
+        schema: &Schema,
+        sqlite: &'s rusqlite::Connection,
+        mut rows: Rows<'stmt>,
+    ) -> Result<QueryOutput> {
+        let results = if let Some(r) = rows.next().unwrap() {
+            let row = r;
 
-                // Keeping the compiler happy.
-                let pull_consumers: Result<Vec<PullConsumer>> = self.pulls
-                                                                    .iter()
-                                                                    .map(|op| PullConsumer::for_template(schema, op))
-                                                                    .collect();
-                let mut pull_consumers = pull_consumers?;
+            // Keeping the compiler happy.
+            let pull_consumers: Result<Vec<PullConsumer>> = self
+                .pulls
+                .iter()
+                .map(|op| PullConsumer::for_template(schema, op))
+                .collect();
+            let mut pull_consumers = pull_consumers?;
 
-                // Collect the usual bindings and accumulate entity IDs for pull.
-                for mut p in pull_consumers.iter_mut() {
-                    p.collect_entity(&row);
-                }
+            // Collect the usual bindings and accumulate entity IDs for pull.
+            for p in pull_consumers.iter_mut() {
+                p.collect_entity(&row);
+            }
 
-                let mut bindings = self.collect_bindings(row)?;
+            let mut bindings = self.collect_bindings(row)?;
 
-                // Run the pull expressions for the collected IDs.
-                for mut p in pull_consumers.iter_mut() {
-                    p.pull(sqlite)?;
-                }
+            // Run the pull expressions for the collected IDs.
+            for p in pull_consumers.iter_mut() {
+                p.pull(sqlite)?;
+            }
 
-                // Expand the pull expressions back into the results vector.
-                for p in pull_consumers.into_iter() {
-                    p.expand(&mut bindings);
-                }
+            // Expand the pull expressions back into the results vector.
+            for p in pull_consumers.into_iter() {
+                p.expand(&mut bindings);
+            }
 
-                QueryResults::Tuple(Some(bindings))
-            } else {
-                QueryResults::Tuple(None)
-            };
+            QueryResults::Tuple(Some(bindings))
+        } else {
+            QueryResults::Tuple(None)
+        };
         Ok(QueryOutput {
             spec: self.spec.clone(),
             results: results,
         })
     }
 
-    fn columns<'s>(&'s self) -> Box<Iterator<Item=&Element> + 's> {
+    fn columns<'s>(&'s self) -> Box<dyn Iterator<Item = &Element> + 's> {
         self.spec.columns()
     }
 }
@@ -195,7 +208,12 @@ pub(crate) struct RelTwoStagePullProjector {
 }
 
 impl RelTwoStagePullProjector {
-    fn with_templates(spec: Rc<FindSpec>, len: usize, templates: Vec<TypedIndex>, pulls: Vec<PullTemplate>) -> RelTwoStagePullProjector {
+    fn with_templates(
+        spec: Rc<FindSpec>,
+        len: usize,
+        templates: Vec<TypedIndex>,
+        pulls: Vec<PullTemplate>,
+    ) -> RelTwoStagePullProjector {
         RelTwoStagePullProjector {
             spec: spec,
             len: len,
@@ -204,15 +222,13 @@ impl RelTwoStagePullProjector {
         }
     }
 
-    fn collect_bindings_into<'a, 'stmt, 'out>(&self, row: Row<'a, 'stmt>, out: &mut Vec<Binding>) -> Result<()> {
+    fn collect_bindings_into<'a>(&self, row: &Row<'a>, out: &mut Vec<Binding>) -> Result<()> {
         // There will be at least as many SQL columns as Datalog columns.
         // gte 'cos we might be querying extra columns for ordering.
         // The templates will take care of ignoring columns.
-        assert!(row.column_count() >= self.len as i32);
+        assert!(row.column_count() >= self.len);
         let mut count = 0;
-        for binding in self.templates
-                           .iter()
-                           .map(|ti| ti.lookup(&row)) {
+        for binding in self.templates.iter().map(|ti| ti.lookup(&row)) {
             out.push(binding?);
             count += 1;
         }
@@ -220,45 +236,60 @@ impl RelTwoStagePullProjector {
         Ok(())
     }
 
-    pub(crate) fn combine(spec: Rc<FindSpec>, column_count: usize, mut elements: ProjectedElements) -> Result<CombinedProjection> {
-        let projector = Box::new(RelTwoStagePullProjector::with_templates(spec, column_count, elements.take_templates(), elements.take_pulls()));
+    pub(crate) fn combine(
+        spec: Rc<FindSpec>,
+        column_count: usize,
+        mut elements: ProjectedElements,
+    ) -> Result<CombinedProjection> {
+        let projector = Box::new(RelTwoStagePullProjector::with_templates(
+            spec,
+            column_count,
+            elements.take_templates(),
+            elements.take_pulls(),
+        ));
 
         // If every column yields only one value, or if this is an aggregate query
         // (because by definition every column in an aggregate query is either
         // aggregated or is a variable _upon which we group_), then don't bother
         // with DISTINCT.
-        let already_distinct = elements.pre_aggregate_projection.is_some() ||
-                               projector.columns().all(|e| e.is_unit());
+        let already_distinct =
+            elements.pre_aggregate_projection.is_some() || projector.columns().all(|e| e.is_unit());
 
         elements.combine(projector, !already_distinct)
     }
 }
 
 impl Projector for RelTwoStagePullProjector {
-    fn project<'stmt, 's>(&self, schema: &Schema, sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
+    fn project<'stmt, 's>(
+        &self,
+        schema: &Schema,
+        sqlite: &'s rusqlite::Connection,
+        mut rows: Rows<'stmt>,
+    ) -> Result<QueryOutput> {
         // Allocate space for five rows to start.
         // This is better than starting off by doubling the buffer a couple of times, and will
         // rapidly grow to support larger query results.
         let width = self.len;
         let mut values: Vec<_> = Vec::with_capacity(5 * width);
 
-        let pull_consumers: Result<Vec<PullConsumer>> = self.pulls
-                                                            .iter()
-                                                            .map(|op| PullConsumer::for_template(schema, op))
-                                                            .collect();
+        let pull_consumers: Result<Vec<PullConsumer>> = self
+            .pulls
+            .iter()
+            .map(|op| PullConsumer::for_template(schema, op))
+            .collect();
         let mut pull_consumers = pull_consumers?;
 
         // Collect the usual bindings and accumulate entity IDs for pull.
-        while let Some(r) = rows.next() {
-            let row = r?;
-            for mut p in pull_consumers.iter_mut() {
+        while let Some(r) = rows.next().unwrap() {
+            let row = r;
+            for p in pull_consumers.iter_mut() {
                 p.collect_entity(&row);
             }
             self.collect_bindings_into(row, &mut values)?;
         }
 
         // Run the pull expressions for the collected IDs.
-        for mut p in pull_consumers.iter_mut() {
+        for p in pull_consumers.iter_mut() {
             p.pull(sqlite)?;
         }
 
@@ -267,7 +298,7 @@ impl Projector for RelTwoStagePullProjector {
             for p in pull_consumers.iter() {
                 p.expand(bindings);
             }
-        };
+        }
 
         Ok(QueryOutput {
             spec: self.spec.clone(),
@@ -275,7 +306,7 @@ impl Projector for RelTwoStagePullProjector {
         })
     }
 
-    fn columns<'s>(&'s self) -> Box<Iterator<Item=&Element> + 's> {
+    fn columns<'s>(&'s self) -> Box<dyn Iterator<Item = &Element> + 's> {
         self.spec.columns()
     }
 }
@@ -295,24 +326,32 @@ impl CollTwoStagePullProjector {
         }
     }
 
-    pub(crate) fn combine(spec: Rc<FindSpec>, mut elements: ProjectedElements) -> Result<CombinedProjection> {
+    pub(crate) fn combine(
+        spec: Rc<FindSpec>,
+        mut elements: ProjectedElements,
+    ) -> Result<CombinedProjection> {
         let pull = elements.pulls.pop().expect("Expected a single pull");
         let projector = Box::new(CollTwoStagePullProjector::with_pull(spec, pull.op));
 
         // If every column yields only one value, or we're grouping by the value,
         // don't bother with DISTINCT. This shouldn't really apply to coll-pull.
-        let already_distinct = elements.pre_aggregate_projection.is_some() ||
-                               projector.columns().all(|e| e.is_unit());
+        let already_distinct =
+            elements.pre_aggregate_projection.is_some() || projector.columns().all(|e| e.is_unit());
         elements.combine(projector, !already_distinct)
     }
 }
 
 impl Projector for CollTwoStagePullProjector {
-    fn project<'stmt, 's>(&self, schema: &Schema, sqlite: &'s rusqlite::Connection, mut rows: Rows<'stmt>) -> Result<QueryOutput> {
+    fn project<'stmt, 's>(
+        &self,
+        schema: &Schema,
+        sqlite: &'s rusqlite::Connection,
+        mut rows: Rows<'stmt>,
+    ) -> Result<QueryOutput> {
         let mut pull_consumer = PullConsumer::for_operation(schema, &self.pull)?;
 
-        while let Some(r) = rows.next() {
-            let row = r?;
+        while let Some(r) = rows.next().unwrap() {
+            let row = r;
             pull_consumer.collect_entity(&row);
         }
 
@@ -328,8 +367,7 @@ impl Projector for CollTwoStagePullProjector {
         })
     }
 
-    fn columns<'s>(&'s self) -> Box<Iterator<Item=&Element> + 's> {
+    fn columns<'s>(&'s self) -> Box<dyn Iterator<Item = &Element> + 's> {
         self.spec.columns()
     }
 }
-

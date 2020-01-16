@@ -9,43 +9,24 @@
 // specific language governing permissions and limitations under the License.
 
 use std::collections::BTreeSet;
-use std::fmt::{
-    Debug,
-    Formatter,
-};
+use std::fmt::{Debug, Formatter};
 
-use core_traits::{
-    Entid,
-    TypedValue,
-    ValueType,
-    ValueTypeSet,
-};
+use core_traits::{Entid, TypedValue, ValueType, ValueTypeSet};
 
-use mentat_core::{
-    ValueRc,
-};
+use mentat_core::ValueRc;
 
-use edn::query::{
-    Direction,
-    FindSpec,
-    Keyword,
-    Limit,
-    Order,
-    SrcVar,
-    Variable,
-    WhereClause,
-};
+use edn::query::{Direction, FindSpec, Keyword, Limit, Order, SrcVar, Variable, WhereClause};
 
 /// This enum models the fixed set of default tables we have -- two
 /// tables and two views -- and computed tables defined in the enclosing CC.
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum DatomsTable {
-    Datoms,             // The non-fulltext datoms table.
-    FulltextValues,     // The virtual table mapping IDs to strings.
-    FulltextDatoms,     // The fulltext-datoms view.
-    AllDatoms,          // Fulltext and non-fulltext datoms.
-    Computed(usize),    // A computed table, tracked elsewhere in the query.
-    Transactions,       // The transactions table, which makes the tx-data log API efficient.
+    Datoms,          // The non-fulltext datoms table.
+    FulltextValues,  // The virtual table mapping IDs to strings.
+    FulltextDatoms,  // The fulltext-datoms view.
+    AllDatoms,       // Fulltext and non-fulltext datoms.
+    Computed(usize), // A computed table, tracked elsewhere in the query.
+    Transactions,    // The transactions table, which makes the tx-data log API efficient.
 }
 
 /// A source of rows that isn't a named table -- typically a subquery or union.
@@ -295,7 +276,8 @@ impl QualifiedAlias {
             Column::Fulltext(_) => None,
             Column::Variable(_) => None,
             Column::Transactions(ref c) => c.associated_type_tag_column().map(Column::Transactions),
-        }.map(|d| QualifiedAlias(self.0.clone(), d))
+        }
+        .map(|d| QualifiedAlias(self.0.clone(), d))
     }
 }
 
@@ -316,19 +298,10 @@ impl Debug for QueryValue {
     fn fmt(&self, f: &mut Formatter) -> ::std::fmt::Result {
         use self::QueryValue::*;
         match self {
-            &Column(ref qa) => {
-                write!(f, "{:?}", qa)
-            },
-            &Entid(ref entid) => {
-                write!(f, "entity({:?})", entid)
-            },
-            &TypedValue(ref typed_value) => {
-                write!(f, "value({:?})", typed_value)
-            },
-            &PrimitiveLong(value) => {
-                write!(f, "primitive({:?})", value)
-            },
-
+            &Column(ref qa) => write!(f, "{:?}", qa),
+            &Entid(ref entid) => write!(f, "entity({:?})", entid),
+            &TypedValue(ref typed_value) => write!(f, "value({:?})", typed_value),
+            &PrimitiveLong(value) => write!(f, "primitive({:?})", value),
         }
     }
 }
@@ -370,25 +343,25 @@ impl Inequality {
     pub fn to_sql_operator(self) -> &'static str {
         use self::Inequality::*;
         match self {
-            LessThan            => "<",
-            LessThanOrEquals    => "<=",
-            GreaterThan         => ">",
+            LessThan => "<",
+            LessThanOrEquals => "<=",
+            GreaterThan => ">",
             GreaterThanOrEquals => ">=",
-            NotEquals           => "<>",
+            NotEquals => "<>",
 
-            Unpermute           => "<",
-            Differ              => "<>",
+            Unpermute => "<",
+            Differ => "<>",
 
-            TxAfter             => ">",
-            TxBefore            => "<",
+            TxAfter => ">",
+            TxBefore => "<",
         }
     }
 
     pub fn from_datalog_operator(s: &str) -> Option<Inequality> {
         match s {
-            "<"  => Some(Inequality::LessThan),
+            "<" => Some(Inequality::LessThan),
             "<=" => Some(Inequality::LessThanOrEquals),
-            ">"  => Some(Inequality::GreaterThan),
+            ">" => Some(Inequality::GreaterThan),
             ">=" => Some(Inequality::GreaterThanOrEquals),
             "!=" => Some(Inequality::NotEquals),
 
@@ -405,21 +378,12 @@ impl Inequality {
     pub fn supported_types(&self) -> ValueTypeSet {
         use self::Inequality::*;
         match self {
-            &LessThan |
-            &LessThanOrEquals |
-            &GreaterThan |
-            &GreaterThanOrEquals |
-            &NotEquals => {
+            &LessThan | &LessThanOrEquals | &GreaterThan | &GreaterThanOrEquals | &NotEquals => {
                 let mut ts = ValueTypeSet::of_numeric_types();
                 ts.insert(ValueType::Instant);
                 ts
-            },
-            &Unpermute |
-            &Differ |
-            &TxAfter |
-            &TxBefore => {
-                ValueTypeSet::of_one(ValueType::Ref)
-            },
+            }
+            &Unpermute | &Differ | &TxAfter | &TxBefore => ValueTypeSet::of_one(ValueType::Ref),
         }
     }
 }
@@ -432,7 +396,7 @@ impl Debug for Inequality {
             &LessThanOrEquals => "<=",
             &GreaterThan => ">",
             &GreaterThanOrEquals => ">=",
-            &NotEquals => "!=",                // Datalog uses !=. SQL uses <>.
+            &NotEquals => "!=", // Datalog uses !=. SQL uses <>.
 
             &Unpermute => "<",
             &Differ => "<>",
@@ -570,51 +534,78 @@ impl Debug for ColumnConstraint {
     fn fmt(&self, f: &mut Formatter) -> ::std::fmt::Result {
         use self::ColumnConstraint::*;
         match self {
-            &Equals(ref qa1, ref thing) => {
-                write!(f, "{:?} = {:?}", qa1, thing)
-            },
+            &Equals(ref qa1, ref thing) => write!(f, "{:?} = {:?}", qa1, thing),
 
-            &Inequality { operator, ref left, ref right } => {
-                write!(f, "{:?} {:?} {:?}", left, operator, right)
-            },
+            &Inequality {
+                operator,
+                ref left,
+                ref right,
+            } => write!(f, "{:?} {:?} {:?}", left, operator, right),
 
-            &Matches(ref qa, ref thing) => {
-                write!(f, "{:?} MATCHES {:?}", qa, thing)
-            },
+            &Matches(ref qa, ref thing) => write!(f, "{:?} MATCHES {:?}", qa, thing),
 
-            &HasTypes { ref value, ref value_types, check_value } => {
+            &HasTypes {
+                ref value,
+                ref value_types,
+                check_value,
+            } => {
                 // This is cludgey, but it's debug code.
                 write!(f, "(")?;
                 for value_type in value_types.iter() {
                     write!(f, "({:?}.value_type_tag = {:?}", value, value_type)?;
-                    if check_value && value_type == ValueType::Double || value_type == ValueType::Long {
-                        write!(f, " AND typeof({:?}) = '{:?}')", value,
-                               if value_type == ValueType::Double { "real" } else { "integer" })?;
+                    if check_value && value_type == ValueType::Double
+                        || value_type == ValueType::Long
+                    {
+                        write!(
+                            f,
+                            " AND typeof({:?}) = '{:?}')",
+                            value,
+                            if value_type == ValueType::Double {
+                                "real"
+                            } else {
+                                "integer"
+                            }
+                        )?;
                     } else {
                         write!(f, ")")?;
                     }
                     write!(f, " OR ")?;
                 }
                 write!(f, "1)")
-            },
-            &NotExists(ref ct) => {
-                write!(f, "NOT EXISTS {:?}", ct)
-            },
+            }
+            &NotExists(ref ct) => write!(f, "NOT EXISTS {:?}", ct),
         }
     }
 }
 
 #[derive(PartialEq, Clone)]
 pub enum EmptyBecause {
-    CachedAttributeHasNoValues { entity: Entid, attr: Entid },
-    CachedAttributeHasNoEntity { value: TypedValue, attr: Entid },
-    ConflictingBindings { var: Variable, existing: TypedValue, desired: TypedValue },
+    CachedAttributeHasNoValues {
+        entity: Entid,
+        attr: Entid,
+    },
+    CachedAttributeHasNoEntity {
+        value: TypedValue,
+        attr: Entid,
+    },
+    ConflictingBindings {
+        var: Variable,
+        existing: TypedValue,
+        desired: TypedValue,
+    },
 
     // A variable is known to be of two conflicting sets of types.
-    TypeMismatch { var: Variable, existing: ValueTypeSet, desired: ValueTypeSet },
+    TypeMismatch {
+        var: Variable,
+        existing: ValueTypeSet,
+        desired: ValueTypeSet,
+    },
 
     // The same, but for non-variables.
-    KnownTypeMismatch { left: ValueTypeSet, right: ValueTypeSet },
+    KnownTypeMismatch {
+        left: ValueTypeSet,
+        right: ValueTypeSet,
+    },
     NoValidTypes(Variable),
     NonAttributeArgument,
     NonInstantArgument,
@@ -627,75 +618,69 @@ pub enum EmptyBecause {
     InvalidAttributeEntid(Entid),
     InvalidBinding(Column, TypedValue),
     ValueTypeMismatch(ValueType, TypedValue),
-    AttributeLookupFailed,         // Catch-all, because the table lookup code is lazy. TODO
+    AttributeLookupFailed, // Catch-all, because the table lookup code is lazy. TODO
 }
 
 impl Debug for EmptyBecause {
     fn fmt(&self, f: &mut Formatter) -> ::std::fmt::Result {
         use self::EmptyBecause::*;
         match self {
-            &CachedAttributeHasNoEntity { ref value, ref attr } => {
-                write!(f, "(?e, {}, {:?}, _) not present in store", attr, value)
-            },
-            &CachedAttributeHasNoValues { ref entity, ref attr } => {
-                write!(f, "({}, {}, ?v, _) not present in store", entity, attr)
-            },
-            &ConflictingBindings { ref var, ref existing, ref desired } => {
-                write!(f, "Var {:?} can't be {:?} because it's already bound to {:?}",
-                       var, desired, existing)
-            },
-            &TypeMismatch { ref var, ref existing, ref desired } => {
-                write!(f, "Type mismatch: {:?} can't be {:?}, because it's already {:?}",
-                       var, desired, existing)
-            },
-            &KnownTypeMismatch { ref left, ref right } => {
-                write!(f, "Type mismatch: {:?} can't be compared to {:?}",
-                       left, right)
-            },
-            &NoValidTypes(ref var) => {
-                write!(f, "Type mismatch: {:?} has no valid types", var)
-            },
-            &NonAttributeArgument => {
-                write!(f, "Non-attribute argument in attribute place")
-            },
-            &NonInstantArgument => {
-                write!(f, "Non-instant argument in instant place")
-            },
-            &NonEntityArgument => {
-                write!(f, "Non-entity argument in entity place")
-            },
-            &NonNumericArgument => {
-                write!(f, "Non-numeric argument in numeric place")
-            },
-            &NonStringFulltextValue => {
-                write!(f, "Non-string argument for fulltext attribute")
-            },
-            &UnresolvedIdent(ref kw) => {
-                write!(f, "Couldn't resolve keyword {}", kw)
-            },
-            &InvalidAttributeIdent(ref kw) => {
-                write!(f, "{} does not name an attribute", kw)
-            },
-            &InvalidAttributeEntid(entid) => {
-                write!(f, "{} is not an attribute", entid)
-            },
-            &NonFulltextAttribute(entid) => {
-                write!(f, "{} is not a fulltext attribute", entid)
-            },
+            &CachedAttributeHasNoEntity {
+                ref value,
+                ref attr,
+            } => write!(f, "(?e, {}, {:?}, _) not present in store", attr, value),
+            &CachedAttributeHasNoValues {
+                ref entity,
+                ref attr,
+            } => write!(f, "({}, {}, ?v, _) not present in store", entity, attr),
+            &ConflictingBindings {
+                ref var,
+                ref existing,
+                ref desired,
+            } => write!(
+                f,
+                "Var {:?} can't be {:?} because it's already bound to {:?}",
+                var, desired, existing
+            ),
+            &TypeMismatch {
+                ref var,
+                ref existing,
+                ref desired,
+            } => write!(
+                f,
+                "Type mismatch: {:?} can't be {:?}, because it's already {:?}",
+                var, desired, existing
+            ),
+            &KnownTypeMismatch {
+                ref left,
+                ref right,
+            } => write!(
+                f,
+                "Type mismatch: {:?} can't be compared to {:?}",
+                left, right
+            ),
+            &NoValidTypes(ref var) => write!(f, "Type mismatch: {:?} has no valid types", var),
+            &NonAttributeArgument => write!(f, "Non-attribute argument in attribute place"),
+            &NonInstantArgument => write!(f, "Non-instant argument in instant place"),
+            &NonEntityArgument => write!(f, "Non-entity argument in entity place"),
+            &NonNumericArgument => write!(f, "Non-numeric argument in numeric place"),
+            &NonStringFulltextValue => write!(f, "Non-string argument for fulltext attribute"),
+            &UnresolvedIdent(ref kw) => write!(f, "Couldn't resolve keyword {}", kw),
+            &InvalidAttributeIdent(ref kw) => write!(f, "{} does not name an attribute", kw),
+            &InvalidAttributeEntid(entid) => write!(f, "{} is not an attribute", entid),
+            &NonFulltextAttribute(entid) => write!(f, "{} is not a fulltext attribute", entid),
             &InvalidBinding(ref column, ref tv) => {
                 write!(f, "{:?} cannot name column {:?}", tv, column)
-            },
-            &ValueTypeMismatch(value_type, ref typed_value) => {
-                write!(f, "Type mismatch: {:?} doesn't match attribute type {:?}",
-                       typed_value, value_type)
-            },
-            &AttributeLookupFailed => {
-                write!(f, "Attribute lookup failed")
-            },
+            }
+            &ValueTypeMismatch(value_type, ref typed_value) => write!(
+                f,
+                "Type mismatch: {:?} doesn't match attribute type {:?}",
+                typed_value, value_type
+            ),
+            &AttributeLookupFailed => write!(f, "Attribute lookup failed"),
         }
     }
 }
-
 
 /// A `FindQuery` represents a valid query to the query algebrizer.
 ///
@@ -720,7 +705,7 @@ pub struct FindQuery {
 pub enum EvolvedNonValuePlace {
     Placeholder,
     Variable(Variable),
-    Entid(Entid),                       // Will always be +ve. See #190.
+    Entid(Entid), // Will always be +ve. See #190.
 }
 
 // TODO: some of these aren't necessary?

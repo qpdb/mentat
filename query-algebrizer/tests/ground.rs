@@ -8,9 +8,9 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
+extern crate core_traits;
 extern crate edn;
 extern crate mentat_core;
-extern crate core_traits;
 extern crate mentat_query_algebrizer;
 extern crate query_algebrizer_traits;
 
@@ -18,40 +18,17 @@ mod utils;
 
 use std::collections::BTreeMap;
 
-use core_traits::{
-    Attribute,
-    ValueType,
-    TypedValue,
-};
+use core_traits::{Attribute, TypedValue, ValueType};
 
-use mentat_core::{
-    Schema,
-};
+use mentat_core::Schema;
 
-use edn::query::{
-    Keyword,
-    PlainSymbol,
-    Variable,
-};
+use edn::query::{Keyword, PlainSymbol, Variable};
 
-use query_algebrizer_traits::errors::{
-    AlgebrizerError,
-    BindingError,
-};
+use query_algebrizer_traits::errors::{AlgebrizerError, BindingError};
 
-use mentat_query_algebrizer::{
-    ComputedTable,
-    Known,
-    QueryInputs,
-};
+use mentat_query_algebrizer::{ComputedTable, Known, QueryInputs};
 
-use utils::{
-    add_attribute,
-    alg,
-    associate_ident,
-    bails,
-    bails_with_inputs,
-};
+use utils::{add_attribute, alg, associate_ident, bails, bails_with_inputs};
 
 fn prepopulated_schema() -> Schema {
     let mut schema = Schema::default();
@@ -60,31 +37,51 @@ fn prepopulated_schema() -> Schema {
     associate_ident(&mut schema, Keyword::namespaced("foo", "parent"), 67);
     associate_ident(&mut schema, Keyword::namespaced("foo", "age"), 68);
     associate_ident(&mut schema, Keyword::namespaced("foo", "height"), 69);
-    add_attribute(&mut schema, 65, Attribute {
-        value_type: ValueType::String,
-        multival: false,
-        ..Default::default()
-    });
-    add_attribute(&mut schema, 66, Attribute {
-        value_type: ValueType::Ref,
-        multival: true,
-        ..Default::default()
-    });
-    add_attribute(&mut schema, 67, Attribute {
-        value_type: ValueType::String,
-        multival: true,
-        ..Default::default()
-    });
-    add_attribute(&mut schema, 68, Attribute {
-        value_type: ValueType::Long,
-        multival: false,
-        ..Default::default()
-    });
-    add_attribute(&mut schema, 69, Attribute {
-        value_type: ValueType::Long,
-        multival: false,
-        ..Default::default()
-    });
+    add_attribute(
+        &mut schema,
+        65,
+        Attribute {
+            value_type: ValueType::String,
+            multival: false,
+            ..Default::default()
+        },
+    );
+    add_attribute(
+        &mut schema,
+        66,
+        Attribute {
+            value_type: ValueType::Ref,
+            multival: true,
+            ..Default::default()
+        },
+    );
+    add_attribute(
+        &mut schema,
+        67,
+        Attribute {
+            value_type: ValueType::String,
+            multival: true,
+            ..Default::default()
+        },
+    );
+    add_attribute(
+        &mut schema,
+        68,
+        Attribute {
+            value_type: ValueType::Long,
+            multival: false,
+            ..Default::default()
+        },
+    );
+    add_attribute(
+        &mut schema,
+        69,
+        Attribute {
+            value_type: ValueType::Long,
+            multival: false,
+            ..Default::default()
+        },
+    );
     schema
 }
 
@@ -126,10 +123,13 @@ fn test_ground_coll_skips_impossible() {
     let known = Known::for_schema(&schema);
     let cc = alg(known, &q);
     assert!(cc.empty_because.is_none());
-    assert_eq!(cc.computed_tables[0], ComputedTable::NamedValues {
-        names: vec![Variable::from_valid_name("?x")],
-        values: vec![TypedValue::Ref(5), TypedValue::Ref(11)],
-    });
+    assert_eq!(
+        cc.computed_tables[0],
+        ComputedTable::NamedValues {
+            names: vec![Variable::from_valid_name("?x")],
+            values: vec![TypedValue::Ref(5), TypedValue::Ref(11)],
+        }
+    );
 }
 
 #[test]
@@ -148,10 +148,21 @@ fn test_ground_rel_skips_impossible() {
     let known = Known::for_schema(&schema);
     let cc = alg(known, &q);
     assert!(cc.empty_because.is_none());
-    assert_eq!(cc.computed_tables[0], ComputedTable::NamedValues {
-        names: vec![Variable::from_valid_name("?x"), Variable::from_valid_name("?p")],
-        values: vec![TypedValue::Ref(5), TypedValue::Ref(7), TypedValue::Ref(11), TypedValue::Ref(12)],
-    });
+    assert_eq!(
+        cc.computed_tables[0],
+        ComputedTable::NamedValues {
+            names: vec![
+                Variable::from_valid_name("?x"),
+                Variable::from_valid_name("?p")
+            ],
+            values: vec![
+                TypedValue::Ref(5),
+                TypedValue::Ref(7),
+                TypedValue::Ref(11),
+                TypedValue::Ref(12)
+            ],
+        }
+    );
 }
 
 #[test]
@@ -186,8 +197,14 @@ fn test_ground_tuple_placeholders() {
     let known = Known::for_schema(&schema);
     let cc = alg(known, &q);
     assert!(cc.empty_because.is_none());
-    assert_eq!(cc.bound_value(&Variable::from_valid_name("?x")), Some(TypedValue::Ref(8)));
-    assert_eq!(cc.bound_value(&Variable::from_valid_name("?p")), Some(TypedValue::Ref(3)));
+    assert_eq!(
+        cc.bound_value(&Variable::from_valid_name("?x")),
+        Some(TypedValue::Ref(8))
+    );
+    assert_eq!(
+        cc.bound_value(&Variable::from_valid_name("?p")),
+        Some(TypedValue::Ref(3))
+    );
 }
 
 #[test]
@@ -197,17 +214,23 @@ fn test_ground_rel_placeholders() {
     let known = Known::for_schema(&schema);
     let cc = alg(known, &q);
     assert!(cc.empty_because.is_none());
-    assert_eq!(cc.computed_tables[0], ComputedTable::NamedValues {
-        names: vec![Variable::from_valid_name("?x"), Variable::from_valid_name("?p")],
-        values: vec![
-            TypedValue::Ref(8),
-            TypedValue::Ref(3),
-            TypedValue::Ref(5),
-            TypedValue::Ref(7),
-            TypedValue::Ref(5),
-            TypedValue::Ref(9),
-        ],
-    });
+    assert_eq!(
+        cc.computed_tables[0],
+        ComputedTable::NamedValues {
+            names: vec![
+                Variable::from_valid_name("?x"),
+                Variable::from_valid_name("?p")
+            ],
+            values: vec![
+                TypedValue::Ref(8),
+                TypedValue::Ref(3),
+                TypedValue::Ref(5),
+                TypedValue::Ref(7),
+                TypedValue::Ref(5),
+                TypedValue::Ref(9),
+            ],
+        }
+    );
 }
 
 // Nothing to do with ground, but while we're here…
@@ -227,8 +250,14 @@ fn test_ground_tuple_infers_types() {
     let known = Known::for_schema(&schema);
     let cc = alg(known, &q);
     assert!(cc.empty_because.is_none());
-    assert_eq!(cc.bound_value(&Variable::from_valid_name("?x")), Some(TypedValue::Ref(8)));
-    assert_eq!(cc.bound_value(&Variable::from_valid_name("?v")), Some(TypedValue::Long(10)));
+    assert_eq!(
+        cc.bound_value(&Variable::from_valid_name("?x")),
+        Some(TypedValue::Ref(8))
+    );
+    assert_eq!(
+        cc.bound_value(&Variable::from_valid_name("?v")),
+        Some(TypedValue::Long(10))
+    );
 }
 
 // We determine the types of variables in the query in an early first pass, and thus we can
@@ -251,10 +280,16 @@ fn test_ground_rel_infers_types() {
     let known = Known::for_schema(&schema);
     let cc = alg(known, &q);
     assert!(cc.empty_because.is_none());
-    assert_eq!(cc.computed_tables[0], ComputedTable::NamedValues {
-        names: vec![Variable::from_valid_name("?x"), Variable::from_valid_name("?v")],
-        values: vec![TypedValue::Ref(8), TypedValue::Long(10)],
-    });
+    assert_eq!(
+        cc.computed_tables[0],
+        ComputedTable::NamedValues {
+            names: vec![
+                Variable::from_valid_name("?x"),
+                Variable::from_valid_name("?v")
+            ],
+            values: vec![TypedValue::Ref(8), TypedValue::Long(10)],
+        }
+    );
 }
 
 #[test]
@@ -262,8 +297,7 @@ fn test_ground_coll_heterogeneous_types() {
     let q = r#"[:find ?x :where [?x _ ?v] [(ground [false 8.5]) [?v ...]]]"#;
     let schema = prepopulated_schema();
     let known = Known::for_schema(&schema);
-    assert_eq!(bails(known, &q),
-               AlgebrizerError::InvalidGroundConstant);
+    assert_eq!(bails(known, &q), AlgebrizerError::InvalidGroundConstant);
 }
 
 #[test]
@@ -271,8 +305,7 @@ fn test_ground_rel_heterogeneous_types() {
     let q = r#"[:find ?x :where [?x _ ?v] [(ground [[false] [5]]) [[?v]]]]"#;
     let schema = prepopulated_schema();
     let known = Known::for_schema(&schema);
-    assert_eq!(bails(known, &q),
-               AlgebrizerError::InvalidGroundConstant);
+    assert_eq!(bails(known, &q), AlgebrizerError::InvalidGroundConstant);
 }
 
 #[test]
@@ -280,8 +313,13 @@ fn test_ground_tuple_duplicate_vars() {
     let q = r#"[:find ?x :where [?x :foo/age ?v] [(ground [8 10]) [?x ?x]]]"#;
     let schema = prepopulated_schema();
     let known = Known::for_schema(&schema);
-    assert_eq!(bails(known, &q),
-               AlgebrizerError::InvalidBinding(PlainSymbol::plain("ground"), BindingError::RepeatedBoundVariable));
+    assert_eq!(
+        bails(known, &q),
+        AlgebrizerError::InvalidBinding(
+            PlainSymbol::plain("ground"),
+            BindingError::RepeatedBoundVariable
+        )
+    );
 }
 
 #[test]
@@ -289,8 +327,13 @@ fn test_ground_rel_duplicate_vars() {
     let q = r#"[:find ?x :where [?x :foo/age ?v] [(ground [[8 10]]) [[?x ?x]]]]"#;
     let schema = prepopulated_schema();
     let known = Known::for_schema(&schema);
-    assert_eq!(bails(known, &q),
-               AlgebrizerError::InvalidBinding(PlainSymbol::plain("ground"), BindingError::RepeatedBoundVariable));
+    assert_eq!(
+        bails(known, &q),
+        AlgebrizerError::InvalidBinding(
+            PlainSymbol::plain("ground"),
+            BindingError::RepeatedBoundVariable
+        )
+    );
 }
 
 #[test]
@@ -298,8 +341,10 @@ fn test_ground_nonexistent_variable_invalid() {
     let q = r#"[:find ?x ?e :where [?e _ ?x] (not [(ground 17) ?v])]"#;
     let schema = prepopulated_schema();
     let known = Known::for_schema(&schema);
-    assert_eq!(bails(known, &q),
-               AlgebrizerError::UnboundVariable(PlainSymbol::plain("?v")));
+    assert_eq!(
+        bails(known, &q),
+        AlgebrizerError::UnboundVariable(PlainSymbol::plain("?v"))
+    );
 }
 
 #[test]
@@ -315,6 +360,8 @@ fn test_unbound_input_variable_invalid() {
 
     let i = QueryInputs::new(types, BTreeMap::default()).expect("valid QueryInputs");
 
-    assert_eq!(bails_with_inputs(known, &q, i),
-               AlgebrizerError::UnboundVariable(PlainSymbol::plain("?x")));
+    assert_eq!(
+        bails_with_inputs(known, &q, i),
+        AlgebrizerError::UnboundVariable(PlainSymbol::plain("?x"))
+    );
 }

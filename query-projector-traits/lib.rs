@@ -23,6 +23,5 @@ extern crate query_pull_traits;
 extern crate mentat_query_algebrizer;
 extern crate mentat_query_sql;
 
-pub mod errors;
 pub mod aggregates;
-
+pub mod errors;

@@ -19,11 +19,15 @@ pub struct RcCounter {
 /// A simple shared counter.
 impl RcCounter {
     pub fn with_initial(value: usize) -> Self {
-        RcCounter { c: Rc::new(Cell::new(value)) }
+        RcCounter {
+            c: Rc::new(Cell::new(value)),
+        }
     }
 
     pub fn new() -> Self {
-        RcCounter { c: Rc::new(Cell::new(0)) }
+        RcCounter {
+            c: Rc::new(Cell::new(0)),
+        }
     }
 
     /// Return the next value in the sequence.

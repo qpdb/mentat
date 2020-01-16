@@ -8,43 +8,19 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use core_traits::{
-    ValueType,
-    ValueTypeSet,
-    TypedValue,
-};
+use core_traits::{TypedValue, ValueType, ValueTypeSet};
 
-use mentat_core::{
-    Schema,
-};
+use mentat_core::Schema;
 
-use edn::query::{
-    Binding,
-    FnArg,
-    Variable,
-    VariableOrPlaceholder,
-    WhereFn,
-};
+use edn::query::{Binding, FnArg, Variable, VariableOrPlaceholder, WhereFn};
 
-use clauses::{
-    ConjoiningClauses,
-    PushComputed,
-};
+use clauses::{ConjoiningClauses, PushComputed};
 
 use clauses::convert::ValueConversion;
 
-use query_algebrizer_traits::errors::{
-    AlgebrizerError,
-    BindingError,
-    Result,
-};
+use query_algebrizer_traits::errors::{AlgebrizerError, BindingError, Result};
 
-use types::{
-    ComputedTable,
-    EmptyBecause,
-    SourceAlias,
-    VariableColumn,
-};
+use types::{ComputedTable, EmptyBecause, SourceAlias, VariableColumn};
 
 use Known;
 
@@ -53,7 +29,13 @@ impl ConjoiningClauses {
     /// the provided types.
     /// Construct a computed table to yield this relation.
     /// This function will panic if some invariants are not met.
-    fn collect_named_bindings<'s>(&mut self, schema: &'s Schema, names: Vec<Variable>, types: Vec<ValueType>, values: Vec<TypedValue>) {
+    fn collect_named_bindings<'s>(
+        &mut self,
+        schema: &'s Schema,
+        names: Vec<Variable>,
+        types: Vec<ValueType>,
+        values: Vec<TypedValue>,
+    ) {
         if values.is_empty() {
             return;
         }
@@ -61,7 +43,7 @@ impl ConjoiningClauses {
         assert!(!names.is_empty());
         assert_eq!(names.len(), types.len());
         assert!(values.len() >= names.len());
-        assert_eq!(values.len() % names.len(), 0);      // It's an exact multiple.
+        assert_eq!(values.len() % names.len(), 0); // It's an exact multiple.
 
         let named_values = ComputedTable::NamedValues {
             names: names.clone(),
@@ -74,13 +56,23 @@ impl ConjoiningClauses {
         // Stitch the computed table into column_bindings, so we get cross-linking.
         for (name, ty) in names.iter().zip(types.into_iter()) {
             self.constrain_var_to_type(name.clone(), ty);
-            self.bind_column_to_var(schema, alias.clone(), VariableColumn::Variable(name.clone()), name.clone());
+            self.bind_column_to_var(
+                schema,
+                alias.clone(),
+                VariableColumn::Variable(name.clone()),
+                name.clone(),
+            );
         }
 
         self.from.push(SourceAlias(table, alias));
     }
 
-    fn apply_ground_place<'s>(&mut self, schema: &'s Schema, var: VariableOrPlaceholder, arg: FnArg) -> Result<()> {
+    fn apply_ground_place<'s>(
+        &mut self,
+        schema: &'s Schema,
+        var: VariableOrPlaceholder,
+        arg: FnArg,
+    ) -> Result<()> {
         match var {
             VariableOrPlaceholder::Placeholder => Ok(()),
             VariableOrPlaceholder::Variable(var) => self.apply_ground_var(schema, var, arg),
@@ -89,14 +81,19 @@ impl ConjoiningClauses {
 
     /// Constrain the CC to associate the given var with the given ground argument.
     /// Marks known-empty on failure.
-    fn apply_ground_var<'s>(&mut self, schema: &'s Schema, var: Variable, arg: FnArg) -> Result<()> {
+    fn apply_ground_var<'s>(
+        &mut self,
+        schema: &'s Schema,
+        var: Variable,
+        arg: FnArg,
+    ) -> Result<()> {
         let known_types = self.known_type_set(&var);
         match self.typed_value_from_arg(schema, &var, arg, known_types)? {
             ValueConversion::Val(value) => self.apply_ground_value(var, value),
             ValueConversion::Impossible(because) => {
                 self.mark_known_empty(because);
                 Ok(())
-            },
+            }
         }
     }
 
@@ -109,7 +106,7 @@ impl ConjoiningClauses {
                     existing: existing.clone(),
                     desired: value,
                 });
-                return Ok(())
+                return Ok(());
             }
         } else {
             self.bind_value(&var, value.clone());
@@ -120,19 +117,29 @@ impl ConjoiningClauses {
 
     pub(crate) fn apply_ground(&mut self, known: Known, where_fn: WhereFn) -> Result<()> {
         if where_fn.args.len() != 1 {
-            bail!(AlgebrizerError::InvalidNumberOfArguments(where_fn.operator.clone(), where_fn.args.len(), 1));
+            bail!(AlgebrizerError::InvalidNumberOfArguments(
+                where_fn.operator.clone(),
+                where_fn.args.len(),
+                1
+            ));
         }
 
         let mut args = where_fn.args.into_iter();
 
         if where_fn.binding.is_empty() {
             // The binding must introduce at least one bound variable.
-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::NoBoundVariable));
+            bail!(AlgebrizerError::InvalidBinding(
+                where_fn.operator.clone(),
+                BindingError::NoBoundVariable
+            ));
         }
 
         if !where_fn.binding.is_valid() {
             // The binding must not duplicate bound variables.
-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::RepeatedBoundVariable));
+            bail!(AlgebrizerError::InvalidBinding(
+                where_fn.operator.clone(),
+                BindingError::RepeatedBoundVariable
+            ));
         }
 
         let schema = known.schema;
@@ -141,8 +148,7 @@ impl ConjoiningClauses {
         // we can immediately substitute the value as a known value in the CC, additionally
         // generating a WHERE clause if columns have already been bound.
         match (where_fn.binding, args.next().unwrap()) {
-            (Binding::BindScalar(var), constant) =>
-                self.apply_ground_var(schema, var, constant),
+            (Binding::BindScalar(var), constant) => self.apply_ground_var(schema, var, constant),
 
             (Binding::BindTuple(places), FnArg::Vector(children)) => {
                 // Just the same, but we bind more than one column at a time.
@@ -151,10 +157,10 @@ impl ConjoiningClauses {
                     bail!(AlgebrizerError::GroundBindingsMismatch)
                 }
                 for (place, arg) in places.into_iter().zip(children.into_iter()) {
-                    self.apply_ground_place(schema, place, arg)?  // TODO: short-circuit on impossible.
+                    self.apply_ground_place(schema, place, arg)? // TODO: short-circuit on impossible.
                 }
                 Ok(())
-            },
+            }
 
             // Collection bindings and rel bindings are similar in that they are both
             // implemented as a subquery with a projection list and a set of values.
@@ -170,30 +176,32 @@ impl ConjoiningClauses {
                 // Check that every value has the same type.
                 let mut accumulated_types = ValueTypeSet::none();
                 let mut skip: Option<EmptyBecause> = None;
-                let values = children.into_iter()
-                                     .filter_map(|arg| -> Option<Result<TypedValue>> {
-                                         // We need to get conversion errors out.
-                                         // We also want to mark known-empty on impossibilty, but
-                                         // still detect serious errors.
-                                         match self.typed_value_from_arg(schema, &var, arg, known_types) {
-                                             Ok(ValueConversion::Val(tv)) => {
-                                                 if accumulated_types.insert(tv.value_type()) &&
-                                                    !accumulated_types.is_unit() {
-                                                     // Values not all of the same type.
-                                                     Some(Err(AlgebrizerError::InvalidGroundConstant.into()))
-                                                 } else {
-                                                     Some(Ok(tv))
-                                                 }
-                                             },
-                                             Ok(ValueConversion::Impossible(because)) => {
-                                                 // Skip this value.
-                                                 skip = Some(because);
-                                                 None
-                                             },
-                                             Err(e) => Some(Err(e.into())),
-                                         }
-                                     })
-                                     .collect::<Result<Vec<TypedValue>>>()?;
+                let values = children
+                    .into_iter()
+                    .filter_map(|arg| -> Option<Result<TypedValue>> {
+                        // We need to get conversion errors out.
+                        // We also want to mark known-empty on impossibilty, but
+                        // still detect serious errors.
+                        match self.typed_value_from_arg(schema, &var, arg, known_types) {
+                            Ok(ValueConversion::Val(tv)) => {
+                                if accumulated_types.insert(tv.value_type())
+                                    && !accumulated_types.is_unit()
+                                {
+                                    // Values not all of the same type.
+                                    Some(Err(AlgebrizerError::InvalidGroundConstant.into()))
+                                } else {
+                                    Some(Ok(tv))
+                                }
+                            }
+                            Ok(ValueConversion::Impossible(because)) => {
+                                // Skip this value.
+                                skip = Some(because);
+                                None
+                            }
+                            Err(e) => Some(Err(e.into())),
+                        }
+                    })
+                    .collect::<Result<Vec<TypedValue>>>()?;
 
                 if values.is_empty() {
                     let because = skip.expect("we skipped all rows for a reason");
@@ -207,7 +215,7 @@ impl ConjoiningClauses {
 
                 self.collect_named_bindings(schema, names, types, values);
                 Ok(())
-            },
+            }
 
             (Binding::BindRel(places), FnArg::Vector(rows)) => {
                 if rows.is_empty() {
@@ -216,17 +224,20 @@ impl ConjoiningClauses {
 
                 // Grab the known types to which these args must conform, and track
                 // the places that won't be bound in the output.
-                let template: Vec<Option<(Variable, ValueTypeSet)>> =
-                    places.iter()
-                          .map(|x| match x {
-                              &VariableOrPlaceholder::Placeholder     => None,
-                              &VariableOrPlaceholder::Variable(ref v) => Some((v.clone(), self.known_type_set(v))),
-                          })
-                          .collect();
+                let template: Vec<Option<(Variable, ValueTypeSet)>> = places
+                    .iter()
+                    .map(|x| match x {
+                        &VariableOrPlaceholder::Placeholder => None,
+                        &VariableOrPlaceholder::Variable(ref v) => {
+                            Some((v.clone(), self.known_type_set(v)))
+                        }
+                    })
+                    .collect();
 
                 // The expected 'width' of the matrix is the number of named variables.
                 let full_width = places.len();
-                let names: Vec<Variable> = places.into_iter().filter_map(|x| x.into_var()).collect();
+                let names: Vec<Variable> =
+                    places.into_iter().filter_map(|x| x.into_var()).collect();
                 let expected_width = names.len();
                 let expected_rows = rows.len();
 
@@ -267,7 +278,7 @@ impl ConjoiningClauses {
                                             // Skip this row. It cannot produce bindings.
                                             skip = Some(because);
                                             break;
-                                        },
+                                        }
                                     }
                                 }
                             }
@@ -279,7 +290,10 @@ impl ConjoiningClauses {
                             }
 
                             // Accumulate the values into the matrix and the types into the type set.
-                            for (val, acc) in vals.into_iter().zip(accumulated_types_for_columns.iter_mut()) {
+                            for (val, acc) in vals
+                                .into_iter()
+                                .zip(accumulated_types_for_columns.iter_mut())
+                            {
                                 let inserted = acc.insert(val.value_type());
                                 if inserted && !acc.is_unit() {
                                     // Heterogeneous types.
@@ -287,8 +301,7 @@ impl ConjoiningClauses {
                                 }
                                 matrix.push(val);
                             }
-
-                        },
+                        }
                         _ => bail!(AlgebrizerError::InvalidGroundConstant),
                     }
                 }
@@ -309,12 +322,13 @@ impl ConjoiningClauses {
                 // type tags. If and when we want to algebrize in two phases and allow for
                 // late-binding input variables, we'll probably be able to loosen this restriction
                 // with little penalty.
-                let types = accumulated_types_for_columns.into_iter()
-                                                         .map(|x| x.exemplar().unwrap())
-                                                         .collect();
+                let types = accumulated_types_for_columns
+                    .into_iter()
+                    .map(|x| x.exemplar().unwrap())
+                    .collect();
                 self.collect_named_bindings(schema, names, types, matrix);
                 Ok(())
-            },
+            }
             (_, _) => bail!(AlgebrizerError::InvalidGroundConstant),
         }
     }
@@ -324,23 +338,11 @@ impl ConjoiningClauses {
 mod testing {
     use super::*;
 
-    use core_traits::{
-        Attribute,
-        ValueType,
-    };
+    use core_traits::{Attribute, ValueType};
 
-    use edn::query::{
-        Binding,
-        FnArg,
-        Keyword,
-        PlainSymbol,
-        Variable,
-    };
+    use edn::query::{Binding, FnArg, Keyword, PlainSymbol, Variable};
 
-    use clauses::{
-        add_attribute,
-        associate_ident,
-    };
+    use clauses::{add_attribute, associate_ident};
 
     #[test]
     fn test_apply_ground() {
@@ -350,25 +352,31 @@ mod testing {
         let mut schema = Schema::default();
 
         associate_ident(&mut schema, Keyword::namespaced("foo", "fts"), 100);
-        add_attribute(&mut schema, 100, Attribute {
-            value_type: ValueType::String,
-            index: true,
-            fulltext: true,
-            ..Default::default()
-        });
+        add_attribute(
+            &mut schema,
+            100,
+            Attribute {
+                value_type: ValueType::String,
+                index: true,
+                fulltext: true,
+                ..Default::default()
+            },
+        );
 
         let known = Known::for_schema(&schema);
 
         // It's awkward enough to write these expansions that we give the details for the simplest
         // case only.  See the tests of the translator for more extensive (albeit looser) coverage.
         let op = PlainSymbol::plain("ground");
-        cc.apply_ground(known, WhereFn {
-            operator: op,
-            args: vec![
-                FnArg::EntidOrInteger(10),
-            ],
-            binding: Binding::BindScalar(vz.clone()),
-        }).expect("to be able to apply_ground");
+        cc.apply_ground(
+            known,
+            WhereFn {
+                operator: op,
+                args: vec![FnArg::EntidOrInteger(10)],
+                binding: Binding::BindScalar(vz.clone()),
+            },
+        )
+        .expect("to be able to apply_ground");
 
         assert!(!cc.is_known_empty());
 
@@ -380,16 +388,20 @@ mod testing {
         assert_eq!(clauses.len(), 0);
 
         let column_bindings = cc.column_bindings;
-        assert_eq!(column_bindings.len(), 0);           // Scalar doesn't need this.
+        assert_eq!(column_bindings.len(), 0); // Scalar doesn't need this.
 
         let known_types = cc.known_types;
         assert_eq!(known_types.len(), 1);
-        assert_eq!(known_types.get(&vz).expect("to know the type of ?z"),
-                   &ValueTypeSet::of_one(ValueType::Long));
+        assert_eq!(
+            known_types.get(&vz).expect("to know the type of ?z"),
+            &ValueTypeSet::of_one(ValueType::Long)
+        );
 
         let value_bindings = cc.value_bindings;
         assert_eq!(value_bindings.len(), 1);
-        assert_eq!(value_bindings.get(&vz).expect("to have a value for ?z"),
-                   &TypedValue::Long(10));        // We default to Long instead of entid.
+        assert_eq!(
+            value_bindings.get(&vz).expect("to have a value for ?z"),
+            &TypedValue::Long(10)
+        ); // We default to Long instead of entid.
     }
 }

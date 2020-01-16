@@ -14,8 +14,8 @@ extern crate failure_derive;
 
 extern crate hyper;
 extern crate rusqlite;
-extern crate uuid;
 extern crate serde_json;
+extern crate uuid;
 
 extern crate db_traits;
 

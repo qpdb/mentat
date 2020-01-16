@@ -13,111 +13,63 @@ extern crate failure;
 extern crate indexmap;
 extern crate rusqlite;
 
+extern crate db_traits;
 extern crate edn;
 extern crate mentat_core;
-extern crate db_traits;
 #[macro_use]
 extern crate core_traits;
-extern crate mentat_db;                 // For value conversion.
+extern crate mentat_db; // For value conversion.
 extern crate mentat_query_algebrizer;
 extern crate mentat_query_pull;
-extern crate query_pull_traits;
-extern crate query_projector_traits;
 extern crate mentat_query_sql;
+extern crate query_projector_traits;
+extern crate query_pull_traits;
 
-use std::collections::{
-    BTreeSet,
-};
+use std::collections::BTreeSet;
 
 use std::iter;
 
 use std::rc::Rc;
 
-use rusqlite::{
-    Row,
-    Rows,
-};
+use rusqlite::{Row, Rows};
 
-use core_traits::{
-    Binding,
-    TypedValue,
-};
+use core_traits::{Binding, TypedValue};
 
-use mentat_core::{
-    Schema,
-    ValueTypeTag,
-};
+use mentat_core::{Schema, ValueTypeTag};
 
-use mentat_core::util::{
-    Either,
-};
+use mentat_core::util::Either;
 
-use mentat_db::{
-    TypedSQLValue,
-};
+use mentat_db::TypedSQLValue;
 
-use edn::query::{
-    Element,
-    FindSpec,
-    Limit,
-    Variable,
-};
+use edn::query::{Element, FindSpec, Limit, Variable};
 
-use mentat_query_algebrizer::{
-    AlgebraicQuery,
-    VariableBindings,
-};
+use mentat_query_algebrizer::{AlgebraicQuery, VariableBindings};
 
-use mentat_query_sql::{
-    GroupBy,
-    Projection,
-};
+use mentat_query_sql::{GroupBy, Projection};
 
 pub mod translate;
 
 mod binding_tuple;
-pub use binding_tuple::{
-    BindingTuple,
-};
+pub use binding_tuple::BindingTuple;
 mod project;
 mod projectors;
 mod pull;
 mod relresult;
 
-use project::{
-    ProjectedElements,
-    project_elements,
-};
+use project::{project_elements, ProjectedElements};
 
-pub use project::{
-    projected_column_for_var,
-};
+pub use project::projected_column_for_var;
 
-pub use projectors::{
-    ConstantProjector,
-    Projector,
-};
+pub use projectors::{ConstantProjector, Projector};
 
 use projectors::{
-    CollProjector,
-    CollTwoStagePullProjector,
-    RelProjector,
-    RelTwoStagePullProjector,
-    ScalarProjector,
-    ScalarTwoStagePullProjector,
-    TupleProjector,
-    TupleTwoStagePullProjector,
+    CollProjector, CollTwoStagePullProjector, RelProjector, RelTwoStagePullProjector,
+    ScalarProjector, ScalarTwoStagePullProjector, TupleProjector, TupleTwoStagePullProjector,
 };
 
-pub use relresult::{
-    RelResult,
-    StructuredRelResult,
-};
+pub use relresult::{RelResult, StructuredRelResult};
 
-use query_projector_traits::errors::{
-    ProjectorError,
-    Result,
-};
+use query_projector_traits::errors::{ProjectorError, Result};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QueryOutput {
@@ -140,16 +92,16 @@ impl From<QueryOutput> for QueryResults {
 }
 
 impl QueryOutput {
-    pub fn empty_factory(spec: &FindSpec) -> Box<Fn() -> QueryResults> {
+    pub fn empty_factory(spec: &FindSpec) -> Box<dyn Fn() -> QueryResults> {
         use self::FindSpec::*;
         match spec {
-            &FindScalar(_)   => Box::new(|| QueryResults::Scalar(None)),
-            &FindTuple(_)    => Box::new(|| QueryResults::Tuple(None)),
-            &FindColl(_)     => Box::new(|| QueryResults::Coll(vec![])),
+            &FindScalar(_) => Box::new(|| QueryResults::Scalar(None)),
+            &FindTuple(_) => Box::new(|| QueryResults::Tuple(None)),
+            &FindColl(_) => Box::new(|| QueryResults::Coll(vec![])),
             &FindRel(ref es) => {
                 let width = es.len();
                 Box::new(move || QueryResults::Rel(RelResult::empty(width)))
-            },
+            }
         }
     }
 
@@ -163,13 +115,12 @@ impl QueryOutput {
 
     pub fn empty(spec: &Rc<FindSpec>) -> QueryOutput {
         use self::FindSpec::*;
-        let results =
-            match &**spec {
-                &FindScalar(_)   => QueryResults::Scalar(None),
-                &FindTuple(_)    => QueryResults::Tuple(None),
-                &FindColl(_)     => QueryResults::Coll(vec![]),
-                &FindRel(ref es) => QueryResults::Rel(RelResult::empty(es.len())),
-            };
+        let results = match &**spec {
+            &FindScalar(_) => QueryResults::Scalar(None),
+            &FindTuple(_) => QueryResults::Tuple(None),
+            &FindColl(_) => QueryResults::Coll(vec![]),
+            &FindRel(ref es) => QueryResults::Rel(RelResult::empty(es.len())),
+        };
         QueryOutput {
             spec: spec.clone(),
             results: results,
@@ -179,85 +130,83 @@ impl QueryOutput {
     pub fn from_constants(spec: &Rc<FindSpec>, bindings: VariableBindings) -> QueryResults {
         use self::FindSpec::*;
         match &**spec {
-            &FindScalar(Element::Variable(ref var)) |
-            &FindScalar(Element::Corresponding(ref var)) => {
-                let val = bindings.get(var)
-                                  .cloned()
-                                  .map(|v| v.into());
+            &FindScalar(Element::Variable(ref var))
+            | &FindScalar(Element::Corresponding(ref var)) => {
+                let val = bindings.get(var).cloned().map(|v| v.into());
                 QueryResults::Scalar(val)
-            },
+            }
             &FindScalar(Element::Aggregate(ref _agg)) => {
                 // TODO: static aggregates.
                 unimplemented!();
-            },
+            }
             &FindScalar(Element::Pull(ref _pull)) => {
                 // TODO: static pull.
                 unimplemented!();
-            },
+            }
             &FindTuple(ref elements) => {
-                let values = elements.iter()
-                                     .map(|e| match e {
-                                         &Element::Variable(ref var) |
-                                         &Element::Corresponding(ref var) => {
-                                             bindings.get(var)
-                                                     .cloned()
-                                                     .expect("every var to have a binding")
-                                                     .into()
-                                         },
-                                         &Element::Pull(ref _pull) => {
-                                            // TODO: static pull.
-                                            unreachable!();
-                                         },
-                                         &Element::Aggregate(ref _agg) => {
-                                            // TODO: static computation of aggregates, then
-                                            // implement the condition in `is_fully_bound`.
-                                            unreachable!();
-                                         },
-                                     })
-                                     .collect();
+                let values = elements
+                    .iter()
+                    .map(|e| match e {
+                        &Element::Variable(ref var) | &Element::Corresponding(ref var) => bindings
+                            .get(var)
+                            .cloned()
+                            .expect("every var to have a binding")
+                            .into(),
+                        &Element::Pull(ref _pull) => {
+                            // TODO: static pull.
+                            unreachable!();
+                        }
+                        &Element::Aggregate(ref _agg) => {
+                            // TODO: static computation of aggregates, then
+                            // implement the condition in `is_fully_bound`.
+                            unreachable!();
+                        }
+                    })
+                    .collect();
                 QueryResults::Tuple(Some(values))
-            },
-            &FindColl(Element::Variable(ref var)) |
-            &FindColl(Element::Corresponding(ref var)) => {
-                let val = bindings.get(var)
-                                  .cloned()
-                                  .expect("every var to have a binding")
-                                  .into();
+            }
+            &FindColl(Element::Variable(ref var)) | &FindColl(Element::Corresponding(ref var)) => {
+                let val = bindings
+                    .get(var)
+                    .cloned()
+                    .expect("every var to have a binding")
+                    .into();
                 QueryResults::Coll(vec![val])
-            },
+            }
             &FindColl(Element::Pull(ref _pull)) => {
                 // TODO: static pull.
                 unimplemented!();
-            },
+            }
             &FindColl(Element::Aggregate(ref _agg)) => {
                 // Does it even make sense to write
                 // [:find [(max ?x) ...] :where [_ :foo/bar ?x]]
                 // ?
                 // TODO
                 unimplemented!();
-            },
+            }
             &FindRel(ref elements) => {
                 let width = elements.len();
-                let values = elements.iter().map(|e| match e {
-                    &Element::Variable(ref var) |
-                    &Element::Corresponding(ref var) => {
-                        bindings.get(var)
-                                .cloned()
-                                .expect("every var to have a binding")
-                                .into()
-                    },
-                    &Element::Pull(ref _pull) => {
-                        // TODO: static pull.
-                        unreachable!();
-                    },
-                    &Element::Aggregate(ref _agg) => {
-                        // TODO: static computation of aggregates, then
-                        // implement the condition in `is_fully_bound`.
-                        unreachable!();
-                    },
-                }).collect();
+                let values = elements
+                    .iter()
+                    .map(|e| match e {
+                        &Element::Variable(ref var) | &Element::Corresponding(ref var) => bindings
+                            .get(var)
+                            .cloned()
+                            .expect("every var to have a binding")
+                            .into(),
+                        &Element::Pull(ref _pull) => {
+                            // TODO: static pull.
+                            unreachable!();
+                        }
+                        &Element::Aggregate(ref _agg) => {
+                            // TODO: static computation of aggregates, then
+                            // implement the condition in `is_fully_bound`.
+                            unreachable!();
+                        }
+                    })
+                    .collect();
                 QueryResults::Rel(RelResult { width, values })
-            },
+            }
         }
     }
 
@@ -275,9 +224,14 @@ impl QueryOutput {
     ///
     /// This is the moral equivalent of `collect` (and `BindingTuple` of `FromIterator`), but
     /// specialized to tuples of expected length.
-    pub fn into_tuple<B>(self) -> Result<Option<B>> where B: BindingTuple {
+    pub fn into_tuple<B>(self) -> Result<Option<B>>
+    where
+        B: BindingTuple,
+    {
         let expected = self.spec.expected_column_count();
-        self.results.into_tuple().and_then(|vec| B::from_binding_vec(expected, vec))
+        self.results
+            .into_tuple()
+            .and_then(|vec| B::from_binding_vec(expected, vec))
     }
 
     pub fn into_rel(self) -> Result<RelResult<Binding>> {
@@ -289,10 +243,22 @@ impl QueryResults {
     pub fn len(&self) -> usize {
         use QueryResults::*;
         match self {
-            &Scalar(ref o) => if o.is_some() { 1 } else { 0 },
-            &Tuple(ref o)  => if o.is_some() { 1 } else { 0 },
-            &Coll(ref v)   => v.len(),
-            &Rel(ref r)    => r.row_count(),
+            &Scalar(ref o) => {
+                if o.is_some() {
+                    1
+                } else {
+                    0
+                }
+            }
+            &Tuple(ref o) => {
+                if o.is_some() {
+                    1
+                } else {
+                    0
+                }
+            }
+            &Coll(ref v) => v.len(),
+            &Rel(ref r) => r.row_count(),
         }
     }
 
@@ -300,9 +266,9 @@ impl QueryResults {
         use QueryResults::*;
         match self {
             &Scalar(ref o) => o.is_none(),
-            &Tuple(ref o)  => o.is_none(),
-            &Coll(ref v)   => v.is_empty(),
-            &Rel(ref r)    => r.is_empty(),
+            &Tuple(ref o) => o.is_none(),
+            &Coll(ref v) => v.is_empty(),
+            &Rel(ref r) => r.is_empty(),
         }
     }
 
@@ -310,14 +276,18 @@ impl QueryResults {
         match self {
             QueryResults::Scalar(o) => Ok(o),
             QueryResults::Coll(_) => bail!(ProjectorError::UnexpectedResultsType("coll", "scalar")),
-            QueryResults::Tuple(_) => bail!(ProjectorError::UnexpectedResultsType("tuple", "scalar")),
+            QueryResults::Tuple(_) => {
+                bail!(ProjectorError::UnexpectedResultsType("tuple", "scalar"))
+            }
             QueryResults::Rel(_) => bail!(ProjectorError::UnexpectedResultsType("rel", "scalar")),
         }
     }
 
     pub fn into_coll(self) -> Result<Vec<Binding>> {
         match self {
-            QueryResults::Scalar(_) => bail!(ProjectorError::UnexpectedResultsType("scalar", "coll")),
+            QueryResults::Scalar(_) => {
+                bail!(ProjectorError::UnexpectedResultsType("scalar", "coll"))
+            }
             QueryResults::Coll(c) => Ok(c),
             QueryResults::Tuple(_) => bail!(ProjectorError::UnexpectedResultsType("tuple", "coll")),
             QueryResults::Rel(_) => bail!(ProjectorError::UnexpectedResultsType("rel", "coll")),
@@ -326,7 +296,9 @@ impl QueryResults {
 
     pub fn into_tuple(self) -> Result<Option<Vec<Binding>>> {
         match self {
-            QueryResults::Scalar(_) => bail!(ProjectorError::UnexpectedResultsType("scalar", "tuple")),
+            QueryResults::Scalar(_) => {
+                bail!(ProjectorError::UnexpectedResultsType("scalar", "tuple"))
+            }
             QueryResults::Coll(_) => bail!(ProjectorError::UnexpectedResultsType("coll", "tuple")),
             QueryResults::Tuple(t) => Ok(t),
             QueryResults::Rel(_) => bail!(ProjectorError::UnexpectedResultsType("rel", "tuple")),
@@ -335,7 +307,9 @@ impl QueryResults {
 
     pub fn into_rel(self) -> Result<RelResult<Binding>> {
         match self {
-            QueryResults::Scalar(_) => bail!(ProjectorError::UnexpectedResultsType("scalar", "rel")),
+            QueryResults::Scalar(_) => {
+                bail!(ProjectorError::UnexpectedResultsType("scalar", "rel"))
+            }
             QueryResults::Coll(_) => bail!(ProjectorError::UnexpectedResultsType("coll", "rel")),
             QueryResults::Tuple(_) => bail!(ProjectorError::UnexpectedResultsType("tuple", "rel")),
             QueryResults::Rel(r) => Ok(r),
@@ -343,7 +317,7 @@ impl QueryResults {
     }
 }
 
-type Index = i32;            // See rusqlite::RowIndex.
+type Index = usize; // See rusqlite::RowIndex.
 enum TypedIndex {
     Known(Index, ValueTypeTag),
     Unknown(Index, Index),
@@ -364,27 +338,26 @@ impl TypedIndex {
     ///
     /// This function will return a runtime error if the type tag is unknown, or the value is
     /// otherwise not convertible by the DB layer.
-    fn lookup<'a, 'stmt>(&self, row: &Row<'a, 'stmt>) -> Result<Binding> {
+    fn lookup<'a>(&self, row: &Row<'a>) -> Result<Binding> {
         use TypedIndex::*;
 
         match self {
             &Known(value_index, value_type) => {
-                let v: rusqlite::types::Value = row.get(value_index);
+                let v: rusqlite::types::Value = row.get(value_index).unwrap();
                 TypedValue::from_sql_value_pair(v, value_type)
                     .map(|v| v.into())
                     .map_err(|e| e.into())
-            },
+            }
             &Unknown(value_index, type_index) => {
-                let v: rusqlite::types::Value = row.get(value_index);
-                let value_type_tag: i32 = row.get(type_index);
+                let v: rusqlite::types::Value = row.get(value_index).unwrap();
+                let value_type_tag: i32 = row.get(type_index).unwrap();
                 TypedValue::from_sql_value_pair(v, value_type_tag)
                     .map(|v| v.into())
                     .map_err(|e| e.into())
-            },
+            }
         }
     }
 }
-
 
 /// Combines the things you need to turn a query into SQL and turn its results into
 /// `QueryResults`: SQL-related projection information (`DISTINCT`, columns, etc.) and
@@ -406,7 +379,7 @@ pub struct CombinedProjection {
 
     /// A Datalog projection. This consumes rows of the appropriate shape (as defined by
     /// the SQL projection) to yield one of the four kinds of Datalog query result.
-    pub datalog_projector: Box<Projector>,
+    pub datalog_projector: Box<dyn Projector>,
 
     /// True if this query requires the SQL query to include DISTINCT.
     pub distinct: bool,
@@ -445,35 +418,38 @@ impl IsPull for Element {
 /// - The bindings established by the topmost CC.
 /// - The types known at algebrizing time.
 /// - The types extracted from the store for unknown attributes.
-pub fn query_projection(schema: &Schema, query: &AlgebraicQuery) -> Result<Either<ConstantProjector, CombinedProjection>> {
+pub fn query_projection(
+    schema: &Schema,
+    query: &AlgebraicQuery,
+) -> Result<Either<ConstantProjector, CombinedProjection>> {
     use self::FindSpec::*;
 
     let spec = query.find_spec.clone();
     if query.is_fully_unit_bound() {
         // Do a few gyrations to produce empty results of the right kind for the query.
 
-        let variables: BTreeSet<Variable> = spec.columns()
-                                                .map(|e| match e {
-                                                    &Element::Variable(ref var) |
-                                                    &Element::Corresponding(ref var) => var.clone(),
+        let variables: BTreeSet<Variable> = spec
+            .columns()
+            .map(|e| match e {
+                &Element::Variable(ref var) | &Element::Corresponding(ref var) => var.clone(),
 
-                                                    // Pull expressions can never be fully bound.
-                                                    // TODO: but the interior can be, in which case we
-                                                    // can handle this and simply project.
-                                                    &Element::Pull(_) => {
-                                                        unreachable!();
-                                                    },
-                                                    &Element::Aggregate(ref _agg) => {
-                                                        // TODO: static computation of aggregates, then
-                                                        // implement the condition in `is_fully_bound`.
-                                                        unreachable!();
-                                                    },
-                                                })
-                                                .collect();
+                // Pull expressions can never be fully bound.
+                // TODO: but the interior can be, in which case we
+                // can handle this and simply project.
+                &Element::Pull(_) => {
+                    unreachable!();
+                }
+                &Element::Aggregate(ref _agg) => {
+                    // TODO: static computation of aggregates, then
+                    // implement the condition in `is_fully_bound`.
+                    unreachable!();
+                }
+            })
+            .collect();
 
         // TODO: error handling
         let results = QueryOutput::from_constants(&spec, query.cc.value_bindings(&variables));
-        let f = Box::new(move || { results.clone() });
+        let f = Box::new(move || results.clone());
 
         Ok(Either::Left(ConstantProjector::new(spec, f)))
     } else if query.is_known_empty() {
@@ -488,8 +464,9 @@ pub fn query_projection(schema: &Schema, query: &AlgebraicQuery) -> Result<Eithe
                     CollTwoStagePullProjector::combine(spec, elements)
                 } else {
                     CollProjector::combine(spec, elements)
-                }.map(|p| p.flip_distinct_for_limit(&query.limit))
-            },
+                }
+                .map(|p| p.flip_distinct_for_limit(&query.limit))
+            }
 
             FindScalar(ref element) => {
                 let elements = project_elements(1, iter::once(element), query)?;
@@ -498,7 +475,7 @@ pub fn query_projection(schema: &Schema, query: &AlgebraicQuery) -> Result<Eithe
                 } else {
                     ScalarProjector::combine(spec, elements)
                 }
-            },
+            }
 
             FindRel(ref elements) => {
                 let is_pull = elements.iter().any(|e| e.is_pull());
@@ -508,8 +485,9 @@ pub fn query_projection(schema: &Schema, query: &AlgebraicQuery) -> Result<Eithe
                     RelTwoStagePullProjector::combine(spec, column_count, elements)
                 } else {
                     RelProjector::combine(spec, column_count, elements)
-                }.map(|p| p.flip_distinct_for_limit(&query.limit))
-            },
+                }
+                .map(|p| p.flip_distinct_for_limit(&query.limit))
+            }
 
             FindTuple(ref elements) => {
                 let is_pull = elements.iter().any(|e| e.is_pull());
@@ -520,41 +498,51 @@ pub fn query_projection(schema: &Schema, query: &AlgebraicQuery) -> Result<Eithe
                 } else {
                     TupleProjector::combine(spec, column_count, elements)
                 }
-            },
-        }.map(Either::Right)
+            }
+        }
+        .map(Either::Right)
     }
 }
 
 #[test]
 fn test_into_tuple() {
     let query_output = QueryOutput {
-        spec: Rc::new(FindSpec::FindTuple(vec![Element::Variable(Variable::from_valid_name("?x")),
-                                               Element::Variable(Variable::from_valid_name("?y"))])),
-        results: QueryResults::Tuple(Some(vec![Binding::Scalar(TypedValue::Long(0)),
-                                               Binding::Scalar(TypedValue::Long(2))])),
+        spec: Rc::new(FindSpec::FindTuple(vec![
+            Element::Variable(Variable::from_valid_name("?x")),
+            Element::Variable(Variable::from_valid_name("?y")),
+        ])),
+        results: QueryResults::Tuple(Some(vec![
+            Binding::Scalar(TypedValue::Long(0)),
+            Binding::Scalar(TypedValue::Long(2)),
+        ])),
     };
 
-    assert_eq!(query_output.clone().into_tuple().expect("into_tuple"),
-               Some((Binding::Scalar(TypedValue::Long(0)),
-                     Binding::Scalar(TypedValue::Long(2)))));
+    assert_eq!(
+        query_output.clone().into_tuple().expect("into_tuple"),
+        Some((
+            Binding::Scalar(TypedValue::Long(0)),
+            Binding::Scalar(TypedValue::Long(2))
+        ))
+    );
 
     match query_output.clone().into_tuple() {
         Err(ProjectorError::UnexpectedResultsTupleLength(expected, got)) => {
             assert_eq!((expected, got), (3, 2));
-        },
+        }
         // This forces the result type.
         Ok(Some((_, _, _))) | _ => panic!("expected error"),
     }
 
     let query_output = QueryOutput {
-        spec: Rc::new(FindSpec::FindTuple(vec![Element::Variable(Variable::from_valid_name("?x")),
-                                               Element::Variable(Variable::from_valid_name("?y"))])),
+        spec: Rc::new(FindSpec::FindTuple(vec![
+            Element::Variable(Variable::from_valid_name("?x")),
+            Element::Variable(Variable::from_valid_name("?y")),
+        ])),
         results: QueryResults::Tuple(None),
     };
 
-
     match query_output.clone().into_tuple() {
-        Ok(None) => {},
+        Ok(None) => {}
         // This forces the result type.
         Ok(Some((_, _))) | _ => panic!("expected error"),
     }
@@ -562,7 +550,7 @@ fn test_into_tuple() {
     match query_output.clone().into_tuple() {
         Err(ProjectorError::UnexpectedResultsTupleLength(expected, got)) => {
             assert_eq!((expected, got), (3, 2));
-        },
+        }
         // This forces the result type.
         Ok(Some((_, _, _))) | _ => panic!("expected error"),
     }

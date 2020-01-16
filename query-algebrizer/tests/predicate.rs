@@ -8,71 +8,58 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
+extern crate core_traits;
 extern crate edn;
 extern crate mentat_core;
-extern crate core_traits;
 extern crate mentat_query_algebrizer;
 extern crate query_algebrizer_traits;
 
 mod utils;
 
-use core_traits::{
-    Attribute,
-    ValueType,
-    TypedValue,
-    ValueTypeSet,
-};
+use core_traits::{Attribute, TypedValue, ValueType, ValueTypeSet};
 
-use mentat_core::{
-    DateTime,
-    Schema,
-    Utc,
-};
+use mentat_core::{DateTime, Schema, Utc};
 
-use edn::query::{
-    Keyword,
-    PlainSymbol,
-    Variable,
-};
+use edn::query::{Keyword, PlainSymbol, Variable};
 
-use query_algebrizer_traits::errors::{
-    AlgebrizerError,
-};
+use query_algebrizer_traits::errors::AlgebrizerError;
 
-use mentat_query_algebrizer::{
-    EmptyBecause,
-    Known,
-    QueryInputs,
-};
+use mentat_query_algebrizer::{EmptyBecause, Known, QueryInputs};
 
-use utils::{
-    add_attribute,
-    alg,
-    alg_with_inputs,
-    associate_ident,
-    bails,
-};
+use utils::{add_attribute, alg, alg_with_inputs, associate_ident, bails};
 
 fn prepopulated_schema() -> Schema {
     let mut schema = Schema::default();
     associate_ident(&mut schema, Keyword::namespaced("foo", "date"), 65);
     associate_ident(&mut schema, Keyword::namespaced("foo", "double"), 66);
     associate_ident(&mut schema, Keyword::namespaced("foo", "long"), 67);
-    add_attribute(&mut schema, 65, Attribute {
-        value_type: ValueType::Instant,
-        multival: false,
-        ..Default::default()
-    });
-    add_attribute(&mut schema, 66, Attribute {
-        value_type: ValueType::Double,
-        multival: false,
-        ..Default::default()
-    });
-    add_attribute(&mut schema, 67, Attribute {
-        value_type: ValueType::Long,
-        multival: false,
-        ..Default::default()
-    });
+    add_attribute(
+        &mut schema,
+        65,
+        Attribute {
+            value_type: ValueType::Instant,
+            multival: false,
+            ..Default::default()
+        },
+    );
+    add_attribute(
+        &mut schema,
+        66,
+        Attribute {
+            value_type: ValueType::Double,
+            multival: false,
+            ..Default::default()
+        },
+    );
+    add_attribute(
+        &mut schema,
+        67,
+        Attribute {
+            value_type: ValueType::Long,
+            multival: false,
+            ..Default::default()
+        },
+    );
     schema
 }
 
@@ -86,21 +73,27 @@ fn test_instant_predicates_require_instants() {
                     :where
                     [?e :foo/date ?t]
                     [(> ?t "2017-06-16T00:56:41.257Z")]]"#;
-    assert_eq!(bails(known, query),
+    assert_eq!(
+        bails(known, query),
         AlgebrizerError::InvalidArgumentType(
             PlainSymbol::plain(">"),
             ValueTypeSet::of_numeric_and_instant_types(),
-            1));
+            1
+        )
+    );
 
     let query = r#"[:find ?e
                     :where
                     [?e :foo/date ?t]
                     [(> "2017-06-16T00:56:41.257Z", ?t)]]"#;
-    assert_eq!(bails(known, query),
+    assert_eq!(
+        bails(known, query),
         AlgebrizerError::InvalidArgumentType(
             PlainSymbol::plain(">"),
             ValueTypeSet::of_numeric_and_instant_types(),
-            0)); // We get this right.
+            0
+        )
+    ); // We get this right.
 
     // You can try using a number, which is valid input to a numeric predicate.
     // In this store and query, though, that means we expect `?t` to be both
@@ -111,12 +104,14 @@ fn test_instant_predicates_require_instants() {
                     [(> ?t 1234512345)]]"#;
     let cc = alg(known, query);
     assert!(cc.is_known_empty());
-    assert_eq!(cc.empty_because.unwrap(),
-               EmptyBecause::TypeMismatch {
-                   var: Variable::from_valid_name("?t"),
-                   existing: ValueTypeSet::of_one(ValueType::Instant),
-                   desired: ValueTypeSet::of_numeric_types(),
-    });
+    assert_eq!(
+        cc.empty_because.unwrap(),
+        EmptyBecause::TypeMismatch {
+            var: Variable::from_valid_name("?t"),
+            existing: ValueTypeSet::of_one(ValueType::Instant),
+            desired: ValueTypeSet::of_numeric_types(),
+        }
+    );
 
     // You can compare doubles to longs.
     let query = r#"[:find ?e
@@ -125,8 +120,11 @@ fn test_instant_predicates_require_instants() {
                     [(< ?t 1234512345)]]"#;
     let cc = alg(known, query);
     assert!(!cc.is_known_empty());
-    assert_eq!(cc.known_type(&Variable::from_valid_name("?t")).expect("?t is known"),
-               ValueType::Double);
+    assert_eq!(
+        cc.known_type(&Variable::from_valid_name("?t"))
+            .expect("?t is known"),
+        ValueType::Double
+    );
 }
 
 #[test]
@@ -135,27 +133,41 @@ fn test_instant_predicates_accepts_var() {
     let known = Known::for_schema(&schema);
 
     let instant_var = Variable::from_valid_name("?time");
-    let instant_value = TypedValue::Instant(DateTime::parse_from_rfc3339("2018-04-11T19:17:00.000Z")
-                    .map(|t| t.with_timezone(&Utc))
-                    .expect("expected valid date"));
+    let instant_value = TypedValue::Instant(
+        DateTime::parse_from_rfc3339("2018-04-11T19:17:00.000Z")
+            .map(|t| t.with_timezone(&Utc))
+            .expect("expected valid date"),
+    );
 
     let query = r#"[:find ?e
                     :in ?time
                     :where
                     [?e :foo/date ?t]
                     [(< ?t ?time)]]"#;
-    let cc = alg_with_inputs(known, query, QueryInputs::with_value_sequence(vec![(instant_var.clone(), instant_value.clone())]));
-    assert_eq!(cc.known_type(&instant_var).expect("?time is known"),
-               ValueType::Instant);
+    let cc = alg_with_inputs(
+        known,
+        query,
+        QueryInputs::with_value_sequence(vec![(instant_var.clone(), instant_value.clone())]),
+    );
+    assert_eq!(
+        cc.known_type(&instant_var).expect("?time is known"),
+        ValueType::Instant
+    );
 
     let query = r#"[:find ?e
                     :in ?time
                     :where
                     [?e :foo/date ?t]
                     [(> ?time, ?t)]]"#;
-    let cc = alg_with_inputs(known, query, QueryInputs::with_value_sequence(vec![(instant_var.clone(), instant_value.clone())]));
-    assert_eq!(cc.known_type(&instant_var).expect("?time is known"),
-               ValueType::Instant);
+    let cc = alg_with_inputs(
+        known,
+        query,
+        QueryInputs::with_value_sequence(vec![(instant_var.clone(), instant_value.clone())]),
+    );
+    assert_eq!(
+        cc.known_type(&instant_var).expect("?time is known"),
+        ValueType::Instant
+    );
 }
 
 #[test]
@@ -172,16 +184,28 @@ fn test_numeric_predicates_accepts_var() {
                     :where
                     [?e :foo/long ?t]
                     [(> ?t ?long)]]"#;
-    let cc = alg_with_inputs(known, query, QueryInputs::with_value_sequence(vec![(numeric_var.clone(), numeric_value.clone())]));
-    assert_eq!(cc.known_type(&numeric_var).expect("?long is known"),
-               ValueType::Long);
+    let cc = alg_with_inputs(
+        known,
+        query,
+        QueryInputs::with_value_sequence(vec![(numeric_var.clone(), numeric_value.clone())]),
+    );
+    assert_eq!(
+        cc.known_type(&numeric_var).expect("?long is known"),
+        ValueType::Long
+    );
 
     let query = r#"[:find ?e
                     :in ?long
                     :where
                     [?e :foo/long ?t]
                     [(> ?long, ?t)]]"#;
-    let cc = alg_with_inputs(known, query, QueryInputs::with_value_sequence(vec![(numeric_var.clone(), numeric_value.clone())]));
-    assert_eq!(cc.known_type(&numeric_var).expect("?long is known"),
-               ValueType::Long);
+    let cc = alg_with_inputs(
+        known,
+        query,
+        QueryInputs::with_value_sequence(vec![(numeric_var.clone(), numeric_value.clone())]),
+    );
+    assert_eq!(
+        cc.known_type(&numeric_var).expect("?long is known"),
+        ValueType::Long
+    );
 }

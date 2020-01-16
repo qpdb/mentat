@@ -19,4 +19,4 @@ path = "../core-traits"
 path = "../query-algebrizer-traits"
 
 [dev-dependencies]
-itertools = "0.7"
+itertools = "0.8"

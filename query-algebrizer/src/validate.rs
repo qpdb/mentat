@@ -10,18 +10,9 @@
 
 use std::collections::BTreeSet;
 
-use edn::query::{
-    ContainsVariables,
-    OrJoin,
-    NotJoin,
-    Variable,
-    UnifyVars,
-};
+use edn::query::{ContainsVariables, NotJoin, OrJoin, UnifyVars, Variable};
 
-use query_algebrizer_traits::errors::{
-    AlgebrizerError,
-    Result,
-};
+use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
 /// In an `or` expression, every mentioned var is considered 'free'.
 /// In an `or-join` expression, every var in the var list is 'required'.
@@ -61,7 +52,7 @@ pub(crate) fn validate_or_join(or_join: &OrJoin) -> Result<()> {
                 }
                 Ok(())
             }
-        },
+        }
         UnifyVars::Explicit(ref vars) => {
             // Each leg must use the joined vars.
             let var_set: BTreeSet<Variable> = vars.iter().cloned().collect();
@@ -71,16 +62,14 @@ pub(crate) fn validate_or_join(or_join: &OrJoin) -> Result<()> {
                 }
             }
             Ok(())
-        },
+        }
     }
 }
 
 pub(crate) fn validate_not_join(not_join: &NotJoin) -> Result<()> {
     // Grab our mentioned variables and ensure that the rules are followed.
     match not_join.unify_vars {
-        UnifyVars::Implicit => {
-            Ok(())
-        },
+        UnifyVars::Implicit => Ok(()),
         UnifyVars::Explicit(ref vars) => {
             // The joined vars must each appear somewhere in the clause's mentioned variables.
             let var_set: BTreeSet<Variable> = vars.iter().cloned().collect();
@@ -88,33 +77,25 @@ pub(crate) fn validate_not_join(not_join: &NotJoin) -> Result<()> {
                 bail!(AlgebrizerError::NonMatchingVariablesInNotClause)
             }
             Ok(())
-        },
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    extern crate mentat_core;
     extern crate edn;
+    extern crate mentat_core;
 
     use edn::query::{
-        Keyword,
-        OrWhereClause,
-        Pattern,
-        PatternNonValuePlace,
-        PatternValuePlace,
-        UnifyVars,
-        Variable,
-        WhereClause,
+        Keyword, OrWhereClause, Pattern, PatternNonValuePlace, PatternValuePlace, UnifyVars,
+        Variable, WhereClause,
     };
 
     use clauses::ident;
 
     use super::*;
     use parse_find_string;
-    use types::{
-        FindQuery,
-    };
+    use types::FindQuery;
 
     fn value_ident(ns: &str, name: &str) -> PatternValuePlace {
         Keyword::namespaced(ns, name).into()
@@ -134,7 +115,7 @@ mod tests {
                 assert_eq!((), validate_or_join(&or_join).unwrap());
                 assert_eq!(expected_unify, or_join.unify_vars);
                 or_join.clauses
-            },
+            }
             _ => panic!(),
         }
     }
@@ -157,31 +138,38 @@ mod tests {
                     left,
                     OrWhereClause::Clause(WhereClause::Pattern(Pattern {
                         source: None,
-                        entity: PatternNonValuePlace::Variable(Variable::from_valid_name("?artist")),
+                        entity: PatternNonValuePlace::Variable(Variable::from_valid_name(
+                            "?artist"
+                        )),
                         attribute: ident("artist", "type"),
                         value: value_ident("artist.type", "group"),
                         tx: PatternNonValuePlace::Placeholder,
-                    })));
+                    }))
+                );
                 assert_eq!(
                     right,
-                    OrWhereClause::And(
-                        vec![
-                            WhereClause::Pattern(Pattern {
-                                source: None,
-                                entity: PatternNonValuePlace::Variable(Variable::from_valid_name("?artist")),
-                                attribute: ident("artist", "type"),
-                                value: value_ident("artist.type", "person"),
-                                tx: PatternNonValuePlace::Placeholder,
-                            }),
-                            WhereClause::Pattern(Pattern {
-                                source: None,
-                                entity: PatternNonValuePlace::Variable(Variable::from_valid_name("?artist")),
-                                attribute: ident("artist", "gender"),
-                                value: value_ident("artist.gender", "female"),
-                                tx: PatternNonValuePlace::Placeholder,
-                            }),
-                        ]));
-            },
+                    OrWhereClause::And(vec![
+                        WhereClause::Pattern(Pattern {
+                            source: None,
+                            entity: PatternNonValuePlace::Variable(Variable::from_valid_name(
+                                "?artist"
+                            )),
+                            attribute: ident("artist", "type"),
+                            value: value_ident("artist.type", "person"),
+                            tx: PatternNonValuePlace::Placeholder,
+                        }),
+                        WhereClause::Pattern(Pattern {
+                            source: None,
+                            entity: PatternNonValuePlace::Variable(Variable::from_valid_name(
+                                "?artist"
+                            )),
+                            attribute: ident("artist", "gender"),
+                            value: value_ident("artist.gender", "female"),
+                            tx: PatternNonValuePlace::Placeholder,
+                        }),
+                    ])
+                );
+            }
             _ => panic!(),
         };
     }
@@ -193,7 +181,12 @@ mod tests {
                         :where (or [?artist :artist/type :artist.type/group]
                                    [?artist :artist/type ?type])]"#;
         let parsed = parse_find_string(query).expect("expected successful parse");
-        match parsed.where_clauses.into_iter().next().expect("expected at least one clause") {
+        match parsed
+            .where_clauses
+            .into_iter()
+            .next()
+            .expect("expected at least one clause")
+        {
             WhereClause::OrJoin(or_join) => assert!(validate_or_join(&or_join).is_err()),
             _ => panic!(),
         }
@@ -209,7 +202,10 @@ mod tests {
                                    (and [?artist :artist/type ?type]
                                         [?type :artist/role :artist.role/parody]))]"#;
         let parsed = parse_find_string(query).expect("expected successful parse");
-        let clauses = valid_or_join(parsed, UnifyVars::Explicit(::std::iter::once(Variable::from_valid_name("?artist")).collect()));
+        let clauses = valid_or_join(
+            parsed,
+            UnifyVars::Explicit(::std::iter::once(Variable::from_valid_name("?artist")).collect()),
+        );
 
         // Let's do some detailed parse checks.
         let mut arms = clauses.into_iter();
@@ -219,35 +215,41 @@ mod tests {
                     left,
                     OrWhereClause::Clause(WhereClause::Pattern(Pattern {
                         source: None,
-                        entity: PatternNonValuePlace::Variable(Variable::from_valid_name("?artist")),
+                        entity: PatternNonValuePlace::Variable(Variable::from_valid_name(
+                            "?artist"
+                        )),
                         attribute: ident("artist", "type"),
                         value: value_ident("artist.type", "group"),
                         tx: PatternNonValuePlace::Placeholder,
-                    })));
+                    }))
+                );
                 assert_eq!(
                     right,
-                    OrWhereClause::And(
-                        vec![
-                            WhereClause::Pattern(Pattern {
-                                source: None,
-                                entity: PatternNonValuePlace::Variable(Variable::from_valid_name("?artist")),
-                                attribute: ident("artist", "type"),
-                                value: PatternValuePlace::Variable(Variable::from_valid_name("?type")),
-                                tx: PatternNonValuePlace::Placeholder,
-                            }),
-                            WhereClause::Pattern(Pattern {
-                                source: None,
-                                entity: PatternNonValuePlace::Variable(Variable::from_valid_name("?type")),
-                                attribute: ident("artist", "role"),
-                                value: value_ident("artist.role", "parody"),
-                                tx: PatternNonValuePlace::Placeholder,
-                            }),
-                        ]));
-            },
+                    OrWhereClause::And(vec![
+                        WhereClause::Pattern(Pattern {
+                            source: None,
+                            entity: PatternNonValuePlace::Variable(Variable::from_valid_name(
+                                "?artist"
+                            )),
+                            attribute: ident("artist", "type"),
+                            value: PatternValuePlace::Variable(Variable::from_valid_name("?type")),
+                            tx: PatternNonValuePlace::Placeholder,
+                        }),
+                        WhereClause::Pattern(Pattern {
+                            source: None,
+                            entity: PatternNonValuePlace::Variable(Variable::from_valid_name(
+                                "?type"
+                            )),
+                            attribute: ident("artist", "role"),
+                            value: value_ident("artist.role", "parody"),
+                            tx: PatternNonValuePlace::Placeholder,
+                        }),
+                    ])
+                );
+            }
             _ => panic!(),
         };
     }
-
 
     /// Tests that the top-level form is a valid `not`, returning the clauses.
     fn valid_not_join(parsed: FindQuery, expected_unify: UnifyVars) -> Vec<WhereClause> {
@@ -267,7 +269,7 @@ mod tests {
                 assert_eq!((), validate_not_join(&not_join).unwrap());
                 assert_eq!(expected_unify, not_join.unify_vars);
                 not_join.clauses
-            },
+            }
             _ => panic!(),
         }
     }
@@ -296,7 +298,8 @@ mod tests {
                         attribute: artist_country.clone(),
                         value: value_ident("country", "CA"),
                         tx: PatternNonValuePlace::Placeholder,
-                    }));
+                    })
+                );
                 assert_eq!(
                     clause2,
                     WhereClause::Pattern(Pattern {
@@ -305,8 +308,9 @@ mod tests {
                         attribute: artist_country,
                         value: value_ident("country", "GB"),
                         tx: PatternNonValuePlace::Placeholder,
-                    }));
-            },
+                    })
+                );
+            }
             _ => panic!(),
         };
     }
@@ -319,7 +323,10 @@ mod tests {
                                    [?release :release/artists ?artist]
                                    [?release :release/year 1970])]"#;
         let parsed = parse_find_string(query).expect("expected successful parse");
-        let clauses = valid_not_join(parsed, UnifyVars::Explicit(::std::iter::once(Variable::from_valid_name("?artist")).collect()));
+        let clauses = valid_not_join(
+            parsed,
+            UnifyVars::Explicit(::std::iter::once(Variable::from_valid_name("?artist")).collect()),
+        );
 
         let release = PatternNonValuePlace::Variable(Variable::from_valid_name("?release"));
         let artist = PatternValuePlace::Variable(Variable::from_valid_name("?artist"));
@@ -335,7 +342,8 @@ mod tests {
                         attribute: ident("release", "artists"),
                         value: artist,
                         tx: PatternNonValuePlace::Placeholder,
-                    }));
+                    })
+                );
                 assert_eq!(
                     clause2,
                     WhereClause::Pattern(Pattern {
@@ -344,8 +352,9 @@ mod tests {
                         attribute: ident("release", "year"),
                         value: PatternValuePlace::EntidOrInteger(1970),
                         tx: PatternNonValuePlace::Placeholder,
-                    }));
-            },
+                    })
+                );
+            }
             _ => panic!(),
         };
     }

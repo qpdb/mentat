@@ -9,46 +9,22 @@
 // specific language governing permissions and limitations under the License.
 
 use std::collections::btree_map::Entry;
-use std::collections::{
-    BTreeMap,
-    BTreeSet,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
-use core_traits::{
-    ValueTypeSet,
-};
+use core_traits::ValueTypeSet;
 
 use edn::query::{
-    OrJoin,
-    OrWhereClause,
-    Pattern,
-    PatternValuePlace,
-    PatternNonValuePlace,
-    UnifyVars,
-    Variable,
+    OrJoin, OrWhereClause, Pattern, PatternNonValuePlace, PatternValuePlace, UnifyVars, Variable,
     WhereClause,
 };
 
-use clauses::{
-    ConjoiningClauses,
-    PushComputed,
-};
+use clauses::{ConjoiningClauses, PushComputed};
 
-use query_algebrizer_traits::errors::{
-    Result,
-};
+use query_algebrizer_traits::errors::Result;
 
 use types::{
-    ColumnConstraintOrAlternation,
-    ColumnAlternation,
-    ColumnIntersection,
-    ComputedTable,
-    DatomsTable,
-    EmptyBecause,
-    EvolvedPattern,
-    PlaceOrEmpty,
-    QualifiedAlias,
-    SourceAlias,
+    ColumnAlternation, ColumnConstraintOrAlternation, ColumnIntersection, ComputedTable,
+    DatomsTable, EmptyBecause, EvolvedPattern, PlaceOrEmpty, QualifiedAlias, SourceAlias,
     VariableColumn,
 };
 
@@ -59,10 +35,10 @@ fn _simply_matches_place(left: &PatternNonValuePlace, right: &PatternNonValuePla
     match (left, right) {
         (&PatternNonValuePlace::Variable(ref a), &PatternNonValuePlace::Variable(ref b)) => a == b,
         (&PatternNonValuePlace::Placeholder, &PatternNonValuePlace::Placeholder) => true,
-        (&PatternNonValuePlace::Entid(_), &PatternNonValuePlace::Entid(_))       => true,
-        (&PatternNonValuePlace::Entid(_), &PatternNonValuePlace::Ident(_))       => true,
-        (&PatternNonValuePlace::Ident(_), &PatternNonValuePlace::Ident(_))       => true,
-        (&PatternNonValuePlace::Ident(_), &PatternNonValuePlace::Entid(_))       => true,
+        (&PatternNonValuePlace::Entid(_), &PatternNonValuePlace::Entid(_)) => true,
+        (&PatternNonValuePlace::Entid(_), &PatternNonValuePlace::Ident(_)) => true,
+        (&PatternNonValuePlace::Ident(_), &PatternNonValuePlace::Ident(_)) => true,
+        (&PatternNonValuePlace::Ident(_), &PatternNonValuePlace::Entid(_)) => true,
         _ => false,
     }
 }
@@ -101,7 +77,7 @@ impl ConjoiningClauses {
             OrWhereClause::And(clauses) => {
                 self.apply_clauses(known, clauses)?;
                 Ok(())
-            },
+            }
         }
     }
 
@@ -117,7 +93,7 @@ impl ConjoiningClauses {
             1 if or_join.is_fully_unified() => {
                 let clause = or_join.clauses.pop().expect("there's a clause");
                 self.apply_or_where_clause(known, clause)
-            },
+            }
             // Either there's only one clause pattern, and it's not fully unified, or we
             // have multiple clauses.
             // In the former case we can't just apply it: it includes a variable that we don't want
@@ -222,12 +198,10 @@ impl ConjoiningClauses {
                 let table = match self.make_evolved_attribute(&known, p.attribute.clone()) {
                     Place((aaa, value_type)) => {
                         match self.make_evolved_value(&known, value_type, p.value.clone()) {
-                            Place(v) => {
-                                self.table_for_places(known.schema, &aaa, &v)
-                            },
+                            Place(v) => self.table_for_places(known.schema, &aaa, &v),
                             Empty(e) => Err(e),
                         }
-                    },
+                    }
                     Empty(e) => Err(e),
                 };
 
@@ -237,20 +211,19 @@ impl ConjoiningClauses {
 
                         // Do not accumulate this pattern at all. Add lightness!
                         continue;
-                    },
+                    }
                     Ok(table) => {
                         // Check the shape of the pattern against a previous pattern.
-                        let same_shape =
-                            if let Some(template) = patterns.get(0) {
-                                template.source == p.source &&     // or-arms all use the same source anyway.
+                        let same_shape = if let Some(template) = patterns.get(0) {
+                            template.source == p.source &&     // or-arms all use the same source anyway.
                                 _simply_matches_place(&template.entity, &p.entity) &&
                                 _simply_matches_place(&template.attribute, &p.attribute) &&
                                 _simply_matches_value_place(&template.value, &p.value) &&
                                 _simply_matches_place(&template.tx, &p.tx)
-                            } else {
-                                // No previous pattern.
-                                true
-                            };
+                        } else {
+                            // No previous pattern.
+                            true
+                        };
 
                         // All of our clauses that _do_ yield a table -- that are possible --
                         // must use the same table in order for this to be a simple `or`!
@@ -286,10 +259,7 @@ impl ConjoiningClauses {
                         .chain(clauses)
                         .collect();
 
-            return DeconstructedOrJoin::Complex(OrJoin::new(
-                UnifyVars::Implicit,
-                reconstructed,
-            ));
+            return DeconstructedOrJoin::Complex(OrJoin::new(UnifyVars::Implicit, reconstructed));
         }
 
         // If we got here without returning, then `patterns` is what we're working with.
@@ -298,7 +268,7 @@ impl ConjoiningClauses {
             0 => {
                 assert!(empty_because.is_some());
                 DeconstructedOrJoin::KnownEmpty(empty_because.unwrap())
-            },
+            }
             1 => DeconstructedOrJoin::UnitPattern(patterns.pop().unwrap()),
             _ => DeconstructedOrJoin::Simple(patterns, mentioned_vars),
         }
@@ -309,42 +279,41 @@ impl ConjoiningClauses {
             DeconstructedOrJoin::KnownSuccess => {
                 // The pattern came to us empty -- `(or)`. Do nothing.
                 Ok(())
-            },
+            }
             DeconstructedOrJoin::KnownEmpty(reason) => {
                 // There were no arms of the join that could be mapped to a table.
                 // The entire `or`, and thus the CC, cannot yield results.
                 self.mark_known_empty(reason);
                 Ok(())
-            },
+            }
             DeconstructedOrJoin::Unit(clause) => {
                 // There was only one clause. We're unifying all variables, so we can just apply here.
                 self.apply_or_where_clause(known, clause)
-            },
+            }
             DeconstructedOrJoin::UnitPattern(pattern) => {
                 // Same, but simpler.
                 match self.make_evolved_pattern(known, pattern) {
                     PlaceOrEmpty::Empty(e) => {
                         self.mark_known_empty(e);
-                    },
+                    }
                     PlaceOrEmpty::Place(pattern) => {
                         self.apply_pattern(known, pattern);
-                    },
+                    }
                 };
                 Ok(())
-            },
+            }
             DeconstructedOrJoin::Simple(patterns, mentioned_vars) => {
                 // Hooray! Fully unified and plain ol' patterns that all use the same table.
                 // Go right ahead and produce a set of constraint alternations that we can collect,
                 // using a single table alias.
                 self.apply_simple_or_join(known, patterns, mentioned_vars)
-            },
+            }
             DeconstructedOrJoin::Complex(or_join) => {
                 // Do this the hard way.
                 self.apply_complex_or_join(known, or_join)
-            },
+            }
         }
     }
-
 
     /// A simple `or` join is effectively a single pattern in which an individual column's bindings
     /// are not a single value. Rather than a pattern like
@@ -373,27 +342,30 @@ impl ConjoiningClauses {
     ///    OR (datoms00.a = 98 AND datoms00.v = 'Peter')
     /// ```
     ///
-    fn apply_simple_or_join(&mut self,
-                            known: Known,
-                            patterns: Vec<Pattern>,
-                            mentioned_vars: BTreeSet<Variable>)
-                            -> Result<()> {
+    fn apply_simple_or_join(
+        &mut self,
+        known: Known,
+        patterns: Vec<Pattern>,
+        mentioned_vars: BTreeSet<Variable>,
+    ) -> Result<()> {
         if self.is_known_empty() {
-            return Ok(())
+            return Ok(());
         }
 
         assert!(patterns.len() >= 2);
 
-        let patterns: Vec<EvolvedPattern> = patterns.into_iter().filter_map(|pattern| {
-            match self.make_evolved_pattern(known, pattern) {
-                PlaceOrEmpty::Empty(_e) => {
-                    // Never mind.
-                    None
-                },
-                PlaceOrEmpty::Place(p) => Some(p),
-            }
-        }).collect();
-
+        let patterns: Vec<EvolvedPattern> = patterns
+            .into_iter()
+            .filter_map(|pattern| {
+                match self.make_evolved_pattern(known, pattern) {
+                    PlaceOrEmpty::Empty(_e) => {
+                        // Never mind.
+                        None
+                    }
+                    PlaceOrEmpty::Place(p) => Some(p),
+                }
+            })
+            .collect();
 
         // Begin by building a base CC that we'll use to produce constraints from each pattern.
         // Populate this base CC with whatever variables are already known from the CC to which
@@ -405,7 +377,9 @@ impl ConjoiningClauses {
 
         // We expect this to always work: if it doesn't, it means we should never have got to this
         // point.
-        let source_alias = self.alias_table(known.schema, &patterns[0]).expect("couldn't get table");
+        let source_alias = self
+            .alias_table(known.schema, &patterns[0])
+            .expect("couldn't get table");
 
         // This is where we'll collect everything we eventually add to the destination CC.
         let mut folded = ConjoiningClauses::default();
@@ -432,24 +406,26 @@ impl ConjoiningClauses {
             //  :where [?a :some/int ?x]
             //         [_ :some/otherint ?x]]
             // ```
-            let mut receptacles =
-                patterns.into_iter()
-                        .map(|pattern| {
-                            let mut receptacle = template.make_receptacle();
-                            receptacle.apply_pattern_clause_for_alias(known, &pattern, &source_alias);
-                            receptacle
-                        })
-                        .peekable();
+            let mut receptacles = patterns
+                .into_iter()
+                .map(|pattern| {
+                    let mut receptacle = template.make_receptacle();
+                    receptacle.apply_pattern_clause_for_alias(known, &pattern, &source_alias);
+                    receptacle
+                })
+                .peekable();
 
             // Let's see if we can grab a reason if every pattern failed.
             // If every pattern failed, we can just take the first!
-            let reason = receptacles.peek()
-                                    .map(|r| r.empty_because.clone())
-                                    .unwrap_or(None);
+            let reason = receptacles
+                .peek()
+                .map(|r| r.empty_because.clone())
+                .unwrap_or(None);
 
             // Filter out empties.
-            let mut receptacles = receptacles.filter(|receptacle| !receptacle.is_known_empty())
-                                             .peekable();
+            let mut receptacles = receptacles
+                .filter(|receptacle| !receptacle.is_known_empty())
+                .peekable();
 
             // We need to copy the column bindings from one of the receptacles. Because this is a simple
             // or, we know that they're all the same.
@@ -460,10 +436,10 @@ impl ConjoiningClauses {
                     match self.column_bindings.entry(v.clone()) {
                         Entry::Vacant(e) => {
                             e.insert(cols.clone());
-                        },
+                        }
                         Entry::Occupied(mut e) => {
                             e.get_mut().append(&mut cols.clone());
-                        },
+                        }
                     }
                 }
             } else {
@@ -483,7 +459,10 @@ impl ConjoiningClauses {
             // we might know that if `?x` is an integer then `?y` is a string, or vice versa, but at
             // this point we'll simply state that `?x` and `?y` can both be integers or strings.
 
-            fn vec_for_iterator<T, I, U>(iter: &I) -> Vec<T> where I: Iterator<Item=U> {
+            fn vec_for_iterator<T, I, U>(iter: &I) -> Vec<T>
+            where
+                I: Iterator<Item = U>,
+            {
                 match iter.size_hint().1 {
                     None => Vec::new(),
                     Some(expected) => Vec::with_capacity(expected),
@@ -593,10 +572,10 @@ impl ConjoiningClauses {
             match clause {
                 OrWhereClause::And(clauses) => {
                     receptacle.apply_clauses(known, clauses)?;
-                },
+                }
                 OrWhereClause::Clause(clause) => {
                     receptacle.apply_clause(known, clause)?;
-                },
+                }
             }
             if receptacle.is_known_empty() {
                 empty_because = receptacle.empty_because;
@@ -681,10 +660,11 @@ impl ConjoiningClauses {
         // Note that we start with the first clause's type information.
         {
             let mut clauses = acc.iter();
-            let mut additional_types = clauses.next()
-                                              .expect("there to be at least one clause")
-                                              .known_types
-                                              .clone();
+            let mut additional_types = clauses
+                .next()
+                .expect("there to be at least one clause")
+                .known_types
+                .clone();
             for cc in clauses {
                 union_types(&mut additional_types, &cc.known_types);
             }
@@ -702,10 +682,18 @@ impl ConjoiningClauses {
         // Stitch the computed table into column_bindings, so we get cross-linking.
         let schema = known.schema;
         for var in var_associations.into_iter() {
-            self.bind_column_to_var(schema, alias.clone(), VariableColumn::Variable(var.clone()), var);
+            self.bind_column_to_var(
+                schema,
+                alias.clone(),
+                VariableColumn::Variable(var.clone()),
+                var,
+            );
         }
         for var in type_associations.into_iter() {
-            self.extracted_types.insert(var.clone(), QualifiedAlias::new(alias.clone(), VariableColumn::VariableTypeTag(var)));
+            self.extracted_types.insert(
+                var.clone(),
+                QualifiedAlias::new(alias.clone(), VariableColumn::VariableTypeTag(var)),
+            );
         }
         self.from.push(SourceAlias(table, alias));
         Ok(())
@@ -713,8 +701,10 @@ impl ConjoiningClauses {
 }
 
 /// Helper to fold together a set of type maps.
-fn union_types(into: &mut BTreeMap<Variable, ValueTypeSet>,
-               additional_types: &BTreeMap<Variable, ValueTypeSet>) {
+fn union_types(
+    into: &mut BTreeMap<Variable, ValueTypeSet>,
+    additional_types: &BTreeMap<Variable, ValueTypeSet>,
+) {
     // We want the exclusive disjunction -- any variable not mentioned in both sets -- to default
     // to ValueTypeSet::Any.
     // This is necessary because we lazily populate known_types, so sometimes the type set will
@@ -727,9 +717,10 @@ fn union_types(into: &mut BTreeMap<Variable, ValueTypeSet>,
     {
         let i: BTreeSet<&Variable> = into.keys().collect();
         let a: BTreeSet<&Variable> = additional_types.keys().collect();
-        any = i.symmetric_difference(&a)
-               .map(|v| ((*v).clone(), ValueTypeSet::any()))
-               .collect();
+        any = i
+            .symmetric_difference(&a)
+            .map(|v| ((*v).clone(), ValueTypeSet::any()))
+            .collect();
     }
 
     // Collect the additional types.
@@ -737,11 +728,11 @@ fn union_types(into: &mut BTreeMap<Variable, ValueTypeSet>,
         match into.entry(var.clone()) {
             Entry::Vacant(e) => {
                 e.insert(new_types.clone());
-            },
+            }
             Entry::Occupied(mut e) => {
                 let new = e.get().union(&new_types);
                 e.insert(new);
-            },
+            }
         }
     }
 
@@ -753,41 +744,20 @@ fn union_types(into: &mut BTreeMap<Variable, ValueTypeSet>,
 mod testing {
     use super::*;
 
-    use core_traits::{
-        Attribute,
-        ValueType,
-        TypedValue,
-    };
+    use core_traits::{Attribute, TypedValue, ValueType};
 
-    use mentat_core::{
-        Schema,
-    };
+    use mentat_core::Schema;
 
-    use edn::query::{
-        Keyword,
-        Variable,
-    };
+    use edn::query::{Keyword, Variable};
 
-    use clauses::{
-        add_attribute,
-        associate_ident,
-    };
+    use clauses::{add_attribute, associate_ident};
 
     use types::{
-        ColumnConstraint,
-        DatomsColumn,
-        DatomsTable,
-        Inequality,
-        QualifiedAlias,
-        QueryValue,
+        ColumnConstraint, DatomsColumn, DatomsTable, Inequality, QualifiedAlias, QueryValue,
         SourceAlias,
     };
 
-    use {
-        algebrize,
-        algebrize_with_counter,
-        parse_find_string,
-    };
+    use {algebrize, algebrize_with_counter, parse_find_string};
 
     fn alg(known: Known, input: &str) -> ConjoiningClauses {
         let parsed = parse_find_string(input).expect("parse failed");
@@ -798,7 +768,9 @@ mod testing {
     /// simpler version.
     fn alg_c(known: Known, counter: usize, input: &str) -> ConjoiningClauses {
         let parsed = parse_find_string(input).expect("parse failed");
-        algebrize_with_counter(known, parsed, counter).expect("algebrize failed").cc
+        algebrize_with_counter(known, parsed, counter)
+            .expect("algebrize failed")
+            .cc
     }
 
     fn compare_ccs(left: ConjoiningClauses, right: ConjoiningClauses) {
@@ -813,31 +785,51 @@ mod testing {
         associate_ident(&mut schema, Keyword::namespaced("foo", "parent"), 67);
         associate_ident(&mut schema, Keyword::namespaced("foo", "age"), 68);
         associate_ident(&mut schema, Keyword::namespaced("foo", "height"), 69);
-        add_attribute(&mut schema, 65, Attribute {
-            value_type: ValueType::String,
-            multival: false,
-            ..Default::default()
-        });
-        add_attribute(&mut schema, 66, Attribute {
-            value_type: ValueType::String,
-            multival: true,
-            ..Default::default()
-        });
-        add_attribute(&mut schema, 67, Attribute {
-            value_type: ValueType::String,
-            multival: true,
-            ..Default::default()
-        });
-        add_attribute(&mut schema, 68, Attribute {
-            value_type: ValueType::Long,
-            multival: false,
-            ..Default::default()
-        });
-        add_attribute(&mut schema, 69, Attribute {
-            value_type: ValueType::Long,
-            multival: false,
-            ..Default::default()
-        });
+        add_attribute(
+            &mut schema,
+            65,
+            Attribute {
+                value_type: ValueType::String,
+                multival: false,
+                ..Default::default()
+            },
+        );
+        add_attribute(
+            &mut schema,
+            66,
+            Attribute {
+                value_type: ValueType::String,
+                multival: true,
+                ..Default::default()
+            },
+        );
+        add_attribute(
+            &mut schema,
+            67,
+            Attribute {
+                value_type: ValueType::String,
+                multival: true,
+                ..Default::default()
+            },
+        );
+        add_attribute(
+            &mut schema,
+            68,
+            Attribute {
+                value_type: ValueType::Long,
+                multival: false,
+                ..Default::default()
+            },
+        );
+        add_attribute(
+            &mut schema,
+            69,
+            Attribute {
+                value_type: ValueType::Long,
+                multival: false,
+                ..Default::default()
+            },
+        );
         schema
     }
 
@@ -853,7 +845,12 @@ mod testing {
                         [?x :foo/nope3 "Daphne"])]"#;
         let cc = alg(known, query);
         assert!(cc.is_known_empty());
-        assert_eq!(cc.empty_because, Some(EmptyBecause::UnresolvedIdent(Keyword::namespaced("foo", "nope3"))));
+        assert_eq!(
+            cc.empty_because,
+            Some(EmptyBecause::UnresolvedIdent(Keyword::namespaced(
+                "foo", "nope3"
+            )))
+        );
     }
 
     /// Test that if only one of the attributes in an `or` resolves, it's equivalent to a simple query.
@@ -868,7 +865,10 @@ mod testing {
                         [?x :foo/nope "Daphne"])]"#;
         let cc = alg(known, query);
         assert!(!cc.is_known_empty());
-        compare_ccs(cc, alg(known, r#"[:find ?x :where [?x :foo/parent "Ámbar"]]"#));
+        compare_ccs(
+            cc,
+            alg(known, r#"[:find ?x :where [?x :foo/parent "Ámbar"]]"#),
+        );
     }
 
     // Simple alternation.
@@ -894,19 +894,43 @@ mod testing {
         let daphne = QueryValue::TypedValue(TypedValue::typed_string("Daphne"));
 
         assert!(!cc.is_known_empty());
-        assert_eq!(cc.wheres, ColumnIntersection(vec![
-            ColumnConstraintOrAlternation::Alternation(
+        assert_eq!(
+            cc.wheres,
+            ColumnIntersection(vec![ColumnConstraintOrAlternation::Alternation(
                 ColumnAlternation(vec![
                     ColumnIntersection(vec![
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a.clone(), knows.clone())),
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0v.clone(), john))]),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d0a.clone(),
+                            knows.clone()
+                        )),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d0v.clone(),
+                            john
+                        ))
+                    ]),
                     ColumnIntersection(vec![
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a.clone(), parent)),
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0v.clone(), ambar))]),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d0a.clone(),
+                            parent
+                        )),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d0v.clone(),
+                            ambar
+                        ))
+                    ]),
                     ColumnIntersection(vec![
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a.clone(), knows)),
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0v.clone(), daphne))]),
-                    ]))]));
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d0a.clone(),
+                            knows
+                        )),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d0v.clone(),
+                            daphne
+                        ))
+                    ]),
+                ])
+            )])
+        );
         assert_eq!(cc.column_bindings.get(&vx), Some(&vec![d0e]));
         assert_eq!(cc.from, vec![SourceAlias(DatomsTable::Datoms, d0)]);
     }
@@ -940,26 +964,60 @@ mod testing {
         let daphne = QueryValue::TypedValue(TypedValue::typed_string("Daphne"));
 
         assert!(!cc.is_known_empty());
-        assert_eq!(cc.wheres, ColumnIntersection(vec![
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a.clone(), name.clone())),
-            ColumnConstraintOrAlternation::Alternation(
-                ColumnAlternation(vec![
+        assert_eq!(
+            cc.wheres,
+            ColumnIntersection(vec![
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                    d0a.clone(),
+                    name.clone()
+                )),
+                ColumnConstraintOrAlternation::Alternation(ColumnAlternation(vec![
                     ColumnIntersection(vec![
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1a.clone(), knows.clone())),
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1v.clone(), john))]),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d1a.clone(),
+                            knows.clone()
+                        )),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d1v.clone(),
+                            john
+                        ))
+                    ]),
                     ColumnIntersection(vec![
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1a.clone(), parent)),
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1v.clone(), ambar))]),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d1a.clone(),
+                            parent
+                        )),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d1v.clone(),
+                            ambar
+                        ))
+                    ]),
                     ColumnIntersection(vec![
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1a.clone(), knows)),
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1v.clone(), daphne))]),
-                    ])),
-            // The outer pattern joins against the `or`.
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0e.clone(), QueryValue::Column(d1e.clone()))),
-        ]));
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d1a.clone(),
+                            knows
+                        )),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d1v.clone(),
+                            daphne
+                        ))
+                    ]),
+                ])),
+                // The outer pattern joins against the `or`.
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                    d0e.clone(),
+                    QueryValue::Column(d1e.clone())
+                )),
+            ])
+        );
         assert_eq!(cc.column_bindings.get(&vx), Some(&vec![d0e, d1e]));
-        assert_eq!(cc.from, vec![SourceAlias(DatomsTable::Datoms, d0),
-                                 SourceAlias(DatomsTable::Datoms, d1)]);
+        assert_eq!(
+            cc.from,
+            vec![
+                SourceAlias(DatomsTable::Datoms, d0),
+                SourceAlias(DatomsTable::Datoms, d1)
+            ]
+        );
     }
 
     // Alternation with a pattern and a predicate.
@@ -990,28 +1048,55 @@ mod testing {
         let daphne = QueryValue::TypedValue(TypedValue::typed_string("Daphne"));
 
         assert!(!cc.is_known_empty());
-        assert_eq!(cc.wheres, ColumnIntersection(vec![
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a.clone(), age.clone())),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Inequality {
-                operator: Inequality::LessThan,
-                left: QueryValue::Column(d0v.clone()),
-                right: QueryValue::TypedValue(TypedValue::Long(30)),
-            }),
-            ColumnConstraintOrAlternation::Alternation(
-                ColumnAlternation(vec![
+        assert_eq!(
+            cc.wheres,
+            ColumnIntersection(vec![
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                    d0a.clone(),
+                    age.clone()
+                )),
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Inequality {
+                    operator: Inequality::LessThan,
+                    left: QueryValue::Column(d0v.clone()),
+                    right: QueryValue::TypedValue(TypedValue::Long(30)),
+                }),
+                ColumnConstraintOrAlternation::Alternation(ColumnAlternation(vec![
                     ColumnIntersection(vec![
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1a.clone(), knows.clone())),
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1v.clone(), john))]),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d1a.clone(),
+                            knows.clone()
+                        )),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d1v.clone(),
+                            john
+                        ))
+                    ]),
                     ColumnIntersection(vec![
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1a.clone(), knows)),
-                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1v.clone(), daphne))]),
-                    ])),
-            // The outer pattern joins against the `or`.
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0e.clone(), QueryValue::Column(d1e.clone()))),
-        ]));
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d1a.clone(),
+                            knows
+                        )),
+                        ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                            d1v.clone(),
+                            daphne
+                        ))
+                    ]),
+                ])),
+                // The outer pattern joins against the `or`.
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                    d0e.clone(),
+                    QueryValue::Column(d1e.clone())
+                )),
+            ])
+        );
         assert_eq!(cc.column_bindings.get(&vx), Some(&vec![d0e, d1e]));
-        assert_eq!(cc.from, vec![SourceAlias(DatomsTable::Datoms, d0),
-                                 SourceAlias(DatomsTable::Datoms, d1)]);
+        assert_eq!(
+            cc.from,
+            vec![
+                SourceAlias(DatomsTable::Datoms, d0),
+                SourceAlias(DatomsTable::Datoms, d1)
+            ]
+        );
     }
 
     // These two are not equivalent:
@@ -1036,18 +1121,32 @@ mod testing {
         let knows = QueryValue::Entid(66);
 
         assert!(!cc.is_known_empty());
-        assert_eq!(cc.wheres, ColumnIntersection(vec![
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a.clone(), knows.clone())),
-            // The outer pattern joins against the `or` on the entity, but not value -- ?y means
-            // different things in each place.
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0e.clone(), QueryValue::Column(c0x.clone()))),
-        ]));
+        assert_eq!(
+            cc.wheres,
+            ColumnIntersection(vec![
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                    d0a.clone(),
+                    knows.clone()
+                )),
+                // The outer pattern joins against the `or` on the entity, but not value -- ?y means
+                // different things in each place.
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
+                    d0e.clone(),
+                    QueryValue::Column(c0x.clone())
+                )),
+            ])
+        );
         assert_eq!(cc.column_bindings.get(&vx), Some(&vec![d0e, c0x]));
 
         // ?y does not have a binding in the `or-join` pattern.
         assert_eq!(cc.column_bindings.get(&vy), Some(&vec![d0v]));
-        assert_eq!(cc.from, vec![SourceAlias(DatomsTable::Datoms, d0),
-                                 SourceAlias(DatomsTable::Computed(0), c0)]);
+        assert_eq!(
+            cc.from,
+            vec![
+                SourceAlias(DatomsTable::Datoms, d0),
+                SourceAlias(DatomsTable::Computed(0), c0)
+            ]
+        );
     }
 
     // These two are equivalent:
@@ -1057,14 +1156,13 @@ mod testing {
     fn test_unit_or_does_flatten() {
         let schema = prepopulated_schema();
         let known = Known::for_schema(&schema);
-        let or_query =   r#"[:find ?x
+        let or_query = r#"[:find ?x
                              :where [?x :foo/knows ?y]
                                     (or [?x :foo/parent ?y])]"#;
         let flat_query = r#"[:find ?x
                              :where [?x :foo/knows ?y]
                                     [?x :foo/parent ?y]]"#;
-        compare_ccs(alg(known, or_query),
-                    alg(known, flat_query));
+        compare_ccs(alg(known, or_query), alg(known, flat_query));
     }
 
     // Elision of `and`.
@@ -1072,14 +1170,13 @@ mod testing {
     fn test_unit_or_and_does_flatten() {
         let schema = prepopulated_schema();
         let known = Known::for_schema(&schema);
-        let or_query =   r#"[:find ?x
+        let or_query = r#"[:find ?x
                              :where (or (and [?x :foo/parent ?y]
                                              [?x :foo/age 7]))]"#;
-        let flat_query =   r#"[:find ?x
+        let flat_query = r#"[:find ?x
                                :where [?x :foo/parent ?y]
                                       [?x :foo/age 7]]"#;
-        compare_ccs(alg(known, or_query),
-                    alg(known, flat_query));
+        compare_ccs(alg(known, or_query), alg(known, flat_query));
     }
 
     // Alternation with `and`.
@@ -1101,31 +1198,45 @@ mod testing {
         let cc = alg(known, query);
         let mut tables = cc.computed_tables.into_iter();
         match (tables.next(), tables.next()) {
-            (Some(ComputedTable::Union { projection, type_extraction, arms }), None) => {
-                assert_eq!(projection, vec![Variable::from_valid_name("?x")].into_iter().collect());
+            (
+                Some(ComputedTable::Union {
+                    projection,
+                    type_extraction,
+                    arms,
+                }),
+                None,
+            ) => {
+                assert_eq!(
+                    projection,
+                    vec![Variable::from_valid_name("?x")].into_iter().collect()
+                );
                 assert!(type_extraction.is_empty());
 
                 let mut arms = arms.into_iter();
                 match (arms.next(), arms.next(), arms.next()) {
                     (Some(and), Some(pattern), None) => {
-                        let expected_and = alg_c(known,
-                                                 0,  // The first pattern to be processed.
-                                                 r#"[:find ?x :where [?x :foo/knows "John"] [?x :foo/parent "Ámbar"]]"#);
+                        let expected_and = alg_c(
+                            known,
+                            0, // The first pattern to be processed.
+                            r#"[:find ?x :where [?x :foo/knows "John"] [?x :foo/parent "Ámbar"]]"#,
+                        );
                         compare_ccs(and, expected_and);
 
-                        let expected_pattern = alg_c(known,
-                                                     2,      // Two aliases taken by the other arm.
-                                                     r#"[:find ?x :where [?x :foo/knows "Daphne"]]"#);
+                        let expected_pattern = alg_c(
+                            known,
+                            2, // Two aliases taken by the other arm.
+                            r#"[:find ?x :where [?x :foo/knows "Daphne"]]"#,
+                        );
                         compare_ccs(pattern, expected_pattern);
-                    },
+                    }
                     _ => {
                         panic!("Expected two arms");
                     }
                 }
-            },
+            }
             _ => {
                 panic!("Didn't get two inner tables.");
-            },
+            }
         }
     }
 

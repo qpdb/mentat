@@ -8,67 +8,36 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-extern crate chrono;
-extern crate time;
+use time;
 
 #[macro_use]
 extern crate mentat;
-extern crate mentat_core;
-extern crate core_traits;
-extern crate public_traits;
-extern crate mentat_db;
 
-extern crate mentat_transaction;
+use mentat_db;
 
 // TODO: when we switch to `failure`, make this more humane.
-extern crate query_algebrizer_traits;       // For errors;
-extern crate query_projector_traits;        // For errors.
+use query_algebrizer_traits; // For errors;
 
 use std::str::FromStr;
 
 use chrono::FixedOffset;
 
-use core_traits::{
-    Entid,
-    KnownEntid,
-    ValueType,
-    ValueTypeSet,
-};
+use core_traits::{Entid, KnownEntid, ValueType, ValueTypeSet};
 
-use mentat_core::{
-    DateTime,
-    HasSchema,
-    Utc,
-    Uuid,
-};
+use mentat_core::{DateTime, HasSchema, Utc, Uuid};
 
-use query_projector_traits::aggregates::{
-    SimpleAggregationOp,
-};
+use query_projector_traits::aggregates::SimpleAggregationOp;
 
 use mentat::{
-    IntoResult,
-    Keyword,
-    PlainSymbol,
-    QueryInputs,
-    Queryable,
-    QueryResults,
-    RelResult,
-    Store,
-    Binding,
-    TxReport,
-    TypedValue,
-    Variable,
-    new_connection,
+    new_connection, Binding, IntoResult, Keyword, PlainSymbol, QueryInputs, QueryResults,
+    Queryable, RelResult, Store, TxReport, TypedValue, Variable,
 };
 
 use mentat::query::q_uncached;
 
 use mentat::conn::Conn;
 
-use public_traits::errors::{
-    MentatError,
-};
+use public_traits::errors::MentatError;
 
 #[test]
 fn test_rel() {
@@ -76,12 +45,16 @@ fn test_rel() {
     let db = mentat_db::db::ensure_current_version(&mut c).expect("Couldn't open DB.");
 
     // Rel.
-    let start = time::PreciseTime::now();
-    let results = q_uncached(&c, &db.schema,
-                             "[:find ?x ?ident :where [?x :db/ident ?ident]]", None)
-        .expect("Query failed")
-        .results;
-    let end = time::PreciseTime::now();
+    let start = time::Instant::now();
+    let results = q_uncached(
+        &c,
+        &db.schema,
+        "[:find ?x ?ident :where [?x :db/ident ?ident]]",
+        None,
+    )
+    .expect("Query failed")
+    .results;
+    let end = time::Instant::now();
 
     // This will need to change each time we add a default ident.
     assert_eq!(40, results.len());
@@ -97,7 +70,7 @@ fn test_rel() {
         panic!("Expected rel.");
     }
 
-    println!("Rel took {}µs", start.to(end).num_microseconds().unwrap());
+    println!("Rel took {}µs", (end - start).whole_microseconds());
 }
 
 #[test]
@@ -106,12 +79,16 @@ fn test_failing_scalar() {
     let db = mentat_db::db::ensure_current_version(&mut c).expect("Couldn't open DB.");
 
     // Scalar that fails.
-    let start = time::PreciseTime::now();
-    let results = q_uncached(&c, &db.schema,
-                             "[:find ?x . :where [?x :db/fulltext true]]", None)
-        .expect("Query failed")
-        .results;
-    let end = time::PreciseTime::now();
+    let start = time::Instant::now();
+    let results = q_uncached(
+        &c,
+        &db.schema,
+        "[:find ?x . :where [?x :db/fulltext true]]",
+        None,
+    )
+    .expect("Query failed")
+    .results;
+    let end = time::Instant::now();
 
     assert_eq!(0, results.len());
 
@@ -120,7 +97,10 @@ fn test_failing_scalar() {
         panic!("Expected failed scalar.");
     }
 
-    println!("Failing scalar took {}µs", start.to(end).num_microseconds().unwrap());
+    println!(
+        "Failing scalar took {}µs",
+        (end - start).whole_microseconds()
+    );
 }
 
 #[test]
@@ -129,26 +109,29 @@ fn test_scalar() {
     let db = mentat_db::db::ensure_current_version(&mut c).expect("Couldn't open DB.");
 
     // Scalar that succeeds.
-    let start = time::PreciseTime::now();
-    let results = q_uncached(&c, &db.schema,
-                             "[:find ?ident . :where [24 :db/ident ?ident]]", None)
-        .expect("Query failed")
-        .results;
-    let end = time::PreciseTime::now();
+    let start = time::Instant::now();
+    let results = q_uncached(
+        &c,
+        &db.schema,
+        "[:find ?ident . :where [24 :db/ident ?ident]]",
+        None,
+    )
+    .expect("Query failed")
+    .results;
+    let end = time::Instant::now();
 
     assert_eq!(1, results.len());
 
     if let QueryResults::Scalar(Some(Binding::Scalar(TypedValue::Keyword(ref rc)))) = results {
         // Should be '24'.
         assert_eq!(&Keyword::namespaced("db.type", "keyword"), rc.as_ref());
-        assert_eq!(KnownEntid(24),
-                   db.schema.get_entid(rc).unwrap());
+        assert_eq!(KnownEntid(24), db.schema.get_entid(rc).unwrap());
     } else {
         panic!("Expected scalar.");
     }
 
     println!("{:?}", results);
-    println!("Scalar took {}µs", start.to(end).num_microseconds().unwrap());
+    println!("Scalar took {}µs", (end - start).whole_microseconds());
 }
 
 #[test]
@@ -157,15 +140,18 @@ fn test_tuple() {
     let db = mentat_db::db::ensure_current_version(&mut c).expect("Couldn't open DB.");
 
     // Tuple.
-    let start = time::PreciseTime::now();
-    let results = q_uncached(&c, &db.schema,
-                             "[:find [?index ?cardinality]
+    let start = time::Instant::now();
+    let results = q_uncached(
+        &c,
+        &db.schema,
+        "[:find [?index ?cardinality]
                                :where [:db/txInstant :db/index ?index]
                                       [:db/txInstant :db/cardinality ?cardinality]]",
-                             None)
-        .expect("Query failed")
-        .results;
-    let end = time::PreciseTime::now();
+        None,
+    )
+    .expect("Query failed")
+    .results;
+    let end = time::Instant::now();
 
     assert_eq!(1, results.len());
 
@@ -173,13 +159,16 @@ fn test_tuple() {
         let cardinality_one = Keyword::namespaced("db.cardinality", "one");
         assert_eq!(tuple.len(), 2);
         assert_eq!(tuple[0], TypedValue::Boolean(true).into());
-        assert_eq!(tuple[1], db.schema.get_entid(&cardinality_one).expect("c1").into());
+        assert_eq!(
+            tuple[1],
+            db.schema.get_entid(&cardinality_one).expect("c1").into()
+        );
     } else {
         panic!("Expected tuple.");
     }
 
     println!("{:?}", results);
-    println!("Tuple took {}µs", start.to(end).num_microseconds().unwrap());
+    println!("Tuple took {}µs", (end - start).whole_microseconds());
 }
 
 #[test]
@@ -188,12 +177,16 @@ fn test_coll() {
     let db = mentat_db::db::ensure_current_version(&mut c).expect("Couldn't open DB.");
 
     // Coll.
-    let start = time::PreciseTime::now();
-    let results = q_uncached(&c, &db.schema,
-                             "[:find [?e ...] :where [?e :db/ident _]]", None)
-        .expect("Query failed")
-        .results;
-    let end = time::PreciseTime::now();
+    let start = time::Instant::now();
+    let results = q_uncached(
+        &c,
+        &db.schema,
+        "[:find [?e ...] :where [?e :db/ident _]]",
+        None,
+    )
+    .expect("Query failed")
+    .results;
+    let end = time::Instant::now();
 
     assert_eq!(40, results.len());
 
@@ -204,7 +197,7 @@ fn test_coll() {
     }
 
     println!("{:?}", results);
-    println!("Coll took {}µs", start.to(end).num_microseconds().unwrap());
+    println!("Coll took {}µs", (end - start).whole_microseconds());
 }
 
 #[test]
@@ -215,13 +208,20 @@ fn test_inputs() {
     // entids::DB_INSTALL_VALUE_TYPE = 5.
     let ee = (Variable::from_valid_name("?e"), TypedValue::Ref(5));
     let inputs = QueryInputs::with_value_sequence(vec![ee]);
-    let results = q_uncached(&c, &db.schema,
-                             "[:find ?i . :in ?e :where [?e :db/ident ?i]]", inputs)
-                        .expect("query to succeed")
-                        .results;
+    let results = q_uncached(
+        &c,
+        &db.schema,
+        "[:find ?i . :in ?e :where [?e :db/ident ?i]]",
+        inputs,
+    )
+    .expect("query to succeed")
+    .results;
 
     if let QueryResults::Scalar(Some(Binding::Scalar(TypedValue::Keyword(value)))) = results {
-        assert_eq!(value.as_ref(), &Keyword::namespaced("db.install", "valueType"));
+        assert_eq!(
+            value.as_ref(),
+            &Keyword::namespaced("db.install", "valueType")
+        );
     } else {
         panic!("Expected scalar.");
     }
@@ -236,13 +236,17 @@ fn test_unbound_inputs() {
     // Bind the wrong var by 'mistake'.
     let xx = (Variable::from_valid_name("?x"), TypedValue::Ref(5));
     let inputs = QueryInputs::with_value_sequence(vec![xx]);
-    let results = q_uncached(&c, &db.schema,
-                             "[:find ?i . :in ?e :where [?e :db/ident ?i]]", inputs);
+    let results = q_uncached(
+        &c,
+        &db.schema,
+        "[:find ?i . :in ?e :where [?e :db/ident ?i]]",
+        inputs,
+    );
 
     match results.expect_err("expected unbound variables") {
         MentatError::UnboundVariables(vars) => {
             assert_eq!(vars, vec!["?e".to_string()].into_iter().collect());
-        },
+        }
         _ => panic!("Expected UnboundVariables variant."),
     }
 }
@@ -255,35 +259,52 @@ fn test_instants_and_uuids() {
 
     let mut c = new_connection("").expect("Couldn't open conn.");
     let mut conn = Conn::connect(&mut c).expect("Couldn't open DB.");
-    conn.transact(&mut c, r#"[
+    conn.transact(
+        &mut c,
+        r#"[
         [:db/add "s" :db/ident :foo/uuid]
         [:db/add "s" :db/valueType :db.type/uuid]
         [:db/add "s" :db/cardinality :db.cardinality/one]
-    ]"#).unwrap();
-    conn.transact(&mut c, r#"[
+    ]"#,
+    )
+    .unwrap();
+    conn.transact(
+        &mut c,
+        r#"[
         [:db/add "u" :foo/uuid #uuid "cf62d552-6569-4d1b-b667-04703041dfc4"]
-    ]"#).unwrap();
-    let r = conn.q_once(&mut c,
-                        r#"[:find [?x ?u ?when]
+    ]"#,
+    )
+    .unwrap();
+    let r = conn
+        .q_once(
+            &mut c,
+            r#"[:find [?x ?u ?when]
                             :where [?x :foo/uuid ?u ?tx]
-                                   [?tx :db/txInstant ?when]]"#, None)
-                .expect("results")
-                .into();
+                                   [?tx :db/txInstant ?when]]"#,
+            None,
+        )
+        .expect("results")
+        .into();
     match r {
         QueryResults::Tuple(Some(vals)) => {
             let mut vals = vals.into_iter();
             match (vals.next(), vals.next(), vals.next(), vals.next()) {
-                (Some(Binding::Scalar(TypedValue::Ref(e))),
-                 Some(Binding::Scalar(TypedValue::Uuid(u))),
-                 Some(Binding::Scalar(TypedValue::Instant(t))),
-                 None) => {
-                     assert!(e > 40);       // There are at least this many entities in the store.
-                     assert_eq!(Ok(u), Uuid::from_str("cf62d552-6569-4d1b-b667-04703041dfc4"));
-                     assert!(t > start);
-                 },
-                 _ => panic!("Unexpected results."),
+                (
+                    Some(Binding::Scalar(TypedValue::Ref(e))),
+                    Some(Binding::Scalar(TypedValue::Uuid(u))),
+                    Some(Binding::Scalar(TypedValue::Instant(t))),
+                    None,
+                ) => {
+                    assert!(e > 40); // There are at least this many entities in the store.
+                    assert_eq!(
+                        Ok(u),
+                        Uuid::from_str("cf62d552-6569-4d1b-b667-04703041dfc4")
+                    );
+                    assert!(t > start);
+                }
+                _ => panic!("Unexpected results."),
             }
-        },
+        }
         _ => panic!("Expected query to work."),
     }
 }
@@ -292,19 +313,32 @@ fn test_instants_and_uuids() {
 fn test_tx() {
     let mut c = new_connection("").expect("Couldn't open conn.");
     let mut conn = Conn::connect(&mut c).expect("Couldn't open DB.");
-    conn.transact(&mut c, r#"[
+    conn.transact(
+        &mut c,
+        r#"[
         [:db/add "s" :db/ident :foo/uuid]
         [:db/add "s" :db/valueType :db.type/uuid]
         [:db/add "s" :db/cardinality :db.cardinality/one]
-    ]"#).expect("successful transaction");
+    ]"#,
+    )
+    .expect("successful transaction");
 
-    let t = conn.transact(&mut c, r#"[
+    let t = conn
+        .transact(
+            &mut c,
+            r#"[
         [:db/add "u" :foo/uuid #uuid "cf62d552-6569-4d1b-b667-04703041dfc4"]
-    ]"#).expect("successful transaction");
+    ]"#,
+        )
+        .expect("successful transaction");
 
-    conn.transact(&mut c, r#"[
+    conn.transact(
+        &mut c,
+        r#"[
         [:db/add "u" :foo/uuid #uuid "550e8400-e29b-41d4-a716-446655440000"]
-    ]"#).expect("successful transaction");
+    ]"#,
+    )
+    .expect("successful transaction");
 
     let r = conn.q_once(&mut c,
                         r#"[:find ?tx
@@ -313,10 +347,8 @@ fn test_tx() {
                 .into();
     match r {
         QueryResults::Rel(ref v) => {
-            assert_eq!(*v, vec![
-                vec![TypedValue::Ref(t.tx_id),]
-            ].into());
-        },
+            assert_eq!(*v, vec![vec![TypedValue::Ref(t.tx_id),]].into());
+        }
         _ => panic!("Expected query to work."),
     }
 }
@@ -325,35 +357,60 @@ fn test_tx() {
 fn test_tx_as_input() {
     let mut c = new_connection("").expect("Couldn't open conn.");
     let mut conn = Conn::connect(&mut c).expect("Couldn't open DB.");
-    conn.transact(&mut c, r#"[
+    conn.transact(
+        &mut c,
+        r#"[
         [:db/add "s" :db/ident :foo/uuid]
         [:db/add "s" :db/valueType :db.type/uuid]
         [:db/add "s" :db/cardinality :db.cardinality/one]
-    ]"#).expect("successful transaction");
-    conn.transact(&mut c, r#"[
+    ]"#,
+    )
+    .expect("successful transaction");
+    conn.transact(
+        &mut c,
+        r#"[
         [:db/add "u" :foo/uuid #uuid "550e8400-e29b-41d4-a716-446655440000"]
-    ]"#).expect("successful transaction");
-    let t = conn.transact(&mut c, r#"[
+    ]"#,
+    )
+    .expect("successful transaction");
+    let t = conn
+        .transact(
+            &mut c,
+            r#"[
         [:db/add "u" :foo/uuid #uuid "cf62d552-6569-4d1b-b667-04703041dfc4"]
-    ]"#).expect("successful transaction");
-    conn.transact(&mut c, r#"[
+    ]"#,
+        )
+        .expect("successful transaction");
+    conn.transact(
+        &mut c,
+        r#"[
         [:db/add "u" :foo/uuid #uuid "267bab92-ee39-4ca2-b7f0-1163a85af1fb"]
-    ]"#).expect("successful transaction");
+    ]"#,
+    )
+    .expect("successful transaction");
 
     let tx = (Variable::from_valid_name("?tx"), TypedValue::Ref(t.tx_id));
     let inputs = QueryInputs::with_value_sequence(vec![tx]);
-    let r = conn.q_once(&mut c,
-                        r#"[:find ?uuid
+    let r = conn
+        .q_once(
+            &mut c,
+            r#"[:find ?uuid
                             :in ?tx
-                            :where [?x :foo/uuid ?uuid ?tx]]"#, inputs)
-                .expect("results")
-                .into();
+                            :where [?x :foo/uuid ?uuid ?tx]]"#,
+            inputs,
+        )
+        .expect("results")
+        .into();
     match r {
         QueryResults::Rel(ref v) => {
-            assert_eq!(*v, vec![
-                vec![TypedValue::Uuid(Uuid::from_str("cf62d552-6569-4d1b-b667-04703041dfc4").expect("Valid UUID")),]
-            ].into());
-        },
+            assert_eq!(
+                *v,
+                vec![vec![TypedValue::Uuid(
+                    Uuid::from_str("cf62d552-6569-4d1b-b667-04703041dfc4").expect("Valid UUID")
+                ),]]
+                .into()
+            );
+        }
         _ => panic!("Expected query to work."),
     }
 }
@@ -363,7 +420,9 @@ fn test_fulltext() {
     let mut c = new_connection("").expect("Couldn't open conn.");
     let mut conn = Conn::connect(&mut c).expect("Couldn't open DB.");
 
-    conn.transact(&mut c, r#"[
+    conn.transact(
+        &mut c,
+        r#"[
         [:db/add "a" :db/ident :foo/term]
         [:db/add "a" :db/valueType :db.type/string]
         [:db/add "a" :db/fulltext false]
@@ -374,41 +433,60 @@ fn test_fulltext() {
         [:db/add "s" :db/fulltext true]
         [:db/add "s" :db/index true]
         [:db/add "s" :db/cardinality :db.cardinality/many]
-    ]"#).unwrap();
+    ]"#,
+    )
+    .unwrap();
 
-    let v = conn.transact(&mut c, r#"[
+    let v = conn
+        .transact(
+            &mut c,
+            r#"[
         [:db/add "v" :foo/fts "hello darkness my old friend"]
         [:db/add "v" :foo/fts "I've come to talk with you again"]
-    ]"#).unwrap().tempids.get("v").cloned().expect("v was mapped");
+    ]"#,
+        )
+        .unwrap()
+        .tempids
+        .get("v")
+        .cloned()
+        .expect("v was mapped");
 
-    let r = conn.q_once(&mut c,
-                        r#"[:find [?x ?val ?score]
-                            :where [(fulltext $ :foo/fts "darkness") [[?x ?val _ ?score]]]]"#, None)
-                .expect("results")
-                .into();
+    let r = conn
+        .q_once(
+            &mut c,
+            r#"[:find [?x ?val ?score]
+                            :where [(fulltext $ :foo/fts "darkness") [[?x ?val _ ?score]]]]"#,
+            None,
+        )
+        .expect("results")
+        .into();
     match r {
         QueryResults::Tuple(Some(vals)) => {
             let mut vals = vals.into_iter();
             match (vals.next(), vals.next(), vals.next(), vals.next()) {
-                (Some(Binding::Scalar(TypedValue::Ref(x))),
-                 Some(Binding::Scalar(TypedValue::String(text))),
-                 Some(Binding::Scalar(TypedValue::Double(score))),
-                 None) => {
-                     assert_eq!(x, v);
-                     assert_eq!(text.as_str(), "hello darkness my old friend");
-                     assert_eq!(score, 0.0f64.into());
-                 },
-                 _ => panic!("Unexpected results."),
+                (
+                    Some(Binding::Scalar(TypedValue::Ref(x))),
+                    Some(Binding::Scalar(TypedValue::String(text))),
+                    Some(Binding::Scalar(TypedValue::Double(score))),
+                    None,
+                ) => {
+                    assert_eq!(x, v);
+                    assert_eq!(text.as_str(), "hello darkness my old friend");
+                    assert_eq!(score, 0.0f64.into());
+                }
+                _ => panic!("Unexpected results."),
             }
-        },
+        }
         r => panic!("Unexpected results {:?}.", r),
     }
 
-    let a = conn.transact(&mut c, r#"[[:db/add "a" :foo/term "talk"]]"#)
-                .unwrap()
-                .tempids
-                .get("a").cloned()
-                .expect("a was mapped");
+    let a = conn
+        .transact(&mut c, r#"[[:db/add "a" :foo/term "talk"]]"#)
+        .unwrap()
+        .tempids
+        .get("a")
+        .cloned()
+        .expect("a was mapped");
 
     // If you use a non-constant search term, it must be bound earlier in the query.
     let query = r#"[:find ?x ?val
@@ -418,11 +496,17 @@ fn test_fulltext() {
                     ]"#;
     let r = conn.q_once(&mut c, query, None);
     match r.expect_err("expected query to fail") {
-        MentatError::AlgebrizerError(query_algebrizer_traits::errors::AlgebrizerError::InvalidArgument(PlainSymbol(s), ty, i)) => {
+        MentatError::AlgebrizerError(
+            query_algebrizer_traits::errors::AlgebrizerError::InvalidArgument(
+                PlainSymbol(s),
+                ty,
+                i,
+            ),
+        ) => {
             assert_eq!(s, "fulltext");
             assert_eq!(ty, "string");
             assert_eq!(i, 2);
-        },
+        }
         _ => panic!("Expected query to fail."),
     }
 
@@ -433,11 +517,17 @@ fn test_fulltext() {
                     [(fulltext $ :foo/fts ?a) [[?x ?val]]]]"#;
     let r = conn.q_once(&mut c, query, None);
     match r.expect_err("expected query to fail") {
-        MentatError::AlgebrizerError(query_algebrizer_traits::errors::AlgebrizerError::InvalidArgument(PlainSymbol(s), ty, i)) => {
+        MentatError::AlgebrizerError(
+            query_algebrizer_traits::errors::AlgebrizerError::InvalidArgument(
+                PlainSymbol(s),
+                ty,
+                i,
+            ),
+        ) => {
             assert_eq!(s, "fulltext");
             assert_eq!(ty, "string");
             assert_eq!(i, 2);
-        },
+        }
         _ => panic!("Expected query to fail."),
     }
 
@@ -447,19 +537,22 @@ fn test_fulltext() {
                     :where
                     [?a :foo/term ?term]
                     [(fulltext $ :foo/fts ?term) [[?x ?val]]]]"#;
-    let inputs = QueryInputs::with_value_sequence(vec![(Variable::from_valid_name("?a"), TypedValue::Ref(a))]);
-    let r = conn.q_once(&mut c, query, inputs)
-                .expect("results")
-                .into();
+    let inputs = QueryInputs::with_value_sequence(vec![(
+        Variable::from_valid_name("?a"),
+        TypedValue::Ref(a),
+    )]);
+    let r = conn.q_once(&mut c, query, inputs).expect("results").into();
     match r {
         QueryResults::Rel(rels) => {
             let values: Vec<Vec<Binding>> = rels.into_iter().collect();
-            assert_eq!(values, vec![
-                vec![Binding::Scalar(TypedValue::Ref(v)),
-                     "I've come to talk with you again".into(),
-                ]
-            ]);
-        },
+            assert_eq!(
+                values,
+                vec![vec![
+                    Binding::Scalar(TypedValue::Ref(v)),
+                    "I've come to talk with you again".into(),
+                ]]
+            );
+        }
         _ => panic!("Expected query to work."),
     }
 }
@@ -469,33 +562,51 @@ fn test_instant_range_query() {
     let mut c = new_connection("").expect("Couldn't open conn.");
     let mut conn = Conn::connect(&mut c).expect("Couldn't open DB.");
 
-    conn.transact(&mut c, r#"[
+    conn.transact(
+        &mut c,
+        r#"[
         [:db/add "a" :db/ident :foo/date]
         [:db/add "a" :db/valueType :db.type/instant]
         [:db/add "a" :db/cardinality :db.cardinality/one]
-    ]"#).unwrap();
+    ]"#,
+    )
+    .unwrap();
 
-    let ids = conn.transact(&mut c, r#"[
+    let ids = conn
+        .transact(
+            &mut c,
+            r#"[
         [:db/add "b" :foo/date #inst "2016-01-01T11:00:00.000Z"]
         [:db/add "c" :foo/date #inst "2016-06-01T11:00:01.000Z"]
         [:db/add "d" :foo/date #inst "2017-01-01T11:00:02.000Z"]
         [:db/add "e" :foo/date #inst "2017-06-01T11:00:03.000Z"]
-    ]"#).unwrap().tempids;
+    ]"#,
+        )
+        .unwrap()
+        .tempids;
 
-    let r = conn.q_once(&mut c,
-                        r#"[:find [?x ...]
+    let r = conn
+        .q_once(
+            &mut c,
+            r#"[:find [?x ...]
                             :order (asc ?date)
                             :where
                             [?x :foo/date ?date]
-                            [(< ?date #inst "2017-01-01T11:00:02.000Z")]]"#, None)
-                .expect("results")
-                .into();
+                            [(< ?date #inst "2017-01-01T11:00:02.000Z")]]"#,
+            None,
+        )
+        .expect("results")
+        .into();
     match r {
         QueryResults::Coll(vals) => {
-            assert_eq!(vals,
-                       vec![Binding::Scalar(TypedValue::Ref(*ids.get("b").unwrap())),
-                            Binding::Scalar(TypedValue::Ref(*ids.get("c").unwrap()))]);
-        },
+            assert_eq!(
+                vals,
+                vec![
+                    Binding::Scalar(TypedValue::Ref(*ids.get("b").unwrap())),
+                    Binding::Scalar(TypedValue::Ref(*ids.get("c").unwrap()))
+                ]
+            );
+        }
         _ => panic!("Expected query to work."),
     }
 }
@@ -505,49 +616,76 @@ fn test_lookup() {
     let mut c = new_connection("").expect("Couldn't open conn.");
     let mut conn = Conn::connect(&mut c).expect("Couldn't open DB.");
 
-    conn.transact(&mut c, r#"[
+    conn.transact(
+        &mut c,
+        r#"[
         [:db/add "a" :db/ident :foo/date]
         [:db/add "a" :db/valueType :db.type/instant]
         [:db/add "a" :db/cardinality :db.cardinality/one]
         [:db/add "b" :db/ident :foo/many]
         [:db/add "b" :db/valueType :db.type/long]
         [:db/add "b" :db/cardinality :db.cardinality/many]
-    ]"#).unwrap();
+    ]"#,
+    )
+    .unwrap();
 
-    let ids = conn.transact(&mut c, r#"[
+    let ids = conn
+        .transact(
+            &mut c,
+            r#"[
         [:db/add "b" :foo/many 123]
         [:db/add "b" :foo/many 456]
         [:db/add "b" :foo/date #inst "2016-01-01T11:00:00.000Z"]
         [:db/add "c" :foo/date #inst "2016-06-01T11:00:01.000Z"]
         [:db/add "d" :foo/date #inst "2017-01-01T11:00:02.000Z"]
         [:db/add "e" :foo/date #inst "2017-06-01T11:00:03.000Z"]
-    ]"#).unwrap().tempids;
+    ]"#,
+        )
+        .unwrap()
+        .tempids;
 
     let entid = ids.get("b").unwrap();
     let foo_date = kw!(:foo/date);
     let foo_many = kw!(:foo/many);
     let db_ident = kw!(:db/ident);
-    let expected = TypedValue::Instant(DateTime::<Utc>::from_str("2016-01-01T11:00:00.000Z").unwrap());
+    let expected =
+        TypedValue::Instant(DateTime::<Utc>::from_str("2016-01-01T11:00:00.000Z").unwrap());
 
     // Fetch a value.
-    assert_eq!(expected, conn.lookup_value_for_attribute(&c, *entid, &foo_date).unwrap().unwrap());
+    assert_eq!(
+        expected,
+        conn.lookup_value_for_attribute(&c, *entid, &foo_date)
+            .unwrap()
+            .unwrap()
+    );
 
     // Try to fetch a missing attribute.
-    assert!(conn.lookup_value_for_attribute(&c, *entid, &db_ident).unwrap().is_none());
+    assert!(conn
+        .lookup_value_for_attribute(&c, *entid, &db_ident)
+        .unwrap()
+        .is_none());
 
     // Try to fetch from a non-existent entity.
-    assert!(conn.lookup_value_for_attribute(&c, 12344567, &foo_date).unwrap().is_none());
+    assert!(conn
+        .lookup_value_for_attribute(&c, 12344567, &foo_date)
+        .unwrap()
+        .is_none());
 
     // Fetch a multi-valued property.
     let two_longs = vec![TypedValue::Long(123), TypedValue::Long(456)];
-    let fetched_many = conn.lookup_value_for_attribute(&c, *entid, &foo_many).unwrap().unwrap();
+    let fetched_many = conn
+        .lookup_value_for_attribute(&c, *entid, &foo_many)
+        .unwrap()
+        .unwrap();
     assert!(two_longs.contains(&fetched_many));
 }
 
 #[test]
 fn test_aggregates_type_handling() {
     let mut store = Store::open("").expect("opened");
-    store.transact(r#"[
+    store
+        .transact(
+            r#"[
         {:db/ident :test/boolean :db/valueType :db.type/boolean :db/cardinality :db.cardinality/one}
         {:db/ident :test/long    :db/valueType :db.type/long    :db/cardinality :db.cardinality/one}
         {:db/ident :test/double  :db/valueType :db.type/double  :db/cardinality :db.cardinality/one}
@@ -556,9 +694,13 @@ fn test_aggregates_type_handling() {
         {:db/ident :test/uuid    :db/valueType :db.type/uuid    :db/cardinality :db.cardinality/one}
         {:db/ident :test/instant :db/valueType :db.type/instant :db/cardinality :db.cardinality/one}
         {:db/ident :test/ref     :db/valueType :db.type/ref     :db/cardinality :db.cardinality/one}
-    ]"#).unwrap();
+    ]"#,
+        )
+        .unwrap();
 
-    store.transact(r#"[
+    store
+        .transact(
+            r#"[
         {:test/boolean false
          :test/long    10
          :test/double  2.4
@@ -583,71 +725,96 @@ fn test_aggregates_type_handling() {
          :test/uuid    #uuid "77777234-1234-1234-1234-123412341234"
          :test/instant #inst "2019-01-01T11:00:00.000Z"
          :test/ref     3}
-    ]"#).unwrap();
+    ]"#,
+        )
+        .unwrap();
 
     // No type limits => can't do it.
     let r = store.q_once(r#"[:find (sum ?v) . :where [_ _ ?v]]"#, None);
     let all_types = ValueTypeSet::any();
     match r.expect_err("expected query to fail") {
-        MentatError::ProjectorError(::query_projector_traits::errors::ProjectorError::CannotApplyAggregateOperationToTypes(
-            SimpleAggregationOp::Sum, types)) => {
-                assert_eq!(types, all_types);
-        },
+        MentatError::ProjectorError(
+            ::query_projector_traits::errors::ProjectorError::CannotApplyAggregateOperationToTypes(
+                SimpleAggregationOp::Sum,
+                types,
+            ),
+        ) => {
+            assert_eq!(types, all_types);
+        }
         e => panic!("Unexpected error type {:?}", e),
     }
 
     // You can't sum instants.
-    let r = store.q_once(r#"[:find (sum ?v) .
+    let r = store.q_once(
+        r#"[:find (sum ?v) .
                              :where [_ _ ?v] [(type ?v :db.type/instant)]]"#,
-                         None);
+        None,
+    );
     match r.expect_err("expected query to fail") {
-        MentatError::ProjectorError(::query_projector_traits::errors::ProjectorError::CannotApplyAggregateOperationToTypes(
-            SimpleAggregationOp::Sum,
-            types)) => {
-                assert_eq!(types, ValueTypeSet::of_one(ValueType::Instant));
-        },
+        MentatError::ProjectorError(
+            ::query_projector_traits::errors::ProjectorError::CannotApplyAggregateOperationToTypes(
+                SimpleAggregationOp::Sum,
+                types,
+            ),
+        ) => {
+            assert_eq!(types, ValueTypeSet::of_one(ValueType::Instant));
+        }
         e => panic!("Unexpected error type {:?}", e),
     }
 
     // But you can count them.
-    let r = store.q_once(r#"[:find (count ?v) .
+    let r = store
+        .q_once(
+            r#"[:find (count ?v) .
                              :where [_ _ ?v] [(type ?v :db.type/instant)]]"#,
-                         None)
-                 .into_scalar_result()
-                 .expect("results")
-                 .unwrap();
+            None,
+        )
+        .into_scalar_result()
+        .expect("results")
+        .unwrap();
 
     // Our two transactions, the bootstrap transaction, plus the three values.
     assert_eq!(Binding::Scalar(TypedValue::Long(6)), r);
 
     // And you can min them, which returns an instant.
-    let r = store.q_once(r#"[:find (min ?v) .
+    let r = store
+        .q_once(
+            r#"[:find (min ?v) .
                              :where [_ _ ?v] [(type ?v :db.type/instant)]]"#,
-                         None)
-                 .into_scalar_result()
-                 .expect("results")
-                 .unwrap();
+            None,
+        )
+        .into_scalar_result()
+        .expect("results")
+        .unwrap();
 
-    let earliest = DateTime::parse_from_rfc3339("2017-01-01T11:00:00.000Z").unwrap().with_timezone(&Utc);
+    let earliest = DateTime::parse_from_rfc3339("2017-01-01T11:00:00.000Z")
+        .unwrap()
+        .with_timezone(&Utc);
     assert_eq!(Binding::Scalar(TypedValue::Instant(earliest)), r);
 
-    let r = store.q_once(r#"[:find (sum ?v) .
+    let r = store
+        .q_once(
+            r#"[:find (sum ?v) .
                              :where [_ _ ?v] [(type ?v :db.type/long)]]"#,
-                         None)
-                 .into_scalar_result()
-                 .expect("results")
-                 .unwrap();
+            None,
+        )
+        .into_scalar_result()
+        .expect("results")
+        .unwrap();
 
     // Yes, the current version is in the store as a Long!
     let total = 30i64 + 20i64 + 10i64 + ::mentat_db::db::CURRENT_VERSION as i64;
     assert_eq!(Binding::Scalar(TypedValue::Long(total)), r);
 
-    let r = store.q_once(r#"[:find (avg ?v) .
+    let r = store
+        .q_once(
+            r#"[:find (avg ?v) .
                              :where [_ _ ?v] [(type ?v :db.type/double)]]"#,
-                         None)
-                 .into_scalar_result()
-                 .expect("results")
-                 .unwrap();
+            None,
+        )
+        .into_scalar_result()
+        .expect("results")
+        .unwrap();
 
     let avg = (6.4f64 / 3f64) + (4.4f64 / 3f64) + (2.4f64 / 3f64);
     assert_eq!(Binding::Scalar(TypedValue::Double(avg.into())), r);
@@ -658,7 +825,9 @@ fn test_type_reqs() {
     let mut c = new_connection("").expect("Couldn't open conn.");
     let mut conn = Conn::connect(&mut c).expect("Couldn't open DB.");
 
-    conn.transact(&mut c, r#"[
+    conn.transact(
+        &mut c,
+        r#"[
         {:db/ident :test/boolean :db/valueType :db.type/boolean :db/cardinality :db.cardinality/one}
         {:db/ident :test/long    :db/valueType :db.type/long    :db/cardinality :db.cardinality/one}
         {:db/ident :test/double  :db/valueType :db.type/double  :db/cardinality :db.cardinality/one}
@@ -667,9 +836,13 @@ fn test_type_reqs() {
         {:db/ident :test/uuid    :db/valueType :db.type/uuid    :db/cardinality :db.cardinality/one}
         {:db/ident :test/instant :db/valueType :db.type/instant :db/cardinality :db.cardinality/one}
         {:db/ident :test/ref     :db/valueType :db.type/ref     :db/cardinality :db.cardinality/one}
-    ]"#).unwrap();
+    ]"#,
+    )
+    .unwrap();
 
-    conn.transact(&mut c, r#"[
+    conn.transact(
+        &mut c,
+        r#"[
         {:test/boolean true
          :test/long    33
          :test/double  1.4
@@ -678,62 +851,89 @@ fn test_type_reqs() {
          :test/uuid    #uuid "12341234-1234-1234-1234-123412341234"
          :test/instant #inst "2018-01-01T11:00:00.000Z"
          :test/ref     1}
-    ]"#).unwrap();
+    ]"#,
+    )
+    .unwrap();
 
     let eid_query = r#"[:find ?eid :where [?eid :test/string "foo"]]"#;
 
-    let res = conn.q_once(&mut c, eid_query, None)
-                  .into_rel_result()
-                  .expect("results");
+    let res = conn
+        .q_once(&mut c, eid_query, None)
+        .into_rel_result()
+        .expect("results");
 
     assert_eq!(res.row_count(), 1);
     assert_eq!(res.width, 1);
-    let entid =
-        match res.into_iter().next().unwrap().into_iter().next().unwrap() {
-            Binding::Scalar(TypedValue::Ref(eid)) => {
-                eid
-            },
-            unexpected => {
-                panic!("Query to get the entity id returned unexpected result {:?}", unexpected);
-            }
-        };
+    let entid = match res.into_iter().next().unwrap().into_iter().next().unwrap() {
+        Binding::Scalar(TypedValue::Ref(eid)) => eid,
+        unexpected => {
+            panic!(
+                "Query to get the entity id returned unexpected result {:?}",
+                unexpected
+            );
+        }
+    };
 
     for value_type in ValueType::all_enums().iter() {
-        let q = format!("[:find [?v ...] :in ?e :where [?e _ ?v] [(type ?v {})]]", value_type.into_keyword());
-        let results = conn.q_once(&mut c, &q, QueryInputs::with_value_sequence(vec![
-                               (Variable::from_valid_name("?e"), TypedValue::Ref(entid)),
-                           ]))
-                          .expect("results")
-                          .into();
+        let q = format!(
+            "[:find [?v ...] :in ?e :where [?e _ ?v] [(type ?v {})]]",
+            value_type.into_keyword()
+        );
+        let results = conn
+            .q_once(
+                &mut c,
+                &q,
+                QueryInputs::with_value_sequence(vec![(
+                    Variable::from_valid_name("?e"),
+                    TypedValue::Ref(entid),
+                )]),
+            )
+            .expect("results")
+            .into();
         match results {
             QueryResults::Coll(vals) => {
                 assert_eq!(vals.len(), 1, "Query should find exactly 1 item");
-            },
+            }
             v => {
                 panic!("Query returned unexpected type: {:?}", v);
             }
         }
     }
 
-    conn.transact(&mut c, r#"[
+    conn.transact(
+        &mut c,
+        r#"[
         {:db/ident :test/long2 :db/valueType :db.type/long :db/cardinality :db.cardinality/one}
-    ]"#).unwrap();
+    ]"#,
+    )
+    .unwrap();
 
-    conn.transact(&mut c, format!("[[:db/add {} :test/long2 5]]", entid)).unwrap();
+    conn.transact(&mut c, format!("[[:db/add {} :test/long2 5]]", entid))
+        .unwrap();
     let longs_query = r#"[:find [?v ...]
                           :order (asc ?v)
                           :in ?e
                           :where [?e _ ?v] [(type ?v :db.type/long)]]"#;
 
-    let res = conn.q_once(&mut c, longs_query, QueryInputs::with_value_sequence(vec![
-                      (Variable::from_valid_name("?e"), TypedValue::Ref(entid)),
-                  ]))
-                  .expect("results")
-                  .into();
+    let res = conn
+        .q_once(
+            &mut c,
+            longs_query,
+            QueryInputs::with_value_sequence(vec![(
+                Variable::from_valid_name("?e"),
+                TypedValue::Ref(entid),
+            )]),
+        )
+        .expect("results")
+        .into();
     match res {
-        QueryResults::Coll(vals) => {
-            assert_eq!(vals, vec![Binding::Scalar(TypedValue::Long(5)), Binding::Scalar(TypedValue::Long(33))])
-        },
+        QueryResults::Coll(vals) => assert_eq!(
+            vals,
+            vec![
+                Binding::Scalar(TypedValue::Long(5)),
+                Binding::Scalar(TypedValue::Long(33))
+            ]
+        ),
         v => {
             panic!("Query returned unexpected type: {:?}", v);
         }
@@ -745,7 +945,9 @@ fn test_monster_head_aggregates() {
     let mut store = Store::open("").expect("opened");
     let mut in_progress = store.begin_transaction().expect("began");
 
-    in_progress.transact(r#"[
+    in_progress
+        .transact(
+            r#"[
         {:db/ident       :monster/heads
          :db/valueType   :db.type/long
          :db/cardinality :db.cardinality/one}
@@ -757,9 +959,13 @@ fn test_monster_head_aggregates() {
         {:db/ident       :monster/weapon
          :db/valueType   :db.type/string
          :db/cardinality :db.cardinality/many}
-    ]"#).expect("transacted");
+    ]"#,
+        )
+        .expect("transacted");
 
-    in_progress.transact(r#"[
+    in_progress
+        .transact(
+            r#"[
         {:monster/heads  1
          :monster/name   "Medusa"
          :monster/weapon "Stony gaze"}
@@ -772,49 +978,62 @@ fn test_monster_head_aggregates() {
         {:monster/heads  3
          :monster/name   "Cerberus"
          :monster/weapon ["8-foot Kong®" "Deadly drool"]}
-    ]"#).expect("transacted");
+    ]"#,
+        )
+        .expect("transacted");
 
     // Without :with, uniqueness applies prior to aggregation, so we get 1 + 3 = 4.
-    let res = in_progress.q_once("[:find (sum ?heads) . :where [?monster :monster/heads ?heads]]", None)
-                         .expect("results")
-                         .into();
+    let res = in_progress
+        .q_once(
+            "[:find (sum ?heads) . :where [?monster :monster/heads ?heads]]",
+            None,
+        )
+        .expect("results")
+        .into();
     match res {
         QueryResults::Scalar(Some(Binding::Scalar(TypedValue::Long(count)))) => {
             assert_eq!(count, 4);
-        },
+        }
         r => panic!("Unexpected result {:?}", r),
     };
 
     // With :with, uniqueness includes the monster, so we get 1 + 1 + 1 + 3 = 6.
-    let res = in_progress.q_once("[:find (sum ?heads) . :with ?monster :where [?monster :monster/heads ?heads]]", None)
-                         .expect("results")
-                         .into();
+    let res = in_progress
+        .q_once(
+            "[:find (sum ?heads) . :with ?monster :where [?monster :monster/heads ?heads]]",
+            None,
+        )
+        .expect("results")
+        .into();
     match res {
         QueryResults::Scalar(Some(Binding::Scalar(TypedValue::Long(count)))) => {
             assert_eq!(count, 6);
-        },
+        }
         r => panic!("Unexpected result {:?}", r),
     };
 
     // Aggregates group.
-    let res = in_progress.q_once(r#"[:find ?name (count ?weapon)
+    let res = in_progress
+        .q_once(
+            r#"[:find ?name (count ?weapon)
                                      :with ?monster
                                      :order (asc ?name)
                                      :where [?monster :monster/name ?name]
                                             [?monster :monster/weapon ?weapon]]"#,
-                                 None)
-                         .expect("results")
-                         .into();
+            None,
+        )
+        .expect("results")
+        .into();
     match res {
         QueryResults::Rel(vals) => {
             let expected = vec![
                 vec!["Cerberus".into(), TypedValue::Long(2)],
-                vec!["Chimera".into(),  TypedValue::Long(1)],
-                vec!["Cyclops".into(),  TypedValue::Long(3)],
-                vec!["Medusa".into(),   TypedValue::Long(1)],
+                vec!["Chimera".into(), TypedValue::Long(1)],
+                vec!["Cyclops".into(), TypedValue::Long(3)],
+                vec!["Medusa".into(), TypedValue::Long(1)],
             ];
             assert_eq!(vals, expected.into());
-        },
+        }
         r => panic!("Unexpected result {:?}", r),
     };
 
@@ -831,7 +1050,9 @@ fn test_basic_aggregates() {
         {:db/ident :foo/name          :db/valueType :db.type/string  :db/cardinality :db.cardinality/one}
     ]"#).unwrap();
 
-    let _ids = store.transact(r#"[
+    let _ids = store
+        .transact(
+            r#"[
         [:db/add "a" :foo/name "Alice"]
         [:db/add "b" :foo/name "Beli"]
         [:db/add "c" :foo/name "Carlos"]
@@ -844,7 +1065,10 @@ fn test_basic_aggregates() {
         [:db/add "b" :foo/age 22]
         [:db/add "c" :foo/age 42]
         [:db/add "d" :foo/age 28]
-    ]"#).unwrap().tempids;
+    ]"#,
+        )
+        .unwrap()
+        .tempids;
 
     // Count the number of distinct bindings of `?veg` that are `true` -- namely, one.
     // This is not the same as `count-distinct`: note the distinction between
@@ -868,16 +1092,20 @@ fn test_basic_aggregates() {
           AND `datoms00`.v = 1
     );
     */
-    let r = store.q_once(r#"[:find (count ?veg)
+    let r = store
+        .q_once(
+            r#"[:find (count ?veg)
                              :where
                              [_ :foo/is-vegetarian ?veg]
-                             [(ground true) ?veg]]"#, None)
-                 .expect("results")
-                 .into();
+                             [(ground true) ?veg]]"#,
+            None,
+        )
+        .expect("results")
+        .into();
     match r {
         QueryResults::Rel(vals) => {
             assert_eq!(vals, vec![vec![TypedValue::Long(1)]].into());
-        },
+        }
         _ => panic!("Expected rel."),
     }
 
@@ -891,109 +1119,149 @@ fn test_basic_aggregates() {
           AND `datoms00`.v = 1
     );
     */
-    let r = store.q_once(r#"[:find (count ?veg) .
+    let r = store
+        .q_once(
+            r#"[:find (count ?veg) .
                              :with ?person
                              :where
                              [?person :foo/is-vegetarian ?veg]
-                             [(ground true) ?veg]]"#, None)
-                 .expect("results")
-                 .into();
+                             [(ground true) ?veg]]"#,
+            None,
+        )
+        .expect("results")
+        .into();
     match r {
         QueryResults::Scalar(Some(val)) => {
             assert_eq!(val, Binding::Scalar(TypedValue::Long(2)));
-        },
+        }
         _ => panic!("Expected scalar."),
     }
 
     // What are the oldest and youngest ages?
-    let r = store.q_once(r#"[:find [(min ?age) (max ?age)]
+    let r = store
+        .q_once(
+            r#"[:find [(min ?age) (max ?age)]
                              :where
-                             [_ :foo/age ?age]]"#, None)
-                 .expect("results")
-                 .into();
+                             [_ :foo/age ?age]]"#,
+            None,
+        )
+        .expect("results")
+        .into();
     match r {
         QueryResults::Tuple(Some(vals)) => {
-            assert_eq!(vals,
-                       vec![Binding::Scalar(TypedValue::Long(14)),
-                            Binding::Scalar(TypedValue::Long(42))]);
-        },
+            assert_eq!(
+                vals,
+                vec![
+                    Binding::Scalar(TypedValue::Long(14)),
+                    Binding::Scalar(TypedValue::Long(42))
+                ]
+            );
+        }
         _ => panic!("Expected tuple."),
     }
 
     // Who's youngest, via order?
-    let r = store.q_once(r#"[:find [?name ?age]
+    let r = store
+        .q_once(
+            r#"[:find [?name ?age]
                              :order (asc ?age)
                              :where
                              [?x :foo/age ?age]
-                             [?x :foo/name ?name]]"#, None)
-                 .expect("results")
-                 .into();
+                             [?x :foo/name ?name]]"#,
+            None,
+        )
+        .expect("results")
+        .into();
     match r {
         QueryResults::Tuple(Some(vals)) => {
-            assert_eq!(vals,
-                       vec!["Alice".into(),
-                            Binding::Scalar(TypedValue::Long(14))]);
-        },
+            assert_eq!(
+                vals,
+                vec!["Alice".into(), Binding::Scalar(TypedValue::Long(14))]
+            );
+        }
         r => panic!("Unexpected results {:?}", r),
     }
 
     // Who's oldest, via order?
-    let r = store.q_once(r#"[:find [?name ?age]
+    let r = store
+        .q_once(
+            r#"[:find [?name ?age]
                              :order (desc ?age)
                              :where
                              [?x :foo/age ?age]
-                             [?x :foo/name ?name]]"#, None)
-                 .expect("results")
-                 .into();
+                             [?x :foo/name ?name]]"#,
+            None,
+        )
+        .expect("results")
+        .into();
     match r {
         QueryResults::Tuple(Some(vals)) => {
-            assert_eq!(vals,
-                       vec!["Carlos".into(),
-                            Binding::Scalar(TypedValue::Long(42))]);
-        },
+            assert_eq!(
+                vals,
+                vec!["Carlos".into(), Binding::Scalar(TypedValue::Long(42))]
+            );
+        }
         _ => panic!("Expected tuple."),
     }
 
     // How many of each age do we have?
     // Add an extra person to make this interesting.
-    store.transact(r#"[{:foo/name "Medusa", :foo/age 28}]"#).expect("transacted");
+    store
+        .transact(r#"[{:foo/name "Medusa", :foo/age 28}]"#)
+        .expect("transacted");
 
     // If we omit the 'with', we'll get the wrong answer:
-    let r = store.q_once(r#"[:find ?age (count ?age)
+    let r = store
+        .q_once(
+            r#"[:find ?age (count ?age)
                              :order (asc ?age)
-                             :where [_ :foo/age ?age]]"#, None)
-                 .expect("results")
-                 .into();
+                             :where [_ :foo/age ?age]]"#,
+            None,
+        )
+        .expect("results")
+        .into();
 
     match r {
         QueryResults::Rel(vals) => {
-            assert_eq!(vals, vec![
-                vec![TypedValue::Long(14), TypedValue::Long(1)],
-                vec![TypedValue::Long(22), TypedValue::Long(1)],
-                vec![TypedValue::Long(28), TypedValue::Long(1)],
-                vec![TypedValue::Long(42), TypedValue::Long(1)],
-            ].into());
-        },
+            assert_eq!(
+                vals,
+                vec![
+                    vec![TypedValue::Long(14), TypedValue::Long(1)],
+                    vec![TypedValue::Long(22), TypedValue::Long(1)],
+                    vec![TypedValue::Long(28), TypedValue::Long(1)],
+                    vec![TypedValue::Long(42), TypedValue::Long(1)],
+                ]
+                .into()
+            );
+        }
         _ => panic!("Expected rel."),
     }
 
     // If we include it, we'll get the right one:
-    let r = store.q_once(r#"[:find ?age (count ?age)
+    let r = store
+        .q_once(
+            r#"[:find ?age (count ?age)
                              :with ?person
                              :order (asc ?age)
-                             :where [?person :foo/age ?age]]"#, None)
-                 .expect("results")
-                 .into();
+                             :where [?person :foo/age ?age]]"#,
+            None,
+        )
+        .expect("results")
+        .into();
 
     match r {
         QueryResults::Rel(vals) => {
-            assert_eq!(vals, vec![
-                vec![TypedValue::Long(14), TypedValue::Long(1)],
-                vec![TypedValue::Long(22), TypedValue::Long(1)],
-                vec![TypedValue::Long(28), TypedValue::Long(2)],
-                vec![TypedValue::Long(42), TypedValue::Long(1)],
-            ].into());
-        },
+            assert_eq!(
+                vals,
+                vec![
+                    vec![TypedValue::Long(14), TypedValue::Long(1)],
+                    vec![TypedValue::Long(22), TypedValue::Long(1)],
+                    vec![TypedValue::Long(28), TypedValue::Long(2)],
+                    vec![TypedValue::Long(42), TypedValue::Long(1)],
+                ]
+                .into()
+            );
+        }
         _ => panic!("Expected rel."),
     }
 }
@@ -1002,7 +1270,9 @@ fn test_basic_aggregates() {
 fn test_combinatorial() {
     let mut store = Store::open("").expect("opened");
 
-    store.transact(r#"[
+    store
+        .transact(
+            r#"[
         [:db/add "a" :db/ident :foo/name]
         [:db/add "a" :db/valueType :db.type/string]
         [:db/add "a" :db/cardinality :db.cardinality/one]
@@ -1010,9 +1280,13 @@ fn test_combinatorial() {
         [:db/add "b" :db/valueType :db.type/ref]
         [:db/add "b" :db/cardinality :db.cardinality/many]
         [:db/add "b" :db/index true]
-    ]"#).unwrap();
+    ]"#,
+        )
+        .unwrap();
 
-    store.transact(r#"[
+    store
+        .transact(
+            r#"[
         [:db/add "a" :foo/name "Alice"]
         [:db/add "b" :foo/name "Beli"]
         [:db/add "c" :foo/name "Carlos"]
@@ -1032,19 +1306,28 @@ fn test_combinatorial() {
         [:db/add "a"  :foo/dance "ad"]
         [:db/add "d"  :foo/dance "ad"]
 
-   ]"#).unwrap();
+   ]"#,
+        )
+        .unwrap();
 
     // How many different pairings of dancers were there?
     // If we just use `!=` (or `differ`), the number is doubled because of symmetry!
-    assert_eq!(Binding::Scalar(TypedValue::Long(6)),
-               store.q_once(r#"[:find (count ?right) .
+    assert_eq!(
+        Binding::Scalar(TypedValue::Long(6)),
+        store
+            .q_once(
+                r#"[:find (count ?right) .
                                 :with ?left
                                 :where
                                 [?left :foo/dance ?dance]
                                 [?right :foo/dance ?dance]
-                                [(differ ?left ?right)]]"#, None)
-                    .into_scalar_result()
-                    .expect("scalar results").unwrap());
+                                [(differ ?left ?right)]]"#,
+                None
+            )
+            .into_scalar_result()
+            .expect("scalar results")
+            .unwrap()
+    );
 
     // SQL addresses this by using `<` instead of `!=` -- by imposing
     // an order on values, we can ensure that each pair only appears once, not
@@ -1053,22 +1336,31 @@ fn test_combinatorial() {
     // will come to rely on it. Instead we expose a specific operator: `unpermute`.
     // When used in a query that generates permuted pairs of references, this
     // ensures that only one permutation is returned for a given pair.
-    assert_eq!(Binding::Scalar(TypedValue::Long(3)),
-               store.q_once(r#"[:find (count ?right) .
+    assert_eq!(
+        Binding::Scalar(TypedValue::Long(3)),
+        store
+            .q_once(
+                r#"[:find (count ?right) .
                                 :with ?left
                                 :where
                                 [?left :foo/dance ?dance]
                                 [?right :foo/dance ?dance]
-                                [(unpermute ?left ?right)]]"#, None)
-                    .into_scalar_result()
-                    .expect("scalar results").unwrap());
+                                [(unpermute ?left ?right)]]"#,
+                None
+            )
+            .into_scalar_result()
+            .expect("scalar results")
+            .unwrap()
+    );
 }
 
 #[test]
 fn test_aggregate_the() {
     let mut store = Store::open("").expect("opened");
 
-    store.transact(r#"[
+    store
+        .transact(
+            r#"[
         {:db/ident       :visit/visitedOnDevice
          :db/valueType   :db.type/ref
          :db/cardinality :db.cardinality/one}
@@ -1096,16 +1388,24 @@ fn test_aggregate_the() {
         {:db/ident       :visit/container
          :db/valueType   :db.type/ref
          :db/cardinality :db.cardinality/one}
-    ]"#).expect("transacted schema");
+    ]"#,
+        )
+        .expect("transacted schema");
 
-    store.transact(r#"[
+    store
+        .transact(
+            r#"[
         {:db/ident :container/facebook}
         {:db/ident :container/personal}
 
         {:db/ident :device/my-desktop}
-    ]"#).expect("transacted idents");
+    ]"#,
+        )
+        .expect("transacted idents");
 
-    store.transact(r#"[
+    store
+        .transact(
+            r#"[
         {:visit/visitedOnDevice :device/my-desktop
          :visit/visitAt #inst "2018-04-06T20:46:00Z"
          :visit/container :container/facebook
@@ -1130,31 +1430,39 @@ fn test_aggregate_the() {
          :visit/page "personalpage"}
         {:db/id "personalpage"
          :page/title "Facebook - Log In or Sign Up"}
-    ]"#).expect("transacted data");
+    ]"#,
+        )
+        .expect("transacted data");
 
-    let per_title =
-        store.q_once(r#"
+    let per_title = store
+        .q_once(
+            r#"
             [:find (max ?visitDate) ?title
              :where [?site :site/url "https://www.facebook.com"]
                     [?site :site/visit ?visit]
                     [?visit :visit/container :container/facebook]
                     [?visit :visit/visitAt ?visitDate]
                     [?visit :visit/page ?page]
-                    [?page :page/title ?title]]"#, None)
-             .into_rel_result()
-             .expect("two results");
+                    [?page :page/title ?title]]"#,
+            None,
+        )
+        .into_rel_result()
+        .expect("two results");
 
-    let corresponding_title =
-        store.q_once(r#"
+    let corresponding_title = store
+        .q_once(
+            r#"
             [:find (max ?visitDate) (the ?title)
              :where [?site :site/url "https://www.facebook.com"]
                     [?site :site/visit ?visit]
                     [?visit :visit/container :container/facebook]
                     [?visit :visit/visitAt ?visitDate]
                     [?visit :visit/page ?page]
-                    [?page :page/title ?title]]"#, None)
-             .into_rel_result()
-             .expect("one result");
+                    [?page :page/title ?title]]"#,
+            None,
+        )
+        .into_rel_result()
+        .expect("one result");
 
     // This test shows the distinction between `?title` and `(the ?title`) — the former returns two
     // results, while the latter returns one. Without `the` we group by `?title`, getting the
@@ -1165,93 +1473,115 @@ fn test_aggregate_the() {
     assert_eq!(2, per_title.row_count());
     assert_eq!(1, corresponding_title.row_count());
 
-    assert_eq!(corresponding_title,
-               vec![vec![TypedValue::Instant(DateTime::<Utc>::from_str("2018-04-06T20:46:00.000Z").unwrap()),
-                         TypedValue::typed_string("(1) Facebook")]].into());
+    assert_eq!(
+        corresponding_title,
+        vec![vec![
+            TypedValue::Instant(DateTime::<Utc>::from_str("2018-04-06T20:46:00.000Z").unwrap()),
+            TypedValue::typed_string("(1) Facebook")
+        ]]
+        .into()
+    );
 }
 
 #[test]
 fn test_null_aggregates() {
     let store = Store::open("").expect("opened");
 
-    let rel =
-        store.q_once(r#"
+    let rel = store
+        .q_once(
+            r#"
             [:find (count ?tx) (max ?txInstant)
              :where [_ _ _ ?tx]
                     [?tx :db/txInstant ?txInstant]
                     [(< ?txInstant #inst "2016-01-01T11:00:00.000Z")]
-            ]"#, None)
-             .into_rel_result()
-             .expect("no results");
+            ]"#,
+            None,
+        )
+        .into_rel_result()
+        .expect("no results");
 
     // (count ?tx) is 0, but (max ?txInstant) is over 0 SQL rows, yielding a NULL in the SQL rows.
     // We reject the entire row containing NULL aggregates.
     assert_eq!(0, rel.row_count());
 
-    let rel_pull =
-        store.q_once(r#"
+    let rel_pull = store
+        .q_once(
+            r#"
             [:find (count ?tx) (max ?txInstant) (pull ?tx [*])
              :where [_ _ _ ?tx]
                     [?tx :db/txInstant ?txInstant]
                     [(< ?txInstant #inst "2016-01-01T11:00:00.000Z")]
-            ]"#, None)
-             .into_rel_result()
-             .expect("no results");
+            ]"#,
+            None,
+        )
+        .into_rel_result()
+        .expect("no results");
 
     // Same logic as above -- just verifying that `RelTwoStagePullProjector` handles NULL.
     assert_eq!(0, rel_pull.row_count());
 
-    let coll =
-        store.q_once(r#"
+    let coll = store
+        .q_once(
+            r#"
             [:find [(max ?txInstant) ...]
              :where [_ _ _ ?tx]
                     [?tx :db/txInstant ?txInstant]
                     [(< ?txInstant #inst "2016-01-01T11:00:00.000Z")]
-            ]"#, None)
-             .into_coll_result()
-             .expect("no results");
+            ]"#,
+            None,
+        )
+        .into_coll_result()
+        .expect("no results");
 
     // (max ?txInstant) is over 0 SQL rows, yielding a NULL in the SQL rows.  We reject the entire
     // row containing NULL aggregates, yielding an empty vector of results.
     assert_eq!(coll, vec![]);
 
-    let tuple =
-        store.q_once(r#"
+    let tuple = store
+        .q_once(
+            r#"
             [:find [(count ?tx) (max ?txInstant)]
              :where [_ _ _ ?tx]
                     [?tx :db/txInstant ?txInstant]
                     [(< ?txInstant #inst "2016-01-01T11:00:00.000Z")]
-            ]"#, None)
-             .into_tuple_result()
-             .expect("no results");
+            ]"#,
+            None,
+        )
+        .into_tuple_result()
+        .expect("no results");
 
     // (count ?tx) is 0, but (max ?txInstant) is over 0 SQL rows, yielding a NULL in the SQL rows.
     // We reject the entire row containing NULL aggregates, yielding no tuple result at all.
     assert_eq!(tuple, None);
 
-
-    let tuple_pull =
-        store.q_once(r#"
+    let tuple_pull = store
+        .q_once(
+            r#"
             [:find [(count ?tx) (max ?txInstant) (pull ?tx [*])]
              :where [_ _ _ ?tx]
                     [?tx :db/txInstant ?txInstant]
                     [(< ?txInstant #inst "2016-01-01T11:00:00.000Z")]
-            ]"#, None)
-             .into_tuple_result()
-             .expect("no results");
+            ]"#,
+            None,
+        )
+        .into_tuple_result()
+        .expect("no results");
 
     // Same logic as above -- just verifying that `CollTwoStagePullProjector` handles NULL.
     assert_eq!(tuple_pull, None);
 
-    let scalar =
-        store.q_once(r#"
+    let scalar = store
+        .q_once(
+            r#"
             [:find (max ?txInstant) .
              :where [_ _ _ ?tx]
                     [?tx :db/txInstant ?txInstant]
                     [(< ?txInstant #inst "2016-01-01T11:00:00.000Z")]
-            ]"#, None)
-             .into_scalar_result()
-             .expect("no results");
+            ]"#,
+            None,
+        )
+        .into_scalar_result()
+        .expect("no results");
 
     // (max ?txInstant) is over 0 SQL rows, yielding a NULL in the SQL rows.  We reject the entire
     // row containing NULL aggregates, yielding no scalar result at all.
@@ -1262,7 +1592,9 @@ fn test_null_aggregates() {
 fn test_aggregation_implicit_grouping() {
     let mut store = Store::open("").expect("opened");
 
-    store.transact(r#"[
+    store
+        .transact(
+            r#"[
         [:db/add "a" :db/ident :foo/score]
         [:db/add "a" :db/valueType :db.type/long]
         [:db/add "a" :db/cardinality :db.cardinality/one]
@@ -1277,9 +1609,13 @@ fn test_aggregation_implicit_grouping() {
         [:db/add "d" :db/cardinality :db.cardinality/many]
         [:db/add "d" :db/index true]
         [:db/add "d" :db/unique :db.unique/value]
-    ]"#).unwrap();
+    ]"#,
+        )
+        .unwrap();
 
-    let ids = store.transact(r#"[
+    let ids = store
+        .transact(
+            r#"[
         [:db/add "a" :foo/name "Alice"]
         [:db/add "b" :foo/name "Beli"]
         [:db/add "c" :foo/name "Carlos"]
@@ -1304,102 +1640,155 @@ fn test_aggregation_implicit_grouping() {
         [:db/add "b"  :foo/play "ba"]
         [:db/add "b"  :foo/play "bb"]
         [:db/add "c"  :foo/play "ca"]
-    ]"#).unwrap().tempids;
+    ]"#,
+        )
+        .unwrap()
+        .tempids;
 
     // How many different scores were there?
-    assert_eq!(Binding::Scalar(TypedValue::Long(7)),
-               store.q_once(r#"[:find (count ?score) .
+    assert_eq!(
+        Binding::Scalar(TypedValue::Long(7)),
+        store
+            .q_once(
+                r#"[:find (count ?score) .
                                 :where
-                                [?game :foo/score ?score]]"#, None)
-                    .into_scalar_result()
-                    .expect("scalar results").unwrap());
+                                [?game :foo/score ?score]]"#,
+                None
+            )
+            .into_scalar_result()
+            .expect("scalar results")
+            .unwrap()
+    );
 
     // How many different games resulted in scores?
     // '14' appears twice.
-    assert_eq!(Binding::Scalar(TypedValue::Long(8)),
-               store.q_once(r#"[:find (count ?score) .
+    assert_eq!(
+        Binding::Scalar(TypedValue::Long(8)),
+        store
+            .q_once(
+                r#"[:find (count ?score) .
                                 :with ?game
                                 :where
-                                [?game :foo/score ?score]]"#, None)
-                    .into_scalar_result()
-                    .expect("scalar results").unwrap());
+                                [?game :foo/score ?score]]"#,
+                None
+            )
+            .into_scalar_result()
+            .expect("scalar results")
+            .unwrap()
+    );
 
     // Who's the highest-scoring vegetarian?
-    assert_eq!(vec!["Alice".into(), Binding::Scalar(TypedValue::Long(99))],
-               store.q_once(r#"[:find [(the ?name) (max ?score)]
+    assert_eq!(
+        vec!["Alice".into(), Binding::Scalar(TypedValue::Long(99))],
+        store
+            .q_once(
+                r#"[:find [(the ?name) (max ?score)]
                                 :where
                                 [?game :foo/score ?score]
                                 [?person :foo/play ?game]
                                 [?person :foo/is-vegetarian true]
-                                [?person :foo/name ?name]]"#, None)
-                    .into_tuple_result()
-                    .expect("tuple results").unwrap());
+                                [?person :foo/name ?name]]"#,
+                None
+            )
+            .into_tuple_result()
+            .expect("tuple results")
+            .unwrap()
+    );
 
     // We can't run an ambiguous correspondence.
-    let res = store.q_once(r#"[:find [(the ?name) (min ?score) (max ?score)]
+    let res = store.q_once(
+        r#"[:find [(the ?name) (min ?score) (max ?score)]
                                :where
                                [?game :foo/score ?score]
                                [?person :foo/play ?game]
                                [?person :foo/is-vegetarian true]
-                               [?person :foo/name ?name]]"#, None);
+                               [?person :foo/name ?name]]"#,
+        None,
+    );
     match res.expect_err("expected query to fail") {
-        MentatError::ProjectorError(::query_projector_traits::errors::ProjectorError::AmbiguousAggregates(mmc, cc)) => {
+        MentatError::ProjectorError(
+            ::query_projector_traits::errors::ProjectorError::AmbiguousAggregates(mmc, cc),
+        ) => {
             assert_eq!(mmc, 2);
             assert_eq!(cc, 1);
-        },
+        }
         e => {
             panic!("Unexpected error type {:?}.", e);
-        },
+        }
     }
 
     // Max scores for vegetarians.
-    let expected: RelResult<Binding> =
-        vec![vec!["Alice".into(), TypedValue::Long(99)],
-             vec!["Beli".into(), TypedValue::Long(22)]].into();
-    assert_eq!(expected,
-               store.q_once(r#"[:find ?name (max ?score)
+    let expected: RelResult<Binding> = vec![
+        vec!["Alice".into(), TypedValue::Long(99)],
+        vec!["Beli".into(), TypedValue::Long(22)],
+    ]
+    .into();
+    assert_eq!(
+        expected,
+        store
+            .q_once(
+                r#"[:find ?name (max ?score)
                                 :where
                                 [?game :foo/score ?score]
                                 [?person :foo/play ?game]
                                 [?person :foo/is-vegetarian true]
-                                [?person :foo/name ?name]]"#, None)
-                    .into_rel_result()
-                    .expect("rel results"));
+                                [?person :foo/name ?name]]"#,
+                None
+            )
+            .into_rel_result()
+            .expect("rel results")
+    );
 
     // We can combine these aggregates.
-    let r = store.q_once(r#"[:find ?x ?name (max ?score) (count ?score) (avg ?score)
+    let r = store
+        .q_once(
+            r#"[:find ?x ?name (max ?score) (count ?score) (avg ?score)
                              :with ?game           ; So we don't discard duplicate scores!
                              :where
                              [?x :foo/name ?name]
                              [?x :foo/play ?game]
-                             [?game :foo/score ?score]]"#, None)
-                 .expect("results")
-                 .into();
+                             [?game :foo/score ?score]]"#,
+            None,
+        )
+        .expect("results")
+        .into();
     match r {
         QueryResults::Rel(vals) => {
-            assert_eq!(vals,
+            assert_eq!(
+                vals,
                 vec![
-                    vec![TypedValue::Ref(ids.get("a").cloned().unwrap()),
-                         "Alice".into(),
-                         TypedValue::Long(99),
-                         TypedValue::Long(3),
-                         TypedValue::Double((127f64 / 3f64).into())],
-                    vec![TypedValue::Ref(ids.get("b").cloned().unwrap()),
-                         "Beli".into(),
-                         TypedValue::Long(22),
-                         TypedValue::Long(2),
-                         TypedValue::Double((33f64 / 2f64).into())],
-                    vec![TypedValue::Ref(ids.get("c").cloned().unwrap()),
-                         "Carlos".into(),
-                         TypedValue::Long(42),
-                         TypedValue::Long(1),
-                         TypedValue::Double(42f64.into())],
-                    vec![TypedValue::Ref(ids.get("d").cloned().unwrap()),
-                         "Diana".into(),
-                         TypedValue::Long(28),
-                         TypedValue::Long(2),
-                         TypedValue::Double((33f64 / 2f64).into())]].into());
-        },
+                    vec![
+                        TypedValue::Ref(ids.get("a").cloned().unwrap()),
+                        "Alice".into(),
+                        TypedValue::Long(99),
+                        TypedValue::Long(3),
+                        TypedValue::Double((127f64 / 3f64).into())
+                    ],
+                    vec![
+                        TypedValue::Ref(ids.get("b").cloned().unwrap()),
+                        "Beli".into(),
+                        TypedValue::Long(22),
+                        TypedValue::Long(2),
+                        TypedValue::Double((33f64 / 2f64).into())
+                    ],
+                    vec![
+                        TypedValue::Ref(ids.get("c").cloned().unwrap()),
+                        "Carlos".into(),
+                        TypedValue::Long(42),
+                        TypedValue::Long(1),
+                        TypedValue::Double(42f64.into())
+                    ],
+                    vec![
+                        TypedValue::Ref(ids.get("d").cloned().unwrap()),
+                        "Diana".into(),
+                        TypedValue::Long(28),
+                        TypedValue::Long(2),
+                        TypedValue::Double((33f64 / 2f64).into())
+                    ]
+                ]
+                .into()
+            );
+        }
         x => panic!("Got unexpected results {:?}", x),
     }
 }
@@ -1408,83 +1797,134 @@ fn test_aggregation_implicit_grouping() {
 fn test_tx_ids() {
     let mut store = Store::open("").expect("opened");
 
-    store.transact(r#"[
+    store
+        .transact(
+            r#"[
         [:db/add "a" :db/ident :foo/term]
         [:db/add "a" :db/valueType :db.type/string]
         [:db/add "a" :db/fulltext false]
         [:db/add "a" :db/cardinality :db.cardinality/many]
-    ]"#).unwrap();
+    ]"#,
+        )
+        .unwrap();
 
-    let tx1 = store.transact(r#"[
+    let tx1 = store
+        .transact(
+            r#"[
         [:db/add "v" :foo/term "1"]
-    ]"#).expect("tx1 to apply").tx_id;
+    ]"#,
+        )
+        .expect("tx1 to apply")
+        .tx_id;
 
-    let tx2 = store.transact(r#"[
+    let tx2 = store
+        .transact(
+            r#"[
         [:db/add "v" :foo/term "2"]
-    ]"#).expect("tx2 to apply").tx_id;
+    ]"#,
+        )
+        .expect("tx2 to apply")
+        .tx_id;
 
-    let tx3 = store.transact(r#"[
+    let tx3 = store
+        .transact(
+            r#"[
         [:db/add "v" :foo/term "3"]
-    ]"#).expect("tx3 to apply").tx_id;
+    ]"#,
+        )
+        .expect("tx3 to apply")
+        .tx_id;
 
     fn assert_tx_id_range(store: &Store, after: Entid, before: Entid, expected: Vec<TypedValue>) {
         // TODO: after https://github.com/mozilla/mentat/issues/641, use q_prepare with inputs bound
         // at execution time.
-        let r = store.q_once(r#"[:find [?tx ...]
+        let r = store
+            .q_once(
+                r#"[:find [?tx ...]
                                  :in ?after ?before
                                  :where
                                  [(tx-ids $ ?after ?before) [?tx ...]]
                                 ]"#,
-                             QueryInputs::with_value_sequence(vec![
-                                 (Variable::from_valid_name("?after"),  TypedValue::Ref(after)),
-                                 (Variable::from_valid_name("?before"), TypedValue::Ref(before)),
-                             ]))
+                QueryInputs::with_value_sequence(vec![
+                    (Variable::from_valid_name("?after"), TypedValue::Ref(after)),
+                    (
+                        Variable::from_valid_name("?before"),
+                        TypedValue::Ref(before),
+                    ),
+                ]),
+            )
             .expect("results")
             .into();
         match r {
             QueryResults::Coll(txs) => {
                 let expected: Vec<Binding> = expected.into_iter().map(|tv| tv.into()).collect();
                 assert_eq!(txs, expected);
-            },
+            }
             x => panic!("Got unexpected results {:?}", x),
         }
     }
 
     assert_tx_id_range(&store, tx1, tx2, vec![TypedValue::Ref(tx1)]);
-    assert_tx_id_range(&store, tx1, tx3, vec![TypedValue::Ref(tx1), TypedValue::Ref(tx2)]);
+    assert_tx_id_range(
+        &store,
+        tx1,
+        tx3,
+        vec![TypedValue::Ref(tx1), TypedValue::Ref(tx2)],
+    );
     assert_tx_id_range(&store, tx2, tx3, vec![TypedValue::Ref(tx2)]);
-    assert_tx_id_range(&store, tx2, tx3 + 1, vec![TypedValue::Ref(tx2), TypedValue::Ref(tx3)]);
+    assert_tx_id_range(
+        &store,
+        tx2,
+        tx3 + 1,
+        vec![TypedValue::Ref(tx2), TypedValue::Ref(tx3)],
+    );
 }
 
 fn run_tx_data_test(mut store: Store) {
-    store.transact(r#"[
+    store
+        .transact(
+            r#"[
         [:db/add "a" :db/ident :foo/term]
         [:db/add "a" :db/valueType :db.type/string]
         [:db/add "a" :db/fulltext false]
         [:db/add "a" :db/cardinality :db.cardinality/many]
-    ]"#).unwrap();
+    ]"#,
+        )
+        .unwrap();
 
-    let tx1 = store.transact(r#"[
+    let tx1 = store
+        .transact(
+            r#"[
         [:db/add "e" :foo/term "1"]
-    ]"#).expect("tx1 to apply");
+    ]"#,
+        )
+        .expect("tx1 to apply");
 
-    let tx2 = store.transact(r#"[
+    let tx2 = store
+        .transact(
+            r#"[
         [:db/add "e" :foo/term "2"]
-    ]"#).expect("tx2 to apply");
+    ]"#,
+        )
+        .expect("tx2 to apply");
 
     fn assert_tx_data(store: &Store, tx: &TxReport, value: TypedValue) {
         // TODO: after https://github.com/mozilla/mentat/issues/641, use q_prepare with inputs bound
         // at execution time.
-        let r = store.q_once(r#"[:find ?e ?a-name ?v ?tx ?added
+        let r = store
+            .q_once(
+                r#"[:find ?e ?a-name ?v ?tx ?added
                                  :in ?tx-in
                                  :where
                                  [(tx-data $ ?tx-in) [[?e ?a ?v ?tx ?added]]]
                                  [?a :db/ident ?a-name]
                                  :order ?e
                                 ]"#,
-                             QueryInputs::with_value_sequence(vec![
-                                 (Variable::from_valid_name("?tx-in"),  TypedValue::Ref(tx.tx_id)),
-                             ]))
+                QueryInputs::with_value_sequence(vec![(
+                    Variable::from_valid_name("?tx-in"),
+                    TypedValue::Ref(tx.tx_id),
+                )]),
+            )
             .expect("results")
             .into();
 
@@ -1492,20 +1932,27 @@ fn run_tx_data_test(mut store: Store) {
 
         match r {
             QueryResults::Rel(vals) => {
-                assert_eq!(vals,
-                           vec![
-                               vec![TypedValue::Ref(e),
-                                    TypedValue::typed_ns_keyword("foo", "term"),
-                                    value,
-                                    TypedValue::Ref(tx.tx_id),
-                                    TypedValue::Boolean(true)],
-                               vec![TypedValue::Ref(tx.tx_id),
-                                    TypedValue::typed_ns_keyword("db", "txInstant"),
-                                    TypedValue::Instant(tx.tx_instant),
-                                    TypedValue::Ref(tx.tx_id),
-                                    TypedValue::Boolean(true)],
-                           ].into());
-            },
+                assert_eq!(
+                    vals,
+                    vec![
+                        vec![
+                            TypedValue::Ref(e),
+                            TypedValue::typed_ns_keyword("foo", "term"),
+                            value,
+                            TypedValue::Ref(tx.tx_id),
+                            TypedValue::Boolean(true)
+                        ],
+                        vec![
+                            TypedValue::Ref(tx.tx_id),
+                            TypedValue::typed_ns_keyword("db", "txInstant"),
+                            TypedValue::Instant(tx.tx_instant),
+                            TypedValue::Ref(tx.tx_id),
+                            TypedValue::Boolean(true)
+                        ],
+                    ]
+                    .into()
+                );
+            }
             x => panic!("Got unexpected results {:?}", x),
         }
     };

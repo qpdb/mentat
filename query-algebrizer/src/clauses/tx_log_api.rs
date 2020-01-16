@@ -8,36 +8,16 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use core_traits::{
-    ValueType,
-};
+use core_traits::ValueType;
 
-use edn::query::{
-    Binding,
-    FnArg,
-    SrcVar,
-    VariableOrPlaceholder,
-    WhereFn,
-};
+use edn::query::{Binding, FnArg, SrcVar, VariableOrPlaceholder, WhereFn};
 
-use clauses::{
-    ConjoiningClauses,
-};
+use clauses::ConjoiningClauses;
 
-use query_algebrizer_traits::errors::{
-    AlgebrizerError,
-    BindingError,
-    Result,
-};
+use query_algebrizer_traits::errors::{AlgebrizerError, BindingError, Result};
 
 use types::{
-    Column,
-    ColumnConstraint,
-    DatomsTable,
-    Inequality,
-    QualifiedAlias,
-    QueryValue,
-    SourceAlias,
+    Column, ColumnConstraint, DatomsTable, Inequality, QualifiedAlias, QueryValue, SourceAlias,
     TransactionsColumn,
 };
 
@@ -60,17 +40,27 @@ impl ConjoiningClauses {
     // transactions that impact one of the given attributes.
     pub(crate) fn apply_tx_ids(&mut self, known: Known, where_fn: WhereFn) -> Result<()> {
         if where_fn.args.len() != 3 {
-            bail!(AlgebrizerError::InvalidNumberOfArguments(where_fn.operator.clone(), where_fn.args.len(), 3));
+            bail!(AlgebrizerError::InvalidNumberOfArguments(
+                where_fn.operator.clone(),
+                where_fn.args.len(),
+                3
+            ));
         }
 
         if where_fn.binding.is_empty() {
             // The binding must introduce at least one bound variable.
-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::NoBoundVariable));
+            bail!(AlgebrizerError::InvalidBinding(
+                where_fn.operator.clone(),
+                BindingError::NoBoundVariable
+            ));
         }
 
         if !where_fn.binding.is_valid() {
             // The binding must not duplicate bound variables.
-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::RepeatedBoundVariable));
+            bail!(AlgebrizerError::InvalidBinding(
+                where_fn.operator.clone(),
+                BindingError::RepeatedBoundVariable
+            ));
         }
 
         // We should have exactly one binding. Destructure it now.
@@ -78,38 +68,49 @@ impl ConjoiningClauses {
             Binding::BindRel(bindings) => {
                 let bindings_count = bindings.len();
                 if bindings_count != 1 {
-                    bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(),
-                                                    BindingError::InvalidNumberOfBindings {
-                                                        number: bindings_count,
-                                                        expected: 1,
-                                                    }));
+                    bail!(AlgebrizerError::InvalidBinding(
+                        where_fn.operator.clone(),
+                        BindingError::InvalidNumberOfBindings {
+                            number: bindings_count,
+                            expected: 1,
+                        }
+                    ));
                 }
                 match bindings.into_iter().next().unwrap() {
                     VariableOrPlaceholder::Placeholder => unreachable!("binding.is_empty()!"),
                     VariableOrPlaceholder::Variable(v) => v,
                 }
-            },
+            }
             Binding::BindColl(v) => v,
-            Binding::BindScalar(_) |
-            Binding::BindTuple(_) => {
-                bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::ExpectedBindRelOrBindColl))
-            },
+            Binding::BindScalar(_) | Binding::BindTuple(_) => {
+                bail!(AlgebrizerError::InvalidBinding(
+                    where_fn.operator.clone(),
+                    BindingError::ExpectedBindRelOrBindColl
+                ))
+            }
         };
 
         let mut args = where_fn.args.into_iter();
 
         // TODO: process source variables.
         match args.next().unwrap() {
-            FnArg::SrcVar(SrcVar::DefaultSrc) => {},
-            _ => bail!(AlgebrizerError::InvalidArgument(where_fn.operator.clone(), "source variable", 0)),
+            FnArg::SrcVar(SrcVar::DefaultSrc) => {}
+            _ => bail!(AlgebrizerError::InvalidArgument(
+                where_fn.operator.clone(),
+                "source variable",
+                0
+            )),
         }
 
-        let tx1 = self.resolve_tx_argument(&known.schema, &where_fn.operator, 1, args.next().unwrap())?;
-        let tx2 = self.resolve_tx_argument(&known.schema, &where_fn.operator, 2, args.next().unwrap())?;
+        let tx1 =
+            self.resolve_tx_argument(&known.schema, &where_fn.operator, 1, args.next().unwrap())?;
+        let tx2 =
+            self.resolve_tx_argument(&known.schema, &where_fn.operator, 2, args.next().unwrap())?;
 
         let transactions = self.next_alias_for_table(DatomsTable::Transactions);
 
-        self.from.push(SourceAlias(DatomsTable::Transactions, transactions.clone()));
+        self.from
+            .push(SourceAlias(DatomsTable::Transactions, transactions.clone()));
 
         // Bound variable must be a ref.
         self.constrain_var_to_type(tx_var.clone(), ValueType::Ref);
@@ -117,18 +118,29 @@ impl ConjoiningClauses {
             return Ok(());
         }
 
-        self.bind_column_to_var(known.schema, transactions.clone(), TransactionsColumn::Tx, tx_var.clone());
+        self.bind_column_to_var(
+            known.schema,
+            transactions.clone(),
+            TransactionsColumn::Tx,
+            tx_var.clone(),
+        );
 
         let after_constraint = ColumnConstraint::Inequality {
             operator: Inequality::LessThanOrEquals,
             left: tx1,
-            right: QueryValue::Column(QualifiedAlias(transactions.clone(), Column::Transactions(TransactionsColumn::Tx))),
+            right: QueryValue::Column(QualifiedAlias(
+                transactions.clone(),
+                Column::Transactions(TransactionsColumn::Tx),
+            )),
         };
         self.wheres.add_intersection(after_constraint);
 
         let before_constraint = ColumnConstraint::Inequality {
             operator: Inequality::LessThan,
-            left: QueryValue::Column(QualifiedAlias(transactions.clone(), Column::Transactions(TransactionsColumn::Tx))),
+            left: QueryValue::Column(QualifiedAlias(
+                transactions.clone(),
+                Column::Transactions(TransactionsColumn::Tx),
+            )),
             right: tx2,
         };
         self.wheres.add_intersection(before_constraint);
@@ -138,17 +150,27 @@ impl ConjoiningClauses {
 
     pub(crate) fn apply_tx_data(&mut self, known: Known, where_fn: WhereFn) -> Result<()> {
         if where_fn.args.len() != 2 {
-            bail!(AlgebrizerError::InvalidNumberOfArguments(where_fn.operator.clone(), where_fn.args.len(), 2));
+            bail!(AlgebrizerError::InvalidNumberOfArguments(
+                where_fn.operator.clone(),
+                where_fn.args.len(),
+                2
+            ));
         }
 
         if where_fn.binding.is_empty() {
             // The binding must introduce at least one bound variable.
-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::NoBoundVariable));
+            bail!(AlgebrizerError::InvalidBinding(
+                where_fn.operator.clone(),
+                BindingError::NoBoundVariable
+            ));
         }
 
         if !where_fn.binding.is_valid() {
             // The binding must not duplicate bound variables.
-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::RepeatedBoundVariable));
+            bail!(AlgebrizerError::InvalidBinding(
+                where_fn.operator.clone(),
+                BindingError::RepeatedBoundVariable
+            ));
         }
 
         // We should have at most five bindings. Destructure them now.
@@ -156,42 +178,67 @@ impl ConjoiningClauses {
             Binding::BindRel(bindings) => {
                 let bindings_count = bindings.len();
                 if bindings_count < 1 || bindings_count > 5 {
-                    bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(),
-                                                    BindingError::InvalidNumberOfBindings {
-                                                        number: bindings.len(),
-                                                        expected: 5,
-                                                    }));
+                    bail!(AlgebrizerError::InvalidBinding(
+                        where_fn.operator.clone(),
+                        BindingError::InvalidNumberOfBindings {
+                            number: bindings.len(),
+                            expected: 5,
+                        }
+                    ));
                 }
                 bindings
-            },
-            Binding::BindScalar(_) |
-            Binding::BindTuple(_) |
-            Binding::BindColl(_) => bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::ExpectedBindRel)),
+            }
+            Binding::BindScalar(_) | Binding::BindTuple(_) | Binding::BindColl(_) => {
+                bail!(AlgebrizerError::InvalidBinding(
+                    where_fn.operator.clone(),
+                    BindingError::ExpectedBindRel
+                ))
+            }
         };
         let mut bindings = bindings.into_iter();
-        let b_e = bindings.next().unwrap_or(VariableOrPlaceholder::Placeholder);
-        let b_a = bindings.next().unwrap_or(VariableOrPlaceholder::Placeholder);
-        let b_v = bindings.next().unwrap_or(VariableOrPlaceholder::Placeholder);
-        let b_tx = bindings.next().unwrap_or(VariableOrPlaceholder::Placeholder);
-        let b_op = bindings.next().unwrap_or(VariableOrPlaceholder::Placeholder);
+        let b_e = bindings
+            .next()
+            .unwrap_or(VariableOrPlaceholder::Placeholder);
+        let b_a = bindings
+            .next()
+            .unwrap_or(VariableOrPlaceholder::Placeholder);
+        let b_v = bindings
+            .next()
+            .unwrap_or(VariableOrPlaceholder::Placeholder);
+        let b_tx = bindings
+            .next()
+            .unwrap_or(VariableOrPlaceholder::Placeholder);
+        let b_op = bindings
+            .next()
+            .unwrap_or(VariableOrPlaceholder::Placeholder);
 
         let mut args = where_fn.args.into_iter();
 
         // TODO: process source variables.
         match args.next().unwrap() {
-            FnArg::SrcVar(SrcVar::DefaultSrc) => {},
-            _ => bail!(AlgebrizerError::InvalidArgument(where_fn.operator.clone(), "source variable", 0)),
+            FnArg::SrcVar(SrcVar::DefaultSrc) => {}
+            _ => bail!(AlgebrizerError::InvalidArgument(
+                where_fn.operator.clone(),
+                "source variable",
+                0
+            )),
         }
 
-        let tx = self.resolve_tx_argument(&known.schema, &where_fn.operator, 1, args.next().unwrap())?;
+        let tx =
+            self.resolve_tx_argument(&known.schema, &where_fn.operator, 1, args.next().unwrap())?;
 
         let transactions = self.next_alias_for_table(DatomsTable::Transactions);
 
-        self.from.push(SourceAlias(DatomsTable::Transactions, transactions.clone()));
+        self.from
+            .push(SourceAlias(DatomsTable::Transactions, transactions.clone()));
 
         let tx_constraint = ColumnConstraint::Equals(
-            QualifiedAlias(transactions.clone(), Column::Transactions(TransactionsColumn::Tx)),
-            tx);
+            QualifiedAlias(
+                transactions.clone(),
+                Column::Transactions(TransactionsColumn::Tx),
+            ),
+            tx,
+        );
         self.wheres.add_intersection(tx_constraint);
 
         if let VariableOrPlaceholder::Variable(ref var) = b_e {
@@ -201,7 +248,12 @@ impl ConjoiningClauses {
                 return Ok(());
             }
 
-            self.bind_column_to_var(known.schema, transactions.clone(), TransactionsColumn::Entity, var.clone());
+            self.bind_column_to_var(
+                known.schema,
+                transactions.clone(),
+                TransactionsColumn::Entity,
+                var.clone(),
+            );
         }
 
         if let VariableOrPlaceholder::Variable(ref var) = b_a {
@@ -211,11 +263,21 @@ impl ConjoiningClauses {
                 return Ok(());
             }
 
-            self.bind_column_to_var(known.schema, transactions.clone(), TransactionsColumn::Attribute, var.clone());
+            self.bind_column_to_var(
+                known.schema,
+                transactions.clone(),
+                TransactionsColumn::Attribute,
+                var.clone(),
+            );
         }
 
         if let VariableOrPlaceholder::Variable(ref var) = b_v {
-            self.bind_column_to_var(known.schema, transactions.clone(), TransactionsColumn::Value, var.clone());
+            self.bind_column_to_var(
+                known.schema,
+                transactions.clone(),
+                TransactionsColumn::Value,
+                var.clone(),
+            );
         }
 
         if let VariableOrPlaceholder::Variable(ref var) = b_tx {
@@ -227,7 +289,12 @@ impl ConjoiningClauses {
 
             // TODO: this might be a programming error if var is our tx argument.  Perhaps we can be
             // helpful in that case.
-            self.bind_column_to_var(known.schema, transactions.clone(), TransactionsColumn::Tx, var.clone());
+            self.bind_column_to_var(
+                known.schema,
+                transactions.clone(),
+                TransactionsColumn::Tx,
+                var.clone(),
+            );
         }
 
         if let VariableOrPlaceholder::Variable(ref var) = b_op {
@@ -237,7 +304,12 @@ impl ConjoiningClauses {
                 return Ok(());
             }
 
-            self.bind_column_to_var(known.schema, transactions.clone(), TransactionsColumn::Added, var.clone());
+            self.bind_column_to_var(
+                known.schema,
+                transactions.clone(),
+                TransactionsColumn::Added,
+                var.clone(),
+            );
         }
 
         Ok(())
@@ -248,21 +320,11 @@ impl ConjoiningClauses {
 mod testing {
     use super::*;
 
-    use core_traits::{
-        TypedValue,
-        ValueType,
-    };
+    use core_traits::{TypedValue, ValueType};
 
-    use mentat_core::{
-        Schema,
-    };
+    use mentat_core::Schema;
 
-    use edn::query::{
-        Binding,
-        FnArg,
-        PlainSymbol,
-        Variable,
-    };
+    use edn::query::{Binding, FnArg, PlainSymbol, Variable};
 
     #[test]
     fn test_apply_tx_ids() {
@@ -272,16 +334,21 @@ mod testing {
         let known = Known::for_schema(&schema);
 
         let op = PlainSymbol::plain("tx-ids");
-        cc.apply_tx_ids(known, WhereFn {
-            operator: op,
-            args: vec![
-                FnArg::SrcVar(SrcVar::DefaultSrc),
-                FnArg::EntidOrInteger(1000),
-                FnArg::EntidOrInteger(2000),
-            ],
-            binding: Binding::BindRel(vec![VariableOrPlaceholder::Variable(Variable::from_valid_name("?tx")),
-            ]),
-        }).expect("to be able to apply_tx_ids");
+        cc.apply_tx_ids(
+            known,
+            WhereFn {
+                operator: op,
+                args: vec![
+                    FnArg::SrcVar(SrcVar::DefaultSrc),
+                    FnArg::EntidOrInteger(1000),
+                    FnArg::EntidOrInteger(2000),
+                ],
+                binding: Binding::BindRel(vec![VariableOrPlaceholder::Variable(
+                    Variable::from_valid_name("?tx"),
+                )]),
+            },
+        )
+        .expect("to be able to apply_tx_ids");
 
         assert!(!cc.is_known_empty());
 
@@ -292,31 +359,56 @@ mod testing {
         let clauses = cc.wheres;
         assert_eq!(clauses.len(), 2);
 
-        assert_eq!(clauses.0[0],
-                   ColumnConstraint::Inequality {
-                       operator: Inequality::LessThanOrEquals,
-                       left: QueryValue::TypedValue(TypedValue::Ref(1000)),
-                       right: QueryValue::Column(QualifiedAlias("transactions00".to_string(), Column::Transactions(TransactionsColumn::Tx))),
-                   }.into());
+        assert_eq!(
+            clauses.0[0],
+            ColumnConstraint::Inequality {
+                operator: Inequality::LessThanOrEquals,
+                left: QueryValue::TypedValue(TypedValue::Ref(1000)),
+                right: QueryValue::Column(QualifiedAlias(
+                    "transactions00".to_string(),
+                    Column::Transactions(TransactionsColumn::Tx)
+                )),
+            }
+            .into()
+        );
 
-        assert_eq!(clauses.0[1],
-                   ColumnConstraint::Inequality {
-                       operator: Inequality::LessThan,
-                       left: QueryValue::Column(QualifiedAlias("transactions00".to_string(), Column::Transactions(TransactionsColumn::Tx))),
-                       right: QueryValue::TypedValue(TypedValue::Ref(2000)),
-                   }.into());
+        assert_eq!(
+            clauses.0[1],
+            ColumnConstraint::Inequality {
+                operator: Inequality::LessThan,
+                left: QueryValue::Column(QualifiedAlias(
+                    "transactions00".to_string(),
+                    Column::Transactions(TransactionsColumn::Tx)
+                )),
+                right: QueryValue::TypedValue(TypedValue::Ref(2000)),
+            }
+            .into()
+        );
 
         let bindings = cc.column_bindings;
         assert_eq!(bindings.len(), 1);
 
-        assert_eq!(bindings.get(&Variable::from_valid_name("?tx")).expect("column binding for ?tx").clone(),
-                   vec![QualifiedAlias("transactions00".to_string(), Column::Transactions(TransactionsColumn::Tx))]);
+        assert_eq!(
+            bindings
+                .get(&Variable::from_valid_name("?tx"))
+                .expect("column binding for ?tx")
+                .clone(),
+            vec![QualifiedAlias(
+                "transactions00".to_string(),
+                Column::Transactions(TransactionsColumn::Tx)
+            )]
+        );
 
         let known_types = cc.known_types;
         assert_eq!(known_types.len(), 1);
 
-        assert_eq!(known_types.get(&Variable::from_valid_name("?tx")).expect("known types for ?tx").clone(),
-                   vec![ValueType::Ref].into_iter().collect());
+        assert_eq!(
+            known_types
+                .get(&Variable::from_valid_name("?tx"))
+                .expect("known types for ?tx")
+                .clone(),
+            vec![ValueType::Ref].into_iter().collect()
+        );
     }
 
     #[test]
@@ -327,20 +419,24 @@ mod testing {
         let known = Known::for_schema(&schema);
 
         let op = PlainSymbol::plain("tx-data");
-        cc.apply_tx_data(known, WhereFn {
-            operator: op,
-            args: vec![
-                FnArg::SrcVar(SrcVar::DefaultSrc),
-                FnArg::EntidOrInteger(1000),
-            ],
-            binding: Binding::BindRel(vec![
-                VariableOrPlaceholder::Variable(Variable::from_valid_name("?e")),
-                VariableOrPlaceholder::Variable(Variable::from_valid_name("?a")),
-                VariableOrPlaceholder::Variable(Variable::from_valid_name("?v")),
-                VariableOrPlaceholder::Variable(Variable::from_valid_name("?tx")),
-                VariableOrPlaceholder::Variable(Variable::from_valid_name("?added")),
-            ]),
-        }).expect("to be able to apply_tx_data");
+        cc.apply_tx_data(
+            known,
+            WhereFn {
+                operator: op,
+                args: vec![
+                    FnArg::SrcVar(SrcVar::DefaultSrc),
+                    FnArg::EntidOrInteger(1000),
+                ],
+                binding: Binding::BindRel(vec![
+                    VariableOrPlaceholder::Variable(Variable::from_valid_name("?e")),
+                    VariableOrPlaceholder::Variable(Variable::from_valid_name("?a")),
+                    VariableOrPlaceholder::Variable(Variable::from_valid_name("?v")),
+                    VariableOrPlaceholder::Variable(Variable::from_valid_name("?tx")),
+                    VariableOrPlaceholder::Variable(Variable::from_valid_name("?added")),
+                ]),
+            },
+        )
+        .expect("to be able to apply_tx_data");
 
         assert!(!cc.is_known_empty());
 
@@ -351,47 +447,123 @@ mod testing {
         let clauses = cc.wheres;
         assert_eq!(clauses.len(), 1);
 
-        assert_eq!(clauses.0[0],
-                   ColumnConstraint::Equals(QualifiedAlias("transactions00".to_string(), Column::Transactions(TransactionsColumn::Tx)),
-                                            QueryValue::TypedValue(TypedValue::Ref(1000))).into());
+        assert_eq!(
+            clauses.0[0],
+            ColumnConstraint::Equals(
+                QualifiedAlias(
+                    "transactions00".to_string(),
+                    Column::Transactions(TransactionsColumn::Tx)
+                ),
+                QueryValue::TypedValue(TypedValue::Ref(1000))
+            )
+            .into()
+        );
 
         let bindings = cc.column_bindings;
         assert_eq!(bindings.len(), 5);
 
-        assert_eq!(bindings.get(&Variable::from_valid_name("?e")).expect("column binding for ?e").clone(),
-                   vec![QualifiedAlias("transactions00".to_string(), Column::Transactions(TransactionsColumn::Entity))]);
+        assert_eq!(
+            bindings
+                .get(&Variable::from_valid_name("?e"))
+                .expect("column binding for ?e")
+                .clone(),
+            vec![QualifiedAlias(
+                "transactions00".to_string(),
+                Column::Transactions(TransactionsColumn::Entity)
+            )]
+        );
 
-        assert_eq!(bindings.get(&Variable::from_valid_name("?a")).expect("column binding for ?a").clone(),
-                   vec![QualifiedAlias("transactions00".to_string(), Column::Transactions(TransactionsColumn::Attribute))]);
+        assert_eq!(
+            bindings
+                .get(&Variable::from_valid_name("?a"))
+                .expect("column binding for ?a")
+                .clone(),
+            vec![QualifiedAlias(
+                "transactions00".to_string(),
+                Column::Transactions(TransactionsColumn::Attribute)
+            )]
+        );
 
-        assert_eq!(bindings.get(&Variable::from_valid_name("?v")).expect("column binding for ?v").clone(),
-                   vec![QualifiedAlias("transactions00".to_string(), Column::Transactions(TransactionsColumn::Value))]);
+        assert_eq!(
+            bindings
+                .get(&Variable::from_valid_name("?v"))
+                .expect("column binding for ?v")
+                .clone(),
+            vec![QualifiedAlias(
+                "transactions00".to_string(),
+                Column::Transactions(TransactionsColumn::Value)
+            )]
+        );
 
-        assert_eq!(bindings.get(&Variable::from_valid_name("?tx")).expect("column binding for ?tx").clone(),
-                   vec![QualifiedAlias("transactions00".to_string(), Column::Transactions(TransactionsColumn::Tx))]);
+        assert_eq!(
+            bindings
+                .get(&Variable::from_valid_name("?tx"))
+                .expect("column binding for ?tx")
+                .clone(),
+            vec![QualifiedAlias(
+                "transactions00".to_string(),
+                Column::Transactions(TransactionsColumn::Tx)
+            )]
+        );
 
-        assert_eq!(bindings.get(&Variable::from_valid_name("?added")).expect("column binding for ?added").clone(),
-                   vec![QualifiedAlias("transactions00".to_string(), Column::Transactions(TransactionsColumn::Added))]);
+        assert_eq!(
+            bindings
+                .get(&Variable::from_valid_name("?added"))
+                .expect("column binding for ?added")
+                .clone(),
+            vec![QualifiedAlias(
+                "transactions00".to_string(),
+                Column::Transactions(TransactionsColumn::Added)
+            )]
+        );
 
         let known_types = cc.known_types;
         assert_eq!(known_types.len(), 4);
 
-        assert_eq!(known_types.get(&Variable::from_valid_name("?e")).expect("known types for ?e").clone(),
-                   vec![ValueType::Ref].into_iter().collect());
+        assert_eq!(
+            known_types
+                .get(&Variable::from_valid_name("?e"))
+                .expect("known types for ?e")
+                .clone(),
+            vec![ValueType::Ref].into_iter().collect()
+        );
 
-        assert_eq!(known_types.get(&Variable::from_valid_name("?a")).expect("known types for ?a").clone(),
-                   vec![ValueType::Ref].into_iter().collect());
+        assert_eq!(
+            known_types
+                .get(&Variable::from_valid_name("?a"))
+                .expect("known types for ?a")
+                .clone(),
+            vec![ValueType::Ref].into_iter().collect()
+        );
 
-        assert_eq!(known_types.get(&Variable::from_valid_name("?tx")).expect("known types for ?tx").clone(),
-                   vec![ValueType::Ref].into_iter().collect());
+        assert_eq!(
+            known_types
+                .get(&Variable::from_valid_name("?tx"))
+                .expect("known types for ?tx")
+                .clone(),
+            vec![ValueType::Ref].into_iter().collect()
+        );
 
-        assert_eq!(known_types.get(&Variable::from_valid_name("?added")).expect("known types for ?added").clone(),
-                   vec![ValueType::Boolean].into_iter().collect());
+        assert_eq!(
+            known_types
+                .get(&Variable::from_valid_name("?added"))
+                .expect("known types for ?added")
+                .clone(),
+            vec![ValueType::Boolean].into_iter().collect()
+        );
 
         let extracted_types = cc.extracted_types;
         assert_eq!(extracted_types.len(), 1);
 
-        assert_eq!(extracted_types.get(&Variable::from_valid_name("?v")).expect("extracted types for ?v").clone(),
-                   QualifiedAlias("transactions00".to_string(), Column::Transactions(TransactionsColumn::ValueTypeTag)));
+        assert_eq!(
+            extracted_types
+                .get(&Variable::from_valid_name("?v"))
+                .expect("extracted types for ?v")
+                .clone(),
+            QualifiedAlias(
+                "transactions00".to_string(),
+                Column::Transactions(TransactionsColumn::ValueTypeTag)
+            )
+        );
     }
 }

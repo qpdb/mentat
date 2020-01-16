@@ -10,17 +10,18 @@
 
 #![crate_name = "mentat_cli"]
 
-use std::path::{
-    PathBuf,
-};
+use std::path::PathBuf;
 
-#[macro_use] extern crate failure_derive;
-#[macro_use] extern crate log;
-#[macro_use] extern crate lazy_static;
+#[macro_use]
+extern crate failure_derive;
+#[macro_use]
+extern crate log;
+#[macro_use]
+extern crate lazy_static;
 
 extern crate combine;
-extern crate env_logger;
 extern crate dirs;
+extern crate env_logger;
 extern crate failure;
 extern crate getopts;
 extern crate linefeed;
@@ -29,17 +30,15 @@ extern crate tabwriter;
 extern crate termion;
 extern crate time;
 
-extern crate mentat;
 extern crate edn;
+extern crate mentat;
 #[macro_use]
 extern crate core_traits;
 extern crate mentat_db;
 
 use getopts::Options;
 
-use termion::{
-    color,
-};
+use termion::color;
 
 static HISTORY_FILE_PATH: &str = ".mentat_history";
 
@@ -73,14 +72,38 @@ pub fn run() -> i32 {
 
     opts.optopt("d", "", "The path to a database to open", "DATABASE");
     if cfg!(feature = "sqlcipher") {
-        opts.optopt("k", "key", "The key to use to open the database (only available when using sqlcipher)", "KEY");
+        opts.optopt(
+            "k",
+            "key",
+            "The key to use to open the database (only available when using sqlcipher)",
+            "KEY",
+        );
     }
     opts.optflag("h", "help", "Print this help message and exit");
-    opts.optmulti("q", "query", "Execute a query on startup. Queries are executed after any transacts.", "QUERY");
-    opts.optmulti("t", "transact", "Execute a transact on startup. Transacts are executed before queries.", "TRANSACT");
-    opts.optmulti("i", "import", "Execute an import on startup. Imports are executed before queries.", "PATH");
+    opts.optmulti(
+        "q",
+        "query",
+        "Execute a query on startup. Queries are executed after any transacts.",
+        "QUERY",
+    );
+    opts.optmulti(
+        "t",
+        "transact",
+        "Execute a transact on startup. Transacts are executed before queries.",
+        "TRANSACT",
+    );
+    opts.optmulti(
+        "i",
+        "import",
+        "Execute an import on startup. Imports are executed before queries.",
+        "PATH",
+    );
     opts.optflag("v", "version", "Print version and exit");
-    opts.optflag("", "no-tty", "Don't try to use a TTY for readline-like input processing");
+    opts.optflag(
+        "",
+        "no-tty",
+        "Don't try to use a TTY for readline-like input processing",
+    );
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -108,41 +131,44 @@ pub fn run() -> i32 {
 
     let mut last_arg: Option<&str> = None;
 
-    let cmds:Vec<command_parser::Command> = args.iter().filter_map(|arg| {
-        match last_arg {
+    let cmds: Vec<command_parser::Command> = args
+        .iter()
+        .filter_map(|arg| match last_arg {
             Some("-d") => {
                 last_arg = None;
                 if let &Some(ref k) = &key {
-                    Some(command_parser::Command::OpenEncrypted(arg.clone(), k.clone()))
+                    Some(command_parser::Command::OpenEncrypted(
+                        arg.clone(),
+                        k.clone(),
+                    ))
                 } else {
                     Some(command_parser::Command::Open(arg.clone()))
                 }
-            },
+            }
             Some("-q") => {
                 last_arg = None;
                 Some(command_parser::Command::Query(arg.clone()))
-            },
+            }
             Some("-i") => {
                 last_arg = None;
                 Some(command_parser::Command::Import(arg.clone()))
-            },
+            }
             Some("-t") => {
                 last_arg = None;
                 Some(command_parser::Command::Transact(arg.clone()))
-            },
-            Some(_) |
-            None => {
+            }
+            Some(_) | None => {
                 last_arg = Some(&arg);
                 None
-            },
-        }
-    }).collect();
+            }
+        })
+        .collect();
 
     let mut repl = match repl::Repl::new(!matches.opt_present("no-tty")) {
         Ok(repl) => repl,
         Err(e) => {
             println!("{}", e);
-            return 1
+            return 1;
         }
     };
 
@@ -157,18 +183,18 @@ pub fn version() -> &'static str {
 }
 
 fn print_usage(arg0: &str, opts: &Options) {
-    print!("{}", opts.usage(&format!(
-        "Usage: {} [OPTIONS] [FILE]", arg0)));
+    print!(
+        "{}",
+        opts.usage(&format!("Usage: {} [OPTIONS] [FILE]", arg0))
+    );
 }
 
 fn print_version() {
     println!("mentat {}", version());
 }
 
-
 #[cfg(test)]
 mod tests {
     #[test]
-    fn it_works() {
-    }
+    fn it_works() {}
 }

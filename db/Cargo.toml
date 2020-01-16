@@ -9,20 +9,20 @@ sqlcipher = ["rusqlite/sqlcipher"]
 syncable = ["serde", "serde_json", "serde_derive"]
 
 [dependencies]
-failure = "0.1.1"
+failure = "0.1.6"
 indexmap = "1"
-itertools = "0.7"
-lazy_static = "0.2"
+itertools = "0.8"
+lazy_static = "1.4.0"
 log = "0.4"
-ordered-float = "0.5"
-time = "0.1"
-petgraph = "0.4.12"
+ordered-float = "1.0.2"
+time = "0.2"
+petgraph = "0.5"
 serde = { version = "1.0", optional = true }
 serde_json = { version = "1.0", optional = true }
 serde_derive = { version = "1.0", optional = true }
 
 [dependencies.rusqlite]
-version = "0.13"
+version = "0.21"
 features = ["limits"]
 
 [dependencies.edn]
@@ -42,7 +42,7 @@ path = "../sql"
 
 # Should be dev-dependencies.
 [dependencies.tabwriter]
-version = "1.0.3"
+version = "1.2.1"
 
 [dev-dependencies]
-env_logger = "0.5"
+env_logger = "0.7"

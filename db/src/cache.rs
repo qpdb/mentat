@@ -46,25 +46,13 @@
 ///!
 ///! Most of the tests for this module are actually in `conn.rs`, where we can set up transactions
 ///! and test the external API.
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use std::collections::{
-    BTreeMap,
-    BTreeSet,
-    HashSet,
-};
+use std::collections::btree_map::Entry;
 
-use std::collections::btree_map::{
-    Entry,
-};
+use std::collections::btree_map::Entry::{Occupied, Vacant};
 
-use std::collections::btree_map::Entry::{
-    Occupied,
-    Vacant,
-};
-
-use std::iter::{
-    once,
-};
+use std::iter::once;
 
 use std::mem;
 
@@ -72,62 +60,40 @@ use std::sync::Arc;
 
 use std::iter::Peekable;
 
-use failure::{
-    ResultExt,
-};
+use failure::ResultExt;
 
 use rusqlite;
 
-use core_traits::{
-    Binding,
-    Entid,
-    TypedValue,
-};
+use core_traits::{Binding, Entid, TypedValue};
 
-use mentat_core::{
-    CachedAttributes,
-    HasSchema,
-    Schema,
-    UpdateableCache,
-    ValueRc,
-};
+use mentat_core::{CachedAttributes, HasSchema, Schema, UpdateableCache, ValueRc};
 
-use mentat_core::util::{
-    Either,
-};
+use mentat_core::util::Either;
 
-use mentat_sql::{
-    QueryBuilder,
-    SQLiteQueryBuilder,
-    SQLQuery,
-};
+use mentat_sql::{QueryBuilder, SQLQuery, SQLiteQueryBuilder};
 
-use edn::entities::{
-    OpType,
-};
+use edn::entities::OpType;
 
-use db::{
-    TypedSQLValue,
-};
+use db::TypedSQLValue;
 
-use db_traits::errors::{
-    DbError,
-    DbErrorKind,
-    Result,
-};
+use db_traits::errors::{DbError, DbErrorKind, Result};
 
-use watcher::{
-    TransactWatcher,
-};
+use watcher::TransactWatcher;
 
 // Right now we use BTreeMap, because we expect few cached attributes.
 pub type CacheMap<K, V> = BTreeMap<K, V>;
 
-trait Remove<T> where T: PartialEq {
+trait Remove<T>
+where
+    T: PartialEq,
+{
     fn remove_every(&mut self, item: &T) -> usize;
 }
 
-impl<T> Remove<T> for Vec<T> where T: PartialEq {
+impl<T> Remove<T> for Vec<T>
+where
+    T: PartialEq,
+{
     /// Remove all occurrences from a vector in-place, by equality.
     fn remove_every(&mut self, item: &T) -> usize {
         let initial_len = self.len();
@@ -140,17 +106,20 @@ trait Absorb {
     fn absorb(&mut self, other: Self);
 }
 
-impl<K, V> Absorb for CacheMap<K, Option<V>> where K: Ord {
+impl<K, V> Absorb for CacheMap<K, Option<V>>
+where
+    K: Ord,
+{
     fn absorb(&mut self, other: Self) {
         for (e, v) in other.into_iter() {
             match v {
                 None => {
                     // It was deleted. Remove it from our map.
                     self.remove(&e);
-                },
+                }
                 s @ Some(_) => {
                     self.insert(e, s);
-                },
+                }
             }
         }
     }
@@ -162,16 +131,20 @@ trait ExtendByAbsorbing {
     fn extend_by_absorbing(&mut self, other: Self);
 }
 
-impl<K, V> ExtendByAbsorbing for BTreeMap<K, V> where K: Ord, V: Absorb {
+impl<K, V> ExtendByAbsorbing for BTreeMap<K, V>
+where
+    K: Ord,
+    V: Absorb,
+{
     fn extend_by_absorbing(&mut self, other: Self) {
         for (k, v) in other.into_iter() {
             match self.entry(k) {
                 Occupied(mut entry) => {
                     entry.get_mut().absorb(v);
-                },
+                }
                 Vacant(entry) => {
                     entry.insert(v);
-                },
+                }
             }
         }
     }
@@ -218,16 +191,18 @@ impl AevFactory {
                 }
                 self.strings.insert(rc.clone());
                 return TypedValue::String(rc);
-            },
+            }
             t => t,
         }
     }
 
     fn row_to_aev(&mut self, row: &rusqlite::Row) -> Aev {
-        let a: Entid = row.get(0);
-        let e: Entid = row.get(1);
-        let value_type_tag: i32 = row.get(3);
-        let v = TypedValue::from_sql_value_pair(row.get(2), value_type_tag).map(|x| x).unwrap();
+        let a: Entid = row.get_unwrap(0);
+        let e: Entid = row.get_unwrap(1);
+        let value_type_tag: i32 = row.get_unwrap(3);
+        let v = TypedValue::from_sql_value_pair(row.get_unwrap(2), value_type_tag)
+            .map(|x| x)
+            .unwrap();
         (a, e, self.intern(v))
     }
 }
@@ -238,7 +213,10 @@ pub struct AevRows<'conn, F> {
 
 /// Unwrap the Result from MappedRows. We could also use this opportunity to map_err it, but
 /// for now it's convenient to avoid error handling.
-impl<'conn, F> Iterator for AevRows<'conn, F> where F: FnMut(&rusqlite::Row) -> Aev {
+impl<'conn, F> Iterator for AevRows<'conn, F>
+where
+    F: FnMut(&rusqlite::Row) -> rusqlite::Result<Aev>,
+{
     type Item = Aev;
     fn next(&mut self) -> Option<Aev> {
         self.rows
@@ -312,17 +290,19 @@ impl RemoveFromCache for SingleValAttributeCache {
             Occupied(mut entry) => {
                 let removed = entry.insert(None);
                 match removed {
-                    None => {},                     // Already removed.
-                    Some(ref r) if r == v => {},    // We removed it!
+                    None => {}                  // Already removed.
+                    Some(ref r) if r == v => {} // We removed it!
                     r => {
-                        eprintln!("Cache inconsistency: should be ({}, {:?}), was ({}, {:?}).",
-                                  e, v, e, r);
+                        eprintln!(
+                            "Cache inconsistency: should be ({}, {:?}), was ({}, {:?}).",
+                            e, v, e, r
+                        );
                     }
                 }
-            },
+            }
             Vacant(entry) => {
                 entry.insert(None);
-            },
+            }
         }
     }
 }
@@ -381,10 +361,16 @@ impl RemoveFromCache for MultiValAttributeCache {
         if let Some(vec) = self.e_vs.get_mut(&e) {
             let removed = vec.remove_every(v);
             if removed == 0 {
-                eprintln!("Cache inconsistency: tried to remove ({}, {:?}), was not present.", e, v);
+                eprintln!(
+                    "Cache inconsistency: tried to remove ({}, {:?}), was not present.",
+                    e, v
+                );
             }
         } else {
-            eprintln!("Cache inconsistency: tried to remove ({}, {:?}), was empty.", e, v);
+            eprintln!(
+                "Cache inconsistency: tried to remove ({}, {:?}), was empty.",
+                e, v
+            );
         }
     }
 }
@@ -424,21 +410,25 @@ impl ClearCache for UniqueReverseAttributeCache {
 
 impl RemoveFromCache for UniqueReverseAttributeCache {
     fn remove(&mut self, e: Entid, v: &TypedValue) {
-        match self.v_e.entry(v.clone()) {           // Future: better entry API!
+        match self.v_e.entry(v.clone()) {
+            // Future: better entry API!
             Occupied(mut entry) => {
                 let removed = entry.insert(None);
                 match removed {
-                    None => {},                     // Already removed.
-                    Some(r) if r == e => {},        // We removed it!
+                    None => {}              // Already removed.
+                    Some(r) if r == e => {} // We removed it!
                     r => {
-                        eprintln!("Cache inconsistency: should be ({}, {:?}), was ({}, {:?}).", e, v, e, r);
+                        eprintln!(
+                            "Cache inconsistency: should be ({}, {:?}), was ({}, {:?}).",
+                            e, v, e, r
+                        );
                     }
                 }
-            },
+            }
             Vacant(entry) => {
                 // It didn't already exist.
                 entry.insert(None);
-            },
+            }
         }
     }
 }
@@ -488,10 +478,16 @@ impl RemoveFromCache for NonUniqueReverseAttributeCache {
         if let Some(vec) = self.v_es.get_mut(&v) {
             let removed = vec.remove(&e);
             if !removed {
-                eprintln!("Cache inconsistency: tried to remove ({}, {:?}), was not present.", e, v);
+                eprintln!(
+                    "Cache inconsistency: tried to remove ({}, {:?}), was not present.",
+                    e, v
+                );
             }
         } else {
-            eprintln!("Cache inconsistency: tried to remove ({}, {:?}), was empty.", e, v);
+            eprintln!(
+                "Cache inconsistency: tried to remove ({}, {:?}), was empty.",
+                e, v
+            );
         }
     }
 }
@@ -507,8 +503,10 @@ impl NonUniqueReverseAttributeCache {
 }
 
 fn with_aev_iter<F, I>(a: Entid, iter: &mut Peekable<I>, mut f: F)
-where I: Iterator<Item=Aev>,
-      F: FnMut(Entid, TypedValue) {
+where
+    I: Iterator<Item = Aev>,
+    F: FnMut(Entid, TypedValue),
+{
     let check = Some(a);
     while iter.peek().map(|&(a, _, _)| a) == check {
         let (_, e, v) = iter.next().unwrap();
@@ -516,64 +514,123 @@ where I: Iterator<Item=Aev>,
     }
 }
 
-fn accumulate_single_val_evs_forward<I, C>(a: Entid, f: &mut C, iter: &mut Peekable<I>) where I: Iterator<Item=Aev>, C: CardinalityOneCache {
+fn accumulate_single_val_evs_forward<I, C>(a: Entid, f: &mut C, iter: &mut Peekable<I>)
+where
+    I: Iterator<Item = Aev>,
+    C: CardinalityOneCache,
+{
     with_aev_iter(a, iter, |e, v| f.set(e, v))
 }
 
-fn accumulate_multi_val_evs_forward<I, C>(a: Entid, f: &mut C, iter: &mut Peekable<I>) where I: Iterator<Item=Aev>, C: CardinalityManyCache {
+fn accumulate_multi_val_evs_forward<I, C>(a: Entid, f: &mut C, iter: &mut Peekable<I>)
+where
+    I: Iterator<Item = Aev>,
+    C: CardinalityManyCache,
+{
     with_aev_iter(a, iter, |e, v| f.acc(e, v))
 }
 
-fn accumulate_unique_evs_reverse<I>(a: Entid, r: &mut UniqueReverseAttributeCache, iter: &mut Peekable<I>) where I: Iterator<Item=Aev> {
+fn accumulate_unique_evs_reverse<I>(
+    a: Entid,
+    r: &mut UniqueReverseAttributeCache,
+    iter: &mut Peekable<I>,
+) where
+    I: Iterator<Item = Aev>,
+{
     with_aev_iter(a, iter, |e, v| r.set(e, v))
 }
 
-fn accumulate_non_unique_evs_reverse<I>(a: Entid, r: &mut NonUniqueReverseAttributeCache, iter: &mut Peekable<I>) where I: Iterator<Item=Aev> {
+fn accumulate_non_unique_evs_reverse<I>(
+    a: Entid,
+    r: &mut NonUniqueReverseAttributeCache,
+    iter: &mut Peekable<I>,
+) where
+    I: Iterator<Item = Aev>,
+{
     with_aev_iter(a, iter, |e, v| r.acc(e, v))
 }
 
-fn accumulate_single_val_unique_evs_both<I, C>(a: Entid, f: &mut C, r: &mut UniqueReverseAttributeCache, iter: &mut Peekable<I>) where I: Iterator<Item=Aev>, C: CardinalityOneCache {
+fn accumulate_single_val_unique_evs_both<I, C>(
+    a: Entid,
+    f: &mut C,
+    r: &mut UniqueReverseAttributeCache,
+    iter: &mut Peekable<I>,
+) where
+    I: Iterator<Item = Aev>,
+    C: CardinalityOneCache,
+{
     with_aev_iter(a, iter, |e, v| {
         f.set(e, v.clone());
         r.set(e, v);
     })
 }
 
-fn accumulate_multi_val_unique_evs_both<I, C>(a: Entid, f: &mut C, r: &mut UniqueReverseAttributeCache, iter: &mut Peekable<I>) where I: Iterator<Item=Aev>, C: CardinalityManyCache {
+fn accumulate_multi_val_unique_evs_both<I, C>(
+    a: Entid,
+    f: &mut C,
+    r: &mut UniqueReverseAttributeCache,
+    iter: &mut Peekable<I>,
+) where
+    I: Iterator<Item = Aev>,
+    C: CardinalityManyCache,
+{
     with_aev_iter(a, iter, |e, v| {
         f.acc(e, v.clone());
         r.set(e, v);
     })
 }
 
-fn accumulate_single_val_non_unique_evs_both<I, C>(a: Entid, f: &mut C, r: &mut NonUniqueReverseAttributeCache, iter: &mut Peekable<I>) where I: Iterator<Item=Aev>, C: CardinalityOneCache {
+fn accumulate_single_val_non_unique_evs_both<I, C>(
+    a: Entid,
+    f: &mut C,
+    r: &mut NonUniqueReverseAttributeCache,
+    iter: &mut Peekable<I>,
+) where
+    I: Iterator<Item = Aev>,
+    C: CardinalityOneCache,
+{
     with_aev_iter(a, iter, |e, v| {
         f.set(e, v.clone());
         r.acc(e, v);
     })
 }
 
-fn accumulate_multi_val_non_unique_evs_both<I, C>(a: Entid, f: &mut C, r: &mut NonUniqueReverseAttributeCache, iter: &mut Peekable<I>) where I: Iterator<Item=Aev>, C: CardinalityManyCache {
+fn accumulate_multi_val_non_unique_evs_both<I, C>(
+    a: Entid,
+    f: &mut C,
+    r: &mut NonUniqueReverseAttributeCache,
+    iter: &mut Peekable<I>,
+) where
+    I: Iterator<Item = Aev>,
+    C: CardinalityManyCache,
+{
     with_aev_iter(a, iter, |e, v| {
         f.acc(e, v.clone());
         r.acc(e, v);
     })
 }
 
-fn accumulate_removal_one<I, C>(a: Entid, c: &mut C, iter: &mut Peekable<I>) where I: Iterator<Item=Aev>, C: RemoveFromCache {
+fn accumulate_removal_one<I, C>(a: Entid, c: &mut C, iter: &mut Peekable<I>)
+where
+    I: Iterator<Item = Aev>,
+    C: RemoveFromCache,
+{
     with_aev_iter(a, iter, |e, v| {
         c.remove(e, &v);
     })
 }
 
 fn accumulate_removal_both<I, F, R>(a: Entid, f: &mut F, r: &mut R, iter: &mut Peekable<I>)
-where I: Iterator<Item=Aev>, F: RemoveFromCache, R: RemoveFromCache {
+where
+    I: Iterator<Item = Aev>,
+    F: RemoveFromCache,
+    R: RemoveFromCache,
+{
     with_aev_iter(a, iter, |e, v| {
         f.remove(e, &v);
         r.remove(e, &v);
     })
 }
-
 
 //
 // Collect four different kinds of cache together, and track what we're storing.
@@ -615,102 +672,174 @@ impl AttributeCaches {
     // c = cache.
     // Note that each of these optionally copies the entry from a fallback cache for copy-on-write.
     #[inline]
-    fn fsc(&mut self, a: Entid, fallback: Option<&AttributeCaches>) -> &mut SingleValAttributeCache {
-        self.single_vals
-            .entry(a)
-            .or_insert_with(|| fallback.and_then(|c| c.single_vals.get(&a).cloned())
-                                       .unwrap_or_else(Default::default))
+    fn fsc(
+        &mut self,
+        a: Entid,
+        fallback: Option<&AttributeCaches>,
+    ) -> &mut SingleValAttributeCache {
+        self.single_vals.entry(a).or_insert_with(|| {
+            fallback
+                .and_then(|c| c.single_vals.get(&a).cloned())
+                .unwrap_or_else(Default::default)
+        })
     }
 
     #[inline]
     fn fmc(&mut self, a: Entid, fallback: Option<&AttributeCaches>) -> &mut MultiValAttributeCache {
-        self.multi_vals
-            .entry(a)
-            .or_insert_with(|| fallback.and_then(|c| c.multi_vals.get(&a).cloned())
-                                       .unwrap_or_else(Default::default))
+        self.multi_vals.entry(a).or_insert_with(|| {
+            fallback
+                .and_then(|c| c.multi_vals.get(&a).cloned())
+                .unwrap_or_else(Default::default)
+        })
     }
 
     #[inline]
-    fn ruc(&mut self, a: Entid, fallback: Option<&AttributeCaches>) -> &mut UniqueReverseAttributeCache {
-        self.unique_reverse
-            .entry(a)
-            .or_insert_with(|| fallback.and_then(|c| c.unique_reverse.get(&a).cloned())
-                                       .unwrap_or_else(Default::default))
+    fn ruc(
+        &mut self,
+        a: Entid,
+        fallback: Option<&AttributeCaches>,
+    ) -> &mut UniqueReverseAttributeCache {
+        self.unique_reverse.entry(a).or_insert_with(|| {
+            fallback
+                .and_then(|c| c.unique_reverse.get(&a).cloned())
+                .unwrap_or_else(Default::default)
+        })
     }
 
     #[inline]
-    fn rnuc(&mut self, a: Entid, fallback: Option<&AttributeCaches>) -> &mut NonUniqueReverseAttributeCache {
-        self.non_unique_reverse
-            .entry(a)
-            .or_insert_with(|| fallback.and_then(|c| c.non_unique_reverse.get(&a).cloned())
-                                       .unwrap_or_else(Default::default))
+    fn rnuc(
+        &mut self,
+        a: Entid,
+        fallback: Option<&AttributeCaches>,
+    ) -> &mut NonUniqueReverseAttributeCache {
+        self.non_unique_reverse.entry(a).or_insert_with(|| {
+            fallback
+                .and_then(|c| c.non_unique_reverse.get(&a).cloned())
+                .unwrap_or_else(Default::default)
+        })
     }
 
     #[inline]
-    fn both_s_u<'r>(&'r mut self, a: Entid, forward_fallback: Option<&AttributeCaches>, reverse_fallback: Option<&AttributeCaches>) -> (&'r mut SingleValAttributeCache, &'r mut UniqueReverseAttributeCache) {
-        (self.single_vals
-             .entry(a)
-             .or_insert_with(|| forward_fallback.and_then(|c| c.single_vals.get(&a).cloned())
-                                                .unwrap_or_else(Default::default)),
-         self.unique_reverse
-             .entry(a)
-             .or_insert_with(|| reverse_fallback.and_then(|c| c.unique_reverse.get(&a).cloned())
-                                                .unwrap_or_else(Default::default)))
+    fn both_s_u<'r>(
+        &'r mut self,
+        a: Entid,
+        forward_fallback: Option<&AttributeCaches>,
+        reverse_fallback: Option<&AttributeCaches>,
+    ) -> (
+        &'r mut SingleValAttributeCache,
+        &'r mut UniqueReverseAttributeCache,
+    ) {
+        (
+            self.single_vals.entry(a).or_insert_with(|| {
+                forward_fallback
+                    .and_then(|c| c.single_vals.get(&a).cloned())
+                    .unwrap_or_else(Default::default)
+            }),
+            self.unique_reverse.entry(a).or_insert_with(|| {
+                reverse_fallback
+                    .and_then(|c| c.unique_reverse.get(&a).cloned())
+                    .unwrap_or_else(Default::default)
+            }),
+        )
     }
 
     #[inline]
-    fn both_m_u<'r>(&'r mut self, a: Entid, forward_fallback: Option<&AttributeCaches>, reverse_fallback: Option<&AttributeCaches>) -> (&'r mut MultiValAttributeCache, &'r mut UniqueReverseAttributeCache) {
-        (self.multi_vals
-             .entry(a)
-             .or_insert_with(|| forward_fallback.and_then(|c| c.multi_vals.get(&a).cloned())
-                                                .unwrap_or_else(Default::default)),
-         self.unique_reverse
-             .entry(a)
-             .or_insert_with(|| reverse_fallback.and_then(|c| c.unique_reverse.get(&a).cloned())
-                                                .unwrap_or_else(Default::default)))
+    fn both_m_u<'r>(
+        &'r mut self,
+        a: Entid,
+        forward_fallback: Option<&AttributeCaches>,
+        reverse_fallback: Option<&AttributeCaches>,
+    ) -> (
+        &'r mut MultiValAttributeCache,
+        &'r mut UniqueReverseAttributeCache,
+    ) {
+        (
+            self.multi_vals.entry(a).or_insert_with(|| {
+                forward_fallback
+                    .and_then(|c| c.multi_vals.get(&a).cloned())
+                    .unwrap_or_else(Default::default)
+            }),
+            self.unique_reverse.entry(a).or_insert_with(|| {
+                reverse_fallback
+                    .and_then(|c| c.unique_reverse.get(&a).cloned())
+                    .unwrap_or_else(Default::default)
+            }),
+        )
     }
 
     #[inline]
-    fn both_s_nu<'r>(&'r mut self, a: Entid, forward_fallback: Option<&AttributeCaches>, reverse_fallback: Option<&AttributeCaches>) -> (&'r mut SingleValAttributeCache, &'r mut NonUniqueReverseAttributeCache) {
-        (self.single_vals
-             .entry(a)
-             .or_insert_with(|| forward_fallback.and_then(|c| c.single_vals.get(&a).cloned())
-                                                .unwrap_or_else(Default::default)),
-         self.non_unique_reverse
-             .entry(a)
-            .or_insert_with(|| reverse_fallback.and_then(|c| c.non_unique_reverse.get(&a).cloned())
-                                               .unwrap_or_else(Default::default)))
+    fn both_s_nu<'r>(
+        &'r mut self,
+        a: Entid,
+        forward_fallback: Option<&AttributeCaches>,
+        reverse_fallback: Option<&AttributeCaches>,
+    ) -> (
+        &'r mut SingleValAttributeCache,
+        &'r mut NonUniqueReverseAttributeCache,
+    ) {
+        (
+            self.single_vals.entry(a).or_insert_with(|| {
+                forward_fallback
+                    .and_then(|c| c.single_vals.get(&a).cloned())
+                    .unwrap_or_else(Default::default)
+            }),
+            self.non_unique_reverse.entry(a).or_insert_with(|| {
+                reverse_fallback
+                    .and_then(|c| c.non_unique_reverse.get(&a).cloned())
+                    .unwrap_or_else(Default::default)
+            }),
+        )
     }
 
     #[inline]
-    fn both_m_nu<'r>(&'r mut self, a: Entid, forward_fallback: Option<&AttributeCaches>, reverse_fallback: Option<&AttributeCaches>) -> (&'r mut MultiValAttributeCache, &'r mut NonUniqueReverseAttributeCache) {
-        (self.multi_vals
-             .entry(a)
-             .or_insert_with(|| forward_fallback.and_then(|c| c.multi_vals.get(&a).cloned())
-                                                .unwrap_or_else(Default::default)),
-         self.non_unique_reverse
-             .entry(a)
-             .or_insert_with(|| reverse_fallback.and_then(|c| c.non_unique_reverse.get(&a).cloned())
-                                                .unwrap_or_else(Default::default)))
+    fn both_m_nu<'r>(
+        &'r mut self,
+        a: Entid,
+        forward_fallback: Option<&AttributeCaches>,
+        reverse_fallback: Option<&AttributeCaches>,
+    ) -> (
+        &'r mut MultiValAttributeCache,
+        &'r mut NonUniqueReverseAttributeCache,
+    ) {
+        (
+            self.multi_vals.entry(a).or_insert_with(|| {
+                forward_fallback
+                    .and_then(|c| c.multi_vals.get(&a).cloned())
+                    .unwrap_or_else(Default::default)
+            }),
+            self.non_unique_reverse.entry(a).or_insert_with(|| {
+                reverse_fallback
+                    .and_then(|c| c.non_unique_reverse.get(&a).cloned())
+                    .unwrap_or_else(Default::default)
+            }),
+        )
     }
 
     // Process rows in `iter` that all share an attribute with the first. Leaves the iterator
     // advanced to the first non-matching row.
-    fn accumulate_evs<I>(&mut self,
-                         fallback: Option<&AttributeCaches>,
-                         schema: &Schema,
-                         iter: &mut Peekable<I>,
-                         behavior: AccumulationBehavior) where I: Iterator<Item=Aev> {
+    fn accumulate_evs<I>(
+        &mut self,
+        fallback: Option<&AttributeCaches>,
+        schema: &Schema,
+        iter: &mut Peekable<I>,
+        behavior: AccumulationBehavior,
+    ) where
+        I: Iterator<Item = Aev>,
+    {
         if let Some(&(a, _, _)) = iter.peek() {
             if let Some(attribute) = schema.attribute_for_entid(a) {
-                let fallback_cached_forward = fallback.map_or(false, |c| c.is_attribute_cached_forward(a));
-                let fallback_cached_reverse = fallback.map_or(false, |c| c.is_attribute_cached_reverse(a));
+                let fallback_cached_forward =
+                    fallback.map_or(false, |c| c.is_attribute_cached_forward(a));
+                let fallback_cached_reverse =
+                    fallback.map_or(false, |c| c.is_attribute_cached_reverse(a));
                 let now_cached_forward = self.is_attribute_cached_forward(a);
                 let now_cached_reverse = self.is_attribute_cached_reverse(a);
 
                 let replace_a = behavior.is_replacing();
-                let copy_forward_if_missing = now_cached_forward && fallback_cached_forward && !replace_a;
-                let copy_reverse_if_missing = now_cached_reverse && fallback_cached_reverse && !replace_a;
+                let copy_forward_if_missing =
+                    now_cached_forward && fallback_cached_forward && !replace_a;
+                let copy_reverse_if_missing =
+                    now_cached_reverse && fallback_cached_reverse && !replace_a;
 
                 let forward_fallback = if copy_forward_if_missing {
                     fallback
@@ -735,10 +864,10 @@ impl AttributeCaches {
                                     r.clear();
                                 }
                                 accumulate_multi_val_unique_evs_both(a, f, r, iter);
-                            },
+                            }
                             AccumulationBehavior::Remove => accumulate_removal_both(a, f, r, iter),
                         }
-                    },
+                    }
                     (true, true, true, false) => {
                         let (f, r) = self.both_m_nu(a, forward_fallback, reverse_fallback);
                         match behavior {
@@ -748,10 +877,10 @@ impl AttributeCaches {
                                     r.clear();
                                 }
                                 accumulate_multi_val_non_unique_evs_both(a, f, r, iter);
-                            },
+                            }
                             AccumulationBehavior::Remove => accumulate_removal_both(a, f, r, iter),
                         }
-                    },
+                    }
                     (true, true, false, true) => {
                         let (f, r) = self.both_s_u(a, forward_fallback, reverse_fallback);
                         match behavior {
@@ -761,10 +890,10 @@ impl AttributeCaches {
                                     r.clear();
                                 }
                                 accumulate_single_val_unique_evs_both(a, f, r, iter);
-                            },
+                            }
                             AccumulationBehavior::Remove => accumulate_removal_both(a, f, r, iter),
                         }
-                    },
+                    }
                     (true, true, false, false) => {
                         let (f, r) = self.both_s_nu(a, forward_fallback, reverse_fallback);
                         match behavior {
@@ -774,10 +903,10 @@ impl AttributeCaches {
                                     r.clear();
                                 }
                                 accumulate_single_val_non_unique_evs_both(a, f, r, iter);
-                            },
+                            }
                             AccumulationBehavior::Remove => accumulate_removal_both(a, f, r, iter),
                         }
-                    },
+                    }
                     (true, false, true, _) => {
                         let f = self.fmc(a, forward_fallback);
                         match behavior {
@@ -786,10 +915,10 @@ impl AttributeCaches {
                                     f.clear();
                                 }
                                 accumulate_multi_val_evs_forward(a, f, iter);
-                            },
+                            }
                             AccumulationBehavior::Remove => accumulate_removal_one(a, f, iter),
                         }
-                    },
+                    }
                     (true, false, false, _) => {
                         let f = self.fsc(a, forward_fallback);
                         match behavior {
@@ -798,10 +927,10 @@ impl AttributeCaches {
                                     f.clear();
                                 }
                                 accumulate_single_val_evs_forward(a, f, iter)
-                            },
+                            }
                             AccumulationBehavior::Remove => accumulate_removal_one(a, f, iter),
                         }
-                    },
+                    }
                     (false, true, _, true) => {
                         let r = self.ruc(a, reverse_fallback);
                         match behavior {
@@ -810,10 +939,10 @@ impl AttributeCaches {
                                     r.clear();
                                 }
                                 accumulate_unique_evs_reverse(a, r, iter);
-                            },
+                            }
                             AccumulationBehavior::Remove => accumulate_removal_one(a, r, iter),
                         }
-                    },
+                    }
                     (false, true, _, false) => {
                         let r = self.rnuc(a, reverse_fallback);
                         match behavior {
@@ -822,19 +951,28 @@ impl AttributeCaches {
                                     r.clear();
                                 }
                                 accumulate_non_unique_evs_reverse(a, r, iter);
-                            },
+                            }
                             AccumulationBehavior::Remove => accumulate_removal_one(a, r, iter),
                         }
-                    },
+                    }
                     (false, false, _, _) => {
-                        unreachable!();           // Must be cached in at least one direction!
-                    },
+                        unreachable!(); // Must be cached in at least one direction!
+                    }
                 }
             }
         }
     }
 
-    fn accumulate_into_cache<I>(&mut self, fallback: Option<&AttributeCaches>, schema: &Schema, mut iter: Peekable<I>, behavior: AccumulationBehavior) -> Result<()> where I: Iterator<Item=Aev> {
+    fn accumulate_into_cache<I>(
+        &mut self,
+        fallback: Option<&AttributeCaches>,
+        schema: &Schema,
+        mut iter: Peekable<I>,
+        behavior: AccumulationBehavior,
+    ) -> Result<()>
+    where
+        I: Iterator<Item = Aev>,
+    {
         while iter.peek().is_some() {
             self.accumulate_evs(fallback, schema, &mut iter, behavior);
         }
@@ -855,7 +993,9 @@ impl AttributeCaches {
     }
 
     pub fn unregister_attribute<U>(&mut self, attribute: U)
-    where U: Into<Entid> {
+    where
+        U: Into<Entid>,
+    {
         let a = attribute.into();
         self.reverse_cached_attributes.remove(&a);
         self.forward_cached_attributes.remove(&a);
@@ -868,7 +1008,11 @@ impl AttributeCaches {
 
 // We need this block for fallback.
 impl AttributeCaches {
-    fn get_entid_for_value_if_present(&self, attribute: Entid, value: &TypedValue) -> Option<Option<Entid>> {
+    fn get_entid_for_value_if_present(
+        &self,
+        attribute: Entid,
+        value: &TypedValue,
+    ) -> Option<Option<Entid>> {
         if self.is_attribute_cached_reverse(attribute) {
             self.unique_reverse
                 .get(&attribute)
@@ -878,9 +1022,16 @@ impl AttributeCaches {
         }
     }
 
-    fn get_value_for_entid_if_present(&self, schema: &Schema, attribute: Entid, entid: Entid) -> Option<Option<&TypedValue>> {
-        if let Some(&Some(ref tv)) = self.value_pairs(schema, attribute)
-                                         .and_then(|c| c.get(&entid)) {
+    fn get_value_for_entid_if_present(
+        &self,
+        schema: &Schema,
+        attribute: Entid,
+        entid: Entid,
+    ) -> Option<Option<&TypedValue>> {
+        if let Some(&Some(ref tv)) = self
+            .value_pairs(schema, attribute)
+            .and_then(|c| c.get(&entid))
+        {
             Some(Some(tv))
         } else {
             None
@@ -890,30 +1041,48 @@ impl AttributeCaches {
 
 /// SQL stuff.
 impl AttributeCaches {
-    fn repopulate(&mut self,
-                  schema: &Schema,
-                  sqlite: &rusqlite::Connection,
-                  attribute: Entid) -> Result<()> {
-        let is_fulltext = schema.attribute_for_entid(attribute).map_or(false, |s| s.fulltext);
-        let table = if is_fulltext { "fulltext_datoms" } else { "datoms" };
-        let sql = format!("SELECT a, e, v, value_type_tag FROM {} WHERE a = ? ORDER BY a ASC, e ASC", table);
-        let args: Vec<&rusqlite::types::ToSql> = vec![&attribute];
-        let mut stmt = sqlite.prepare(&sql).context(DbErrorKind::CacheUpdateFailed)?;
+    fn repopulate(
+        &mut self,
+        schema: &Schema,
+        sqlite: &rusqlite::Connection,
+        attribute: Entid,
+    ) -> Result<()> {
+        let is_fulltext = schema
+            .attribute_for_entid(attribute)
+            .map_or(false, |s| s.fulltext);
+        let table = if is_fulltext {
+            "fulltext_datoms"
+        } else {
+            "datoms"
+        };
+        let sql = format!(
+            "SELECT a, e, v, value_type_tag FROM {} WHERE a = ? ORDER BY a ASC, e ASC",
+            table
+        );
+        let args: Vec<&dyn rusqlite::types::ToSql> = vec![&attribute];
+        let mut stmt = sqlite
+            .prepare(&sql)
+            .context(DbErrorKind::CacheUpdateFailed)?;
         let replacing = true;
         self.repopulate_from_aevt(schema, &mut stmt, args, replacing)
     }
 
-    fn repopulate_from_aevt<'a, 's, 'c, 'v>(&'a mut self,
-                                            schema: &'s Schema,
-                                            statement: &'c mut rusqlite::Statement,
-                                            args: Vec<&'v rusqlite::types::ToSql>,
-                                            replacing: bool) -> Result<()> {
+    fn repopulate_from_aevt<'a, 's, 'c, 'v>(
+        &'a mut self,
+        schema: &'s Schema,
+        statement: &'c mut rusqlite::Statement,
+        args: Vec<&'v dyn rusqlite::types::ToSql>,
+        replacing: bool,
+    ) -> Result<()> {
         let mut aev_factory = AevFactory::new();
-        let rows = statement.query_map(&args, |row| aev_factory.row_to_aev(row))?;
-        let aevs = AevRows {
-            rows: rows,
-        };
-        self.accumulate_into_cache(None, schema, aevs.peekable(), AccumulationBehavior::Add { replacing })?;
+        let rows = statement.query_map(&args, |row| Ok(aev_factory.row_to_aev(row)))?;
+        let aevs = AevRows { rows: rows };
+        self.accumulate_into_cache(
+            None,
+            schema,
+            aevs.peekable(),
+            AccumulationBehavior::Add { replacing },
+        )?;
         Ok(())
     }
 }
@@ -958,12 +1127,13 @@ impl AttributeCaches {
     ///
     /// Each provided attribute will be marked as forward-cached; the caller is responsible for
     /// ensuring that this cache is complete or that it is not expected to be complete.
-    fn populate_cache_for_entities_and_attributes<'s, 'c>(&mut self,
-                                                          schema: &'s Schema,
-                                                          sqlite: &'c rusqlite::Connection,
-                                                          attrs: AttributeSpec,
-                                                          entities: &Vec<Entid>) -> Result<()> {
-
+    fn populate_cache_for_entities_and_attributes<'s, 'c>(
+        &mut self,
+        schema: &'s Schema,
+        sqlite: &'c rusqlite::Connection,
+        attrs: AttributeSpec,
+        entities: &Vec<Entid>,
+    ) -> Result<()> {
         // Mark the attributes as cached as we go. We do this because we're going in through the
         // back door here, and the usual caching API won't have taken care of this for us.
         let mut qb = SQLiteQueryBuilder::new();
@@ -971,13 +1141,14 @@ impl AttributeCaches {
         match attrs {
             AttributeSpec::All => {
                 qb.push_sql("all_datoms WHERE e IN (");
-                interpose!(item, entities,
-                           { qb.push_sql(&item.to_string()) },
-                           { qb.push_sql(", ") });
+                interpose!(item, entities, { qb.push_sql(&item.to_string()) }, {
+                    qb.push_sql(", ")
+                });
                 qb.push_sql(") ORDER BY a ASC, e ASC");
 
-                self.forward_cached_attributes.extend(schema.attribute_map.keys());
-            },
+                self.forward_cached_attributes
+                    .extend(schema.attribute_map.keys());
+            }
             AttributeSpec::Specified { fts, non_fts } => {
                 let has_fts = !fts.is_empty();
                 let has_non_fts = !non_fts.is_empty();
@@ -989,13 +1160,13 @@ impl AttributeCaches {
 
                 if has_non_fts {
                     qb.push_sql("datoms WHERE e IN (");
-                    interpose!(item, entities,
-                               { qb.push_sql(&item.to_string()) },
-                               { qb.push_sql(", ") });
+                    interpose!(item, entities, { qb.push_sql(&item.to_string()) }, {
+                        qb.push_sql(", ")
+                    });
                     qb.push_sql(") AND a IN (");
-                    interpose!(item, non_fts,
-                               { qb.push_sql(&item.to_string()) },
-                               { qb.push_sql(", ") });
+                    interpose!(item, non_fts, { qb.push_sql(&item.to_string()) }, {
+                        qb.push_sql(", ")
+                    });
                     qb.push_sql(")");
 
                     self.forward_cached_attributes.extend(non_fts.iter());
@@ -1008,23 +1179,23 @@ impl AttributeCaches {
 
                 if has_fts {
                     qb.push_sql("fulltext_datoms WHERE e IN (");
-                    interpose!(item, entities,
-                               { qb.push_sql(&item.to_string()) },
-                               { qb.push_sql(", ") });
+                    interpose!(item, entities, { qb.push_sql(&item.to_string()) }, {
+                        qb.push_sql(", ")
+                    });
                     qb.push_sql(") AND a IN (");
-                    interpose!(item, fts,
-                               { qb.push_sql(&item.to_string()) },
-                               { qb.push_sql(", ") });
+                    interpose!(item, fts, { qb.push_sql(&item.to_string()) }, {
+                        qb.push_sql(", ")
+                    });
                     qb.push_sql(")");
 
                     self.forward_cached_attributes.extend(fts.iter());
                 }
                 qb.push_sql(" ORDER BY a ASC, e ASC");
-            },
+            }
         };
 
         let SQLQuery { sql, args } = qb.finish();
-        assert!(args.is_empty());                       // TODO: we know there are never args, but we'd like to run this query 'properly'.
+        assert!(args.is_empty()); // TODO: we know there are never args, but we'd like to run this query 'properly'.
         let mut stmt = sqlite.prepare(sql.as_str())?;
         let replacing = false;
         self.repopulate_from_aevt(schema, &mut stmt, vec![], replacing)
@@ -1033,27 +1204,33 @@ impl AttributeCaches {
     /// Return a reference to the cache for the provided `a`, if `a` names an attribute that is
     /// cached in the forward direction. If `a` doesn't name an attribute, or it's not cached at
     /// all, or it's only cached in reverse (`v` to `e`, not `e` to `v`), `None` is returned.
-    pub fn forward_attribute_cache_for_attribute<'a, 's>(&'a self, schema: &'s Schema, a: Entid) -> Option<&'a AttributeCache> {
+    pub fn forward_attribute_cache_for_attribute<'a, 's>(
+        &'a self,
+        schema: &'s Schema,
+        a: Entid,
+    ) -> Option<&'a dyn AttributeCache> {
         if !self.forward_cached_attributes.contains(&a) {
             return None;
         }
-        schema.attribute_for_entid(a)
-              .and_then(|attr|
-                if attr.multival {
-                    self.multi_vals.get(&a).map(|v| v as &AttributeCache)
-                } else {
-                    self.single_vals.get(&a).map(|v| v as &AttributeCache)
-                })
+        schema.attribute_for_entid(a).and_then(|attr| {
+            if attr.multival {
+                self.multi_vals.get(&a).map(|v| v as &dyn AttributeCache)
+            } else {
+                self.single_vals.get(&a).map(|v| v as &dyn AttributeCache)
+            }
+        })
     }
 
     /// Fetch the requested entities and attributes from the store and put them in the cache.
     /// The caller is responsible for ensuring that `entities` is unique.
     /// Attributes for which every entity is already cached will not be processed again.
-    pub fn extend_cache_for_entities_and_attributes<'s, 'c>(&mut self,
-                                                            schema: &'s Schema,
-                                                            sqlite: &'c rusqlite::Connection,
-                                                            mut attrs: AttributeSpec,
-                                                            entities: &Vec<Entid>) -> Result<()> {
+    pub fn extend_cache_for_entities_and_attributes<'s, 'c>(
+        &mut self,
+        schema: &'s Schema,
+        sqlite: &'c rusqlite::Connection,
+        mut attrs: AttributeSpec,
+        entities: &Vec<Entid>,
+    ) -> Result<()> {
         // TODO: Exclude any entities for which every attribute is known.
         // TODO: initialize from an existing (complete) AttributeCache.
 
@@ -1061,8 +1238,11 @@ impl AttributeCaches {
         match &mut attrs {
             &mut AttributeSpec::All => {
                 // If we're caching all attributes, there's nothing we can exclude.
-            },
-            &mut AttributeSpec::Specified { ref mut non_fts, ref mut fts } => {
+            }
+            &mut AttributeSpec::Specified {
+                ref mut non_fts,
+                ref mut fts,
+            } => {
                 // Remove any attributes for which all entities are present in the cache (even
                 // as a 'miss').
                 let exclude_missing = |vec: &mut Vec<Entid>| {
@@ -1093,7 +1273,7 @@ impl AttributeCaches {
                 };
                 exclude_missing(non_fts);
                 exclude_missing(fts);
-            },
+            }
         }
 
         self.populate_cache_for_entities_and_attributes(schema, sqlite, attrs, entities)
@@ -1101,26 +1281,39 @@ impl AttributeCaches {
 
     /// Fetch the requested entities and attributes and put them in a new cache.
     /// The caller is responsible for ensuring that `entities` is unique.
-    pub fn make_cache_for_entities_and_attributes<'s, 'c>(schema: &'s Schema,
-                                                          sqlite: &'c rusqlite::Connection,
-                                                          attrs: AttributeSpec,
-                                                          entities: &Vec<Entid>) -> Result<AttributeCaches> {
+    pub fn make_cache_for_entities_and_attributes<'s, 'c>(
+        schema: &'s Schema,
+        sqlite: &'c rusqlite::Connection,
+        attrs: AttributeSpec,
+        entities: &Vec<Entid>,
+    ) -> Result<AttributeCaches> {
         let mut cache = AttributeCaches::default();
         cache.populate_cache_for_entities_and_attributes(schema, sqlite, attrs, entities)?;
         Ok(cache)
     }
 }
 
-
 impl CachedAttributes for AttributeCaches {
-    fn get_values_for_entid(&self, schema: &Schema, attribute: Entid, entid: Entid) -> Option<&Vec<TypedValue>> {
+    fn get_values_for_entid(
+        &self,
+        schema: &Schema,
+        attribute: Entid,
+        entid: Entid,
+    ) -> Option<&Vec<TypedValue>> {
         self.values_pairs(schema, attribute)
             .and_then(|c| c.get(&entid))
     }
 
-    fn get_value_for_entid(&self, schema: &Schema, attribute: Entid, entid: Entid) -> Option<&TypedValue> {
-        if let Some(&Some(ref tv)) = self.value_pairs(schema, attribute)
-                                         .and_then(|c| c.get(&entid)) {
+    fn get_value_for_entid(
+        &self,
+        schema: &Schema,
+        attribute: Entid,
+        entid: Entid,
+    ) -> Option<&TypedValue> {
+        if let Some(&Some(ref tv)) = self
+            .value_pairs(schema, attribute)
+            .and_then(|c| c.get(&entid))
+        {
             Some(tv)
         } else {
             None
@@ -1128,8 +1321,7 @@ impl CachedAttributes for AttributeCaches {
     }
 
     fn has_cached_attributes(&self) -> bool {
-        !self.reverse_cached_attributes.is_empty() ||
-        !self.forward_cached_attributes.is_empty()
+        !self.reverse_cached_attributes.is_empty() || !self.forward_cached_attributes.is_empty()
     }
 
     fn is_attribute_cached_reverse(&self, attribute: Entid) -> bool {
@@ -1142,15 +1334,23 @@ impl CachedAttributes for AttributeCaches {
 
     fn get_entid_for_value(&self, attribute: Entid, value: &TypedValue) -> Option<Entid> {
         if self.is_attribute_cached_reverse(attribute) {
-            self.unique_reverse.get(&attribute).and_then(|c| c.get_e(value))
+            self.unique_reverse
+                .get(&attribute)
+                .and_then(|c| c.get_e(value))
         } else {
             None
         }
     }
 
-    fn get_entids_for_value(&self, attribute: Entid, value: &TypedValue) -> Option<&BTreeSet<Entid>> {
+    fn get_entids_for_value(
+        &self,
+        attribute: Entid,
+        value: &TypedValue,
+    ) -> Option<&BTreeSet<Entid>> {
         if self.is_attribute_cached_reverse(attribute) {
-            self.non_unique_reverse.get(&attribute).and_then(|c| c.get_es(value))
+            self.non_unique_reverse
+                .get(&attribute)
+                .and_then(|c| c.get_es(value))
         } else {
             None
         }
@@ -1159,47 +1359,70 @@ impl CachedAttributes for AttributeCaches {
 
 impl UpdateableCache<DbError> for AttributeCaches {
     fn update<I>(&mut self, schema: &Schema, retractions: I, assertions: I) -> Result<()>
-    where I: Iterator<Item=(Entid, Entid, TypedValue)> {
+    where
+        I: Iterator<Item = (Entid, Entid, TypedValue)>,
+    {
         self.update_with_fallback(None, schema, retractions, assertions)
     }
 }
 
 impl AttributeCaches {
-    fn update_with_fallback<I>(&mut self, fallback: Option<&AttributeCaches>, schema: &Schema, retractions: I, assertions: I) -> Result<()>
-    where I: Iterator<Item=(Entid, Entid, TypedValue)> {
+    fn update_with_fallback<I>(
+        &mut self,
+        fallback: Option<&AttributeCaches>,
+        schema: &Schema,
+        retractions: I,
+        assertions: I,
+    ) -> Result<()>
+    where
+        I: Iterator<Item = (Entid, Entid, TypedValue)>,
+    {
         let r_aevs = retractions.peekable();
         self.accumulate_into_cache(fallback, schema, r_aevs, AccumulationBehavior::Remove)?;
 
         let aevs = assertions.peekable();
-        self.accumulate_into_cache(fallback, schema, aevs, AccumulationBehavior::Add { replacing: false })
+        self.accumulate_into_cache(
+            fallback,
+            schema,
+            aevs,
+            AccumulationBehavior::Add { replacing: false },
+        )
     }
 
-    fn values_pairs<U>(&self, schema: &Schema, attribute: U) -> Option<&BTreeMap<Entid, Vec<TypedValue>>>
-    where U: Into<Entid> {
+    fn values_pairs<U>(
+        &self,
+        schema: &Schema,
+        attribute: U,
+    ) -> Option<&BTreeMap<Entid, Vec<TypedValue>>>
+    where
+        U: Into<Entid>,
+    {
         let attribute = attribute.into();
-        schema.attribute_for_entid(attribute)
-              .and_then(|attr|
-                if attr.multival {
-                    self.multi_vals
-                        .get(&attribute)
-                        .map(|c| &c.e_vs)
-                } else {
-                    None
-                })
+        schema.attribute_for_entid(attribute).and_then(|attr| {
+            if attr.multival {
+                self.multi_vals.get(&attribute).map(|c| &c.e_vs)
+            } else {
+                None
+            }
+        })
     }
 
-    fn value_pairs<U>(&self, schema: &Schema, attribute: U) -> Option<&CacheMap<Entid, Option<TypedValue>>>
-    where U: Into<Entid> {
+    fn value_pairs<U>(
+        &self,
+        schema: &Schema,
+        attribute: U,
+    ) -> Option<&CacheMap<Entid, Option<TypedValue>>>
+    where
+        U: Into<Entid>,
+    {
         let attribute = attribute.into();
-        schema.attribute_for_entid(attribute)
-              .and_then(|attr|
-                if attr.multival {
-                    None
-                } else {
-                    self.single_vals
-                        .get(&attribute)
-                        .map(|c| &c.e_v)
-                })
+        schema.attribute_for_entid(attribute).and_then(|attr| {
+            if attr.multival {
+                None
+            } else {
+                self.single_vals.get(&attribute).map(|c| &c.e_v)
+            }
+        })
     }
 }
 
@@ -1207,13 +1430,17 @@ impl Absorb for AttributeCaches {
     // Replace or insert attribute-cache pairs from `other` into `self`.
     // Fold in any in-place deletions.
     fn absorb(&mut self, other: Self) {
-        self.forward_cached_attributes.extend(other.forward_cached_attributes);
-        self.reverse_cached_attributes.extend(other.reverse_cached_attributes);
+        self.forward_cached_attributes
+            .extend(other.forward_cached_attributes);
+        self.reverse_cached_attributes
+            .extend(other.reverse_cached_attributes);
 
         self.single_vals.extend_by_absorbing(other.single_vals);
         self.multi_vals.extend_by_absorbing(other.multi_vals);
-        self.unique_reverse.extend_by_absorbing(other.unique_reverse);
-        self.non_unique_reverse.extend_by_absorbing(other.non_unique_reverse);
+        self.unique_reverse
+            .extend_by_absorbing(other.unique_reverse);
+        self.non_unique_reverse
+            .extend_by_absorbing(other.non_unique_reverse);
     }
 }
 
@@ -1234,31 +1461,56 @@ impl SQLiteAttributeCache {
         new
     }
 
-    pub fn register_forward<U>(&mut self, schema: &Schema, sqlite: &rusqlite::Connection, attribute: U) -> Result<()>
-    where U: Into<Entid> {
+    pub fn register_forward<U>(
+        &mut self,
+        schema: &Schema,
+        sqlite: &rusqlite::Connection,
+        attribute: U,
+    ) -> Result<()>
+    where
+        U: Into<Entid>,
+    {
         let a = attribute.into();
 
         // The attribute must exist!
-        let _ = schema.attribute_for_entid(a).ok_or_else(|| DbErrorKind::UnknownAttribute(a))?;
+        let _ = schema
+            .attribute_for_entid(a)
+            .ok_or_else(|| DbErrorKind::UnknownAttribute(a))?;
         let caches = self.make_mut();
         caches.forward_cached_attributes.insert(a);
         caches.repopulate(schema, sqlite, a)
     }
 
-    pub fn register_reverse<U>(&mut self, schema: &Schema, sqlite: &rusqlite::Connection, attribute: U) -> Result<()>
-    where U: Into<Entid> {
+    pub fn register_reverse<U>(
+        &mut self,
+        schema: &Schema,
+        sqlite: &rusqlite::Connection,
+        attribute: U,
+    ) -> Result<()>
+    where
+        U: Into<Entid>,
+    {
         let a = attribute.into();
 
         // The attribute must exist!
-        let _ = schema.attribute_for_entid(a).ok_or_else(|| DbErrorKind::UnknownAttribute(a))?;
+        let _ = schema
+            .attribute_for_entid(a)
+            .ok_or_else(|| DbErrorKind::UnknownAttribute(a))?;
 
         let caches = self.make_mut();
         caches.reverse_cached_attributes.insert(a);
         caches.repopulate(schema, sqlite, a)
     }
 
-    pub fn register<U>(&mut self, schema: &Schema, sqlite: &rusqlite::Connection, attribute: U) -> Result<()>
-    where U: Into<Entid> {
+    pub fn register<U>(
+        &mut self,
+        schema: &Schema,
+        sqlite: &rusqlite::Connection,
+        attribute: U,
+    ) -> Result<()>
+    where
+        U: Into<Entid>,
+    {
         let a = attribute.into();
 
         // TODO: reverse-index unique by default?
@@ -1270,7 +1522,9 @@ impl SQLiteAttributeCache {
     }
 
     pub fn unregister<U>(&mut self, attribute: U)
-    where U: Into<Entid> {
+    where
+        U: Into<Entid>,
+    {
         self.make_mut().unregister_attribute(attribute);
     }
 
@@ -1281,17 +1535,29 @@ impl SQLiteAttributeCache {
 
 impl UpdateableCache<DbError> for SQLiteAttributeCache {
     fn update<I>(&mut self, schema: &Schema, retractions: I, assertions: I) -> Result<()>
-    where I: Iterator<Item=(Entid, Entid, TypedValue)> {
+    where
+        I: Iterator<Item = (Entid, Entid, TypedValue)>,
+    {
         self.make_mut().update(schema, retractions, assertions)
     }
 }
 
 impl CachedAttributes for SQLiteAttributeCache {
-    fn get_values_for_entid(&self, schema: &Schema, attribute: Entid, entid: Entid) -> Option<&Vec<TypedValue>> {
+    fn get_values_for_entid(
+        &self,
+        schema: &Schema,
+        attribute: Entid,
+        entid: Entid,
+    ) -> Option<&Vec<TypedValue>> {
         self.inner.get_values_for_entid(schema, attribute, entid)
     }
 
-    fn get_value_for_entid(&self, schema: &Schema, attribute: Entid, entid: Entid) -> Option<&TypedValue> {
+    fn get_value_for_entid(
+        &self,
+        schema: &Schema,
+        attribute: Entid,
+        entid: Entid,
+    ) -> Option<&TypedValue> {
         self.inner.get_value_for_entid(schema, attribute, entid)
     }
 
@@ -1304,11 +1570,15 @@ impl CachedAttributes for SQLiteAttributeCache {
     }
 
     fn has_cached_attributes(&self) -> bool {
-        !self.inner.forward_cached_attributes.is_empty() ||
-        !self.inner.reverse_cached_attributes.is_empty()
+        !self.inner.forward_cached_attributes.is_empty()
+            || !self.inner.reverse_cached_attributes.is_empty()
     }
 
-    fn get_entids_for_value(&self, attribute: Entid, value: &TypedValue) -> Option<&BTreeSet<Entid>> {
+    fn get_entids_for_value(
+        &self,
+        attribute: Entid,
+        value: &TypedValue,
+    ) -> Option<&BTreeSet<Entid>> {
         self.inner.get_entids_for_value(attribute, value)
     }
 
@@ -1319,14 +1589,26 @@ impl CachedAttributes for SQLiteAttributeCache {
 
 impl SQLiteAttributeCache {
     /// Intended for use from tests.
-    pub fn values_pairs<U>(&self, schema: &Schema, attribute: U) -> Option<&BTreeMap<Entid, Vec<TypedValue>>>
-    where U: Into<Entid> {
+    pub fn values_pairs<U>(
+        &self,
+        schema: &Schema,
+        attribute: U,
+    ) -> Option<&BTreeMap<Entid, Vec<TypedValue>>>
+    where
+        U: Into<Entid>,
+    {
         self.inner.values_pairs(schema, attribute)
     }
 
     /// Intended for use from tests.
-    pub fn value_pairs<U>(&self, schema: &Schema, attribute: U) -> Option<&BTreeMap<Entid, Option<TypedValue>>>
-    where U: Into<Entid> {
+    pub fn value_pairs<U>(
+        &self,
+        schema: &Schema,
+        attribute: U,
+    ) -> Option<&BTreeMap<Entid, Option<TypedValue>>>
+    where
+        U: Into<Entid>,
+    {
         self.inner.value_pairs(schema, attribute)
     }
 }
@@ -1352,12 +1634,21 @@ impl InProgressSQLiteAttributeCache {
         }
     }
 
-    pub fn register_forward<U>(&mut self, schema: &Schema, sqlite: &rusqlite::Connection, attribute: U) -> Result<()>
-    where U: Into<Entid> {
+    pub fn register_forward<U>(
+        &mut self,
+        schema: &Schema,
+        sqlite: &rusqlite::Connection,
+        attribute: U,
+    ) -> Result<()>
+    where
+        U: Into<Entid>,
+    {
         let a = attribute.into();
 
         // The attribute must exist!
-        let _ = schema.attribute_for_entid(a).ok_or_else(|| DbErrorKind::UnknownAttribute(a))?;
+        let _ = schema
+            .attribute_for_entid(a)
+            .ok_or_else(|| DbErrorKind::UnknownAttribute(a))?;
 
         if self.is_attribute_cached_forward(a) {
             return Ok(());
@@ -1368,12 +1659,21 @@ impl InProgressSQLiteAttributeCache {
         self.overlay.repopulate(schema, sqlite, a)
     }
 
-    pub fn register_reverse<U>(&mut self, schema: &Schema, sqlite: &rusqlite::Connection, attribute: U) -> Result<()>
-    where U: Into<Entid> {
+    pub fn register_reverse<U>(
+        &mut self,
+        schema: &Schema,
+        sqlite: &rusqlite::Connection,
+        attribute: U,
+    ) -> Result<()>
+    where
+        U: Into<Entid>,
+    {
         let a = attribute.into();
 
         // The attribute must exist!
-        let _ = schema.attribute_for_entid(a).ok_or_else(|| DbErrorKind::UnknownAttribute(a))?;
+        let _ = schema
+            .attribute_for_entid(a)
+            .ok_or_else(|| DbErrorKind::UnknownAttribute(a))?;
 
         if self.is_attribute_cached_reverse(a) {
             return Ok(());
@@ -1384,12 +1684,21 @@ impl InProgressSQLiteAttributeCache {
         self.overlay.repopulate(schema, sqlite, a)
     }
 
-    pub fn register<U>(&mut self, schema: &Schema, sqlite: &rusqlite::Connection, attribute: U) -> Result<()>
-    where U: Into<Entid> {
+    pub fn register<U>(
+        &mut self,
+        schema: &Schema,
+        sqlite: &rusqlite::Connection,
+        attribute: U,
+    ) -> Result<()>
+    where
+        U: Into<Entid>,
+    {
         let a = attribute.into();
 
         // The attribute must exist!
-        let _ = schema.attribute_for_entid(a).ok_or_else(|| DbErrorKind::UnknownAttribute(a))?;
+        let _ = schema
+            .attribute_for_entid(a)
+            .ok_or_else(|| DbErrorKind::UnknownAttribute(a))?;
 
         // TODO: reverse-index unique by default?
         let reverse_done = self.is_attribute_cached_reverse(a);
@@ -1411,9 +1720,10 @@ impl InProgressSQLiteAttributeCache {
         self.overlay.repopulate(schema, sqlite, a)
     }
 
-
     pub fn unregister<U>(&mut self, attribute: U)
-    where U: Into<Entid> {
+    where
+        U: Into<Entid>,
+    {
         let a = attribute.into();
         self.overlay.unregister_attribute(a);
         self.unregistered_forward.insert(a);
@@ -1422,20 +1732,30 @@ impl InProgressSQLiteAttributeCache {
 
     pub fn unregister_all(&mut self) {
         self.overlay.unregister_all_attributes();
-        self.unregistered_forward.extend(self.inner.forward_cached_attributes.iter().cloned());
-        self.unregistered_reverse.extend(self.inner.reverse_cached_attributes.iter().cloned());
+        self.unregistered_forward
+            .extend(self.inner.forward_cached_attributes.iter().cloned());
+        self.unregistered_reverse
+            .extend(self.inner.reverse_cached_attributes.iter().cloned());
     }
 }
 
 impl UpdateableCache<DbError> for InProgressSQLiteAttributeCache {
     fn update<I>(&mut self, schema: &Schema, retractions: I, assertions: I) -> Result<()>
-    where I: Iterator<Item=(Entid, Entid, TypedValue)> {
-        self.overlay.update_with_fallback(Some(&self.inner), schema, retractions, assertions)
+    where
+        I: Iterator<Item = (Entid, Entid, TypedValue)>,
+    {
+        self.overlay
+            .update_with_fallback(Some(&self.inner), schema, retractions, assertions)
     }
 }
 
 impl CachedAttributes for InProgressSQLiteAttributeCache {
-    fn get_values_for_entid(&self, schema: &Schema, attribute: Entid, entid: Entid) -> Option<&Vec<TypedValue>> {
+    fn get_values_for_entid(
+        &self,
+        schema: &Schema,
+        attribute: Entid,
+        entid: Entid,
+    ) -> Option<&Vec<TypedValue>> {
         if self.unregistered_forward.contains(&attribute) {
             None
         } else {
@@ -1448,14 +1768,22 @@ impl CachedAttributes for InProgressSQLiteAttributeCache {
         }
     }
 
-    fn get_value_for_entid(&self, schema: &Schema, attribute: Entid, entid: Entid) -> Option<&TypedValue> {
+    fn get_value_for_entid(
+        &self,
+        schema: &Schema,
+        attribute: Entid,
+        entid: Entid,
+    ) -> Option<&TypedValue> {
         if self.unregistered_forward.contains(&attribute) {
             None
         } else {
             // If it was present in `inner` but the value was deleted, there will be `Some(None)`
             // in `overlay`, and we won't fall through.
             // We can safely use `or_else`.
-            match self.overlay.get_value_for_entid_if_present(schema, attribute, entid) {
+            match self
+                .overlay
+                .get_value_for_entid_if_present(schema, attribute, entid)
+            {
                 Some(present) => present,
                 None => self.inner.get_value_for_entid(schema, attribute, entid),
             }
@@ -1463,15 +1791,15 @@ impl CachedAttributes for InProgressSQLiteAttributeCache {
     }
 
     fn is_attribute_cached_reverse(&self, attribute: Entid) -> bool {
-        !self.unregistered_reverse.contains(&attribute) &&
-        (self.inner.reverse_cached_attributes.contains(&attribute) ||
-         self.overlay.reverse_cached_attributes.contains(&attribute))
+        !self.unregistered_reverse.contains(&attribute)
+            && (self.inner.reverse_cached_attributes.contains(&attribute)
+                || self.overlay.reverse_cached_attributes.contains(&attribute))
     }
 
     fn is_attribute_cached_forward(&self, attribute: Entid) -> bool {
-        !self.unregistered_forward.contains(&attribute) &&
-        (self.inner.forward_cached_attributes.contains(&attribute) ||
-         self.overlay.forward_cached_attributes.contains(&attribute))
+        !self.unregistered_forward.contains(&attribute)
+            && (self.inner.forward_cached_attributes.contains(&attribute)
+                || self.overlay.forward_cached_attributes.contains(&attribute))
     }
 
     fn has_cached_attributes(&self) -> bool {
@@ -1481,18 +1809,19 @@ impl CachedAttributes for InProgressSQLiteAttributeCache {
         }
 
         // If we haven't removed any, pass through to inner.
-        if self.unregistered_forward.is_empty() &&
-           self.unregistered_reverse.is_empty() {
+        if self.unregistered_forward.is_empty() && self.unregistered_reverse.is_empty() {
             return self.inner.has_cached_attributes();
         }
 
         // Otherwise, we need to check whether we've removed anything that was cached.
-        if self.inner
-               .forward_cached_attributes
-               .iter()
-               .filter(|a| !self.unregistered_forward.contains(a))
-               .next()
-               .is_some() {
+        if self
+            .inner
+            .forward_cached_attributes
+            .iter()
+            .filter(|a| !self.unregistered_forward.contains(a))
+            .next()
+            .is_some()
+        {
             return true;
         }
 
@@ -1504,7 +1833,11 @@ impl CachedAttributes for InProgressSQLiteAttributeCache {
             .is_some()
     }
 
-    fn get_entids_for_value(&self, attribute: Entid, value: &TypedValue) -> Option<&BTreeSet<Entid>> {
+    fn get_entids_for_value(
+        &self,
+        attribute: Entid,
+        value: &TypedValue,
+    ) -> Option<&BTreeSet<Entid>> {
         if self.unregistered_reverse.contains(&attribute) {
             None
         } else {
@@ -1521,7 +1854,10 @@ impl CachedAttributes for InProgressSQLiteAttributeCache {
             // If it was present in `inner` but the value was deleted, there will be `Some(None)`
             // in `overlay`, and we won't fall through.
             // We can safely use `or_else`.
-            match self.overlay.get_entid_for_value_if_present(attribute, value) {
+            match self
+                .overlay
+                .get_entid_for_value_if_present(attribute, value)
+            {
                 Some(present) => present,
                 None => self.inner.get_entid_for_value(attribute, value),
             }
@@ -1531,16 +1867,29 @@ impl CachedAttributes for InProgressSQLiteAttributeCache {
 
 impl InProgressSQLiteAttributeCache {
     /// Intended for use from tests.
-    pub fn values_pairs<U>(&self, schema: &Schema, attribute: U) -> Option<&BTreeMap<Entid, Vec<TypedValue>>>
-    where U: Into<Entid> {
+    pub fn values_pairs<U>(
+        &self,
+        schema: &Schema,
+        attribute: U,
+    ) -> Option<&BTreeMap<Entid, Vec<TypedValue>>>
+    where
+        U: Into<Entid>,
+    {
         let a = attribute.into();
-        self.overlay.values_pairs(schema, a)
-                    .or_else(|| self.inner.values_pairs(schema, a))
+        self.overlay
+            .values_pairs(schema, a)
+            .or_else(|| self.inner.values_pairs(schema, a))
     }
 
     /// Intended for use from tests.
-    pub fn value_pairs<U>(&self, schema: &Schema, attribute: U) -> Option<&BTreeMap<Entid, Option<TypedValue>>>
-    where U: Into<Entid> {
+    pub fn value_pairs<U>(
+        &self,
+        schema: &Schema,
+        attribute: U,
+    ) -> Option<&BTreeMap<Entid, Option<TypedValue>>>
+    where
+        U: Into<Entid>,
+    {
         let a = attribute.into();
         self.overlay
             .value_pairs(schema, a)
@@ -1618,48 +1967,50 @@ impl<'a> TransactWatcher for InProgressCacheTransactWatcher<'a> {
         };
         match target.entry(a) {
             Entry::Vacant(entry) => {
-                let is_cached = self.cache.is_attribute_cached_forward(a) ||
-                                self.cache.is_attribute_cached_reverse(a);
+                let is_cached = self.cache.is_attribute_cached_forward(a)
+                    || self.cache.is_attribute_cached_reverse(a);
                 if is_cached {
                     entry.insert(Either::Right(vec![(e, v.clone())]));
                 } else {
                     entry.insert(Either::Left(()));
                 }
-            },
+            }
             Entry::Occupied(mut entry) => {
                 match entry.get_mut() {
                     &mut Either::Left(_) => {
                         // Nothing to do.
-                    },
+                    }
                     &mut Either::Right(ref mut vec) => {
                         vec.push((e, v.clone()));
-                    },
+                    }
                 }
-            },
+            }
         }
     }
 
     fn done(&mut self, _t: &Entid, schema: &Schema) -> Result<()> {
         // Oh, I wish we had impl trait. Without it we have a six-line type signature if we
         // try to break this out as a helper function.
-        let collected_retractions = mem::replace(&mut self.collected_retractions, Default::default());
+        let collected_retractions =
+            mem::replace(&mut self.collected_retractions, Default::default());
         let collected_assertions = mem::replace(&mut self.collected_assertions, Default::default());
-        let mut intermediate_expansion =
-            once(collected_retractions)
-                .chain(once(collected_assertions))
-                .into_iter()
-                .map(move |tree| tree.into_iter()
-                                     .filter_map(move |(a, evs)| {
-                                        match evs {
-                                            // Drop the empty placeholders.
-                                            Either::Left(_) => None,
-                                            Either::Right(vec) => Some((a, vec)),
-                                        }
-                                     })
-                                     .flat_map(move |(a, evs)| {
-                                        // Flatten into a vec of (a, e, v).
-                                        evs.into_iter().map(move |(e, v)| (a, e, v))
-                                     }));
+        let mut intermediate_expansion = once(collected_retractions)
+            .chain(once(collected_assertions))
+            .into_iter()
+            .map(move |tree| {
+                tree.into_iter()
+                    .filter_map(move |(a, evs)| {
+                        match evs {
+                            // Drop the empty placeholders.
+                            Either::Left(_) => None,
+                            Either::Right(vec) => Some((a, vec)),
+                        }
+                    })
+                    .flat_map(move |(a, evs)| {
+                        // Flatten into a vec of (a, e, v).
+                        evs.into_iter().map(move |(e, v)| (a, e, v))
+                    })
+            });
         let retractions = intermediate_expansion.next().unwrap();
         let assertions = intermediate_expansion.next().unwrap();
         self.cache.update(schema, retractions, assertions)

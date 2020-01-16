@@ -8,47 +8,26 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use core_traits::{
-    Entid,
-    ValueType,
-    TypedValue,
-    ValueTypeSet,
-};
+use core_traits::{Entid, TypedValue, ValueType, ValueTypeSet};
 
-use mentat_core::{
-    Cloned,
-    HasSchema,
-};
+use mentat_core::{Cloned, HasSchema};
 
 use edn::query::{
-    NonIntegerConstant,
-    Pattern,
-    PatternValuePlace,
-    PatternNonValuePlace,
-    SrcVar,
-    Variable,
+    NonIntegerConstant, Pattern, PatternNonValuePlace, PatternValuePlace, SrcVar, Variable,
 };
 
-use clauses::{
-    ConjoiningClauses,
-};
+use clauses::ConjoiningClauses;
 
 use types::{
-    ColumnConstraint,
-    DatomsColumn,
-    EmptyBecause,
-    EvolvedNonValuePlace,
-    EvolvedPattern,
-    EvolvedValuePlace,
-    PlaceOrEmpty,
-    SourceAlias,
+    ColumnConstraint, DatomsColumn, EmptyBecause, EvolvedNonValuePlace, EvolvedPattern,
+    EvolvedValuePlace, PlaceOrEmpty, SourceAlias,
 };
 
 use Known;
 
 pub fn into_typed_value(nic: NonIntegerConstant) -> TypedValue {
     match nic {
-        NonIntegerConstant::BigInteger(_) => unimplemented!(),     // TODO: #280.
+        NonIntegerConstant::BigInteger(_) => unimplemented!(), // TODO: #280.
         NonIntegerConstant::Boolean(v) => TypedValue::Boolean(v),
         NonIntegerConstant::Float(v) => TypedValue::Double(v),
         NonIntegerConstant::Text(v) => v.into(),
@@ -59,7 +38,6 @@ pub fn into_typed_value(nic: NonIntegerConstant) -> TypedValue {
 
 /// Application of patterns.
 impl ConjoiningClauses {
-
     /// Apply the constraints in the provided pattern to this CC.
     ///
     /// This is a single-pass process, which means it is naturally incomplete, failing to take into
@@ -95,7 +73,12 @@ impl ConjoiningClauses {
     ///   existence subquery instead of a join.
     ///
     /// This method is only public for use from `or.rs`.
-    pub(crate) fn apply_pattern_clause_for_alias(&mut self, known: Known, pattern: &EvolvedPattern, alias: &SourceAlias) {
+    pub(crate) fn apply_pattern_clause_for_alias(
+        &mut self,
+        known: Known,
+        pattern: &EvolvedPattern,
+        alias: &SourceAlias,
+    ) {
         if self.is_known_empty() {
             return;
         }
@@ -115,21 +98,25 @@ impl ConjoiningClauses {
         let schema = known.schema;
         match pattern.entity {
             EvolvedNonValuePlace::Placeholder =>
-                // Placeholders don't contribute any column bindings, nor do
-                // they constrain the query -- there's no need to produce
-                // IS NOT NULL, because we don't store nulls in our schema.
-                (),
-            EvolvedNonValuePlace::Variable(ref v) =>
-                self.bind_column_to_var(schema, col.clone(), DatomsColumn::Entity, v.clone()),
-            EvolvedNonValuePlace::Entid(entid) =>
-                self.constrain_column_to_entity(col.clone(), DatomsColumn::Entity, entid),
+            // Placeholders don't contribute any column bindings, nor do
+            // they constrain the query -- there's no need to produce
+            // IS NOT NULL, because we don't store nulls in our schema.
+            {
+                ()
+            }
+            EvolvedNonValuePlace::Variable(ref v) => {
+                self.bind_column_to_var(schema, col.clone(), DatomsColumn::Entity, v.clone())
+            }
+            EvolvedNonValuePlace::Entid(entid) => {
+                self.constrain_column_to_entity(col.clone(), DatomsColumn::Entity, entid)
+            }
         }
 
         match pattern.attribute {
-            EvolvedNonValuePlace::Placeholder =>
-                (),
-            EvolvedNonValuePlace::Variable(ref v) =>
-                self.bind_column_to_var(schema, col.clone(), DatomsColumn::Attribute, v.clone()),
+            EvolvedNonValuePlace::Placeholder => (),
+            EvolvedNonValuePlace::Variable(ref v) => {
+                self.bind_column_to_var(schema, col.clone(), DatomsColumn::Attribute, v.clone())
+            }
             EvolvedNonValuePlace::Entid(entid) => {
                 if !schema.is_attribute(entid) {
                     // Furthermore, that entid must resolve to an attribute. If it doesn't, this
@@ -138,7 +125,7 @@ impl ConjoiningClauses {
                     return;
                 }
                 self.constrain_attribute(col.clone(), entid)
-            },
+            }
         }
 
         // Determine if the pattern's value type is known.
@@ -149,8 +136,7 @@ impl ConjoiningClauses {
         let value_type = self.get_value_type(schema, pattern);
 
         match pattern.value {
-            EvolvedValuePlace::Placeholder =>
-                (),
+            EvolvedValuePlace::Placeholder => (),
 
             EvolvedValuePlace::Variable(ref v) => {
                 if let Some(this_type) = value_type {
@@ -163,22 +149,24 @@ impl ConjoiningClauses {
                 }
 
                 self.bind_column_to_var(schema, col.clone(), DatomsColumn::Value, v.clone());
-            },
-            EvolvedValuePlace::Entid(i) => {
-                match value_type {
-                    Some(ValueType::Ref) | None => {
-                        self.constrain_column_to_entity(col.clone(), DatomsColumn::Value, i);
-                    },
-                    Some(value_type) => {
-                        self.mark_known_empty(EmptyBecause::ValueTypeMismatch(value_type, TypedValue::Ref(i)));
-                    },
+            }
+            EvolvedValuePlace::Entid(i) => match value_type {
+                Some(ValueType::Ref) | None => {
+                    self.constrain_column_to_entity(col.clone(), DatomsColumn::Value, i);
+                }
+                Some(value_type) => {
+                    self.mark_known_empty(EmptyBecause::ValueTypeMismatch(
+                        value_type,
+                        TypedValue::Ref(i),
+                    ));
                 }
             },
 
             EvolvedValuePlace::EntidOrInteger(i) =>
-                // If we know the valueType, then we can determine whether this is an entid or an
-                // integer. If we don't, then we must generate a more general query with a
-                // value_type_tag.
+            // If we know the valueType, then we can determine whether this is an entid or an
+            // integer. If we don't, then we must generate a more general query with a
+            // value_type_tag.
+            {
                 if let Some(ValueType::Ref) = value_type {
                     self.constrain_column_to_entity(col.clone(), DatomsColumn::Value, i);
                 } else {
@@ -196,7 +184,8 @@ impl ConjoiningClauses {
                     // TODO: isn't there a bug here? We'll happily take a numeric value
                     // for a non-numeric attribute!
                     self.constrain_value_to_numeric(col.clone(), i);
-                },
+                }
+            }
             EvolvedValuePlace::IdentOrKeyword(ref kw) => {
                 // If we know the valueType, then we can determine whether this is an ident or a
                 // keyword. If we don't, then we must generate a more general query with a
@@ -206,7 +195,11 @@ impl ConjoiningClauses {
                 // such.
                 if let Some(ValueType::Ref) = value_type {
                     if let Some(entid) = self.entid_for_ident(schema, kw) {
-                        self.constrain_column_to_entity(col.clone(), DatomsColumn::Value, entid.into())
+                        self.constrain_column_to_entity(
+                            col.clone(),
+                            DatomsColumn::Value,
+                            entid.into(),
+                        )
                     } else {
                         // A resolution failure means we're done here: this attribute must have an
                         // entity value.
@@ -215,10 +208,18 @@ impl ConjoiningClauses {
                     }
                 } else {
                     // It must be a keyword.
-                    self.constrain_column_to_constant(col.clone(), DatomsColumn::Value, TypedValue::Keyword(kw.clone()));
-                    self.wheres.add_intersection(ColumnConstraint::has_unit_type(col.clone(), ValueType::Keyword));
+                    self.constrain_column_to_constant(
+                        col.clone(),
+                        DatomsColumn::Value,
+                        TypedValue::Keyword(kw.clone()),
+                    );
+                    self.wheres
+                        .add_intersection(ColumnConstraint::has_unit_type(
+                            col.clone(),
+                            ValueType::Keyword,
+                        ));
                 };
-            },
+            }
             EvolvedValuePlace::Value(ref c) => {
                 // TODO: don't allocate.
                 let typed_value = c.clone();
@@ -252,24 +253,33 @@ impl ConjoiningClauses {
                 // Because everything we handle here is unambiguous, we generate a single type
                 // restriction from the value type of the typed value.
                 if value_type.is_none() {
-                    self.wheres.add_intersection(
-                        ColumnConstraint::has_unit_type(col.clone(), typed_value_type));
+                    self.wheres
+                        .add_intersection(ColumnConstraint::has_unit_type(
+                            col.clone(),
+                            typed_value_type,
+                        ));
                 }
-            },
+            }
         }
 
         match pattern.tx {
             EvolvedNonValuePlace::Placeholder => (),
             EvolvedNonValuePlace::Variable(ref v) => {
                 self.bind_column_to_var(schema, col.clone(), DatomsColumn::Tx, v.clone());
-            },
+            }
             EvolvedNonValuePlace::Entid(entid) => {
                 self.constrain_column_to_entity(col.clone(), DatomsColumn::Tx, entid);
-            },
+            }
         }
     }
 
-    fn reverse_lookup(&mut self, known: Known, var: &Variable, attr: Entid, val: &TypedValue) -> bool {
+    fn reverse_lookup(
+        &mut self,
+        known: Known,
+        var: &Variable,
+        attr: Entid,
+        val: &TypedValue,
+    ) -> bool {
         if let Some(attribute) = known.schema.attribute_for_entid(attr) {
             let unique = attribute.unique.is_some();
             if unique {
@@ -280,11 +290,11 @@ impl ConjoiningClauses {
                             attr: attr,
                         });
                         true
-                    },
+                    }
                     Some(item) => {
                         self.bind_value(var, TypedValue::Ref(item));
                         true
-                    },
+                    }
                 }
             } else {
                 match known.get_entids_for_value(attr, val) {
@@ -294,7 +304,7 @@ impl ConjoiningClauses {
                             attr: attr,
                         });
                         true
-                    },
+                    }
                     Some(items) => {
                         if items.len() == 1 {
                             let item = items.iter().next().cloned().unwrap();
@@ -305,7 +315,7 @@ impl ConjoiningClauses {
                             // TODO: handle multiple values.
                             false
                         }
-                    },
+                    }
                 }
             }
         } else {
@@ -340,9 +350,9 @@ impl ConjoiningClauses {
                 let cached_forward = known.is_attribute_cached_forward(attr);
                 let cached_reverse = known.is_attribute_cached_reverse(attr);
 
-                if (cached_forward || cached_reverse) &&
-                   pattern.tx == EvolvedNonValuePlace::Placeholder {
-
+                if (cached_forward || cached_reverse)
+                    && pattern.tx == EvolvedNonValuePlace::Placeholder
+                {
                     let attribute = schema.attribute_for_entid(attr).unwrap();
 
                     // There are two patterns we can handle:
@@ -359,41 +369,46 @@ impl ConjoiningClauses {
                                             // It's an ident.
                                             // TODO
                                             return false;
-                                        },
+                                        }
                                         ValueType::Keyword => {
                                             let tv: TypedValue = TypedValue::Keyword(kw.clone());
                                             return self.reverse_lookup(known, var, attr, &tv);
-                                        },
+                                        }
                                         t => {
                                             let tv: TypedValue = TypedValue::Keyword(kw.clone());
                                             // Anything else can't match an IdentOrKeyword.
-                                            self.mark_known_empty(EmptyBecause::ValueTypeMismatch(t, tv));
+                                            self.mark_known_empty(EmptyBecause::ValueTypeMismatch(
+                                                t, tv,
+                                            ));
                                             return true;
-                                        },
+                                        }
                                     }
-                                },
+                                }
                                 EvolvedValuePlace::Value(ref val) => {
                                     if cached_reverse {
                                         return self.reverse_lookup(known, var, attr, val);
                                     }
                                 }
-                                _ => {},      // TODO: check constant values against cache.
+                                _ => {} // TODO: check constant values against cache.
                             }
-                        },
+                        }
 
                         // Forward lookup.
                         EvolvedNonValuePlace::Entid(entity) => {
                             match pattern.value {
                                 EvolvedValuePlace::Variable(ref var) => {
                                     if cached_forward {
-                                        match known.get_value_for_entid(known.schema, attr, entity) {
+                                        match known.get_value_for_entid(known.schema, attr, entity)
+                                        {
                                             None => {
-                                                self.mark_known_empty(EmptyBecause::CachedAttributeHasNoValues {
-                                                    entity: entity,
-                                                    attr: attr,
-                                                });
+                                                self.mark_known_empty(
+                                                    EmptyBecause::CachedAttributeHasNoValues {
+                                                        entity: entity,
+                                                        attr: attr,
+                                                    },
+                                                );
                                                 return true;
-                                            },
+                                            }
                                             Some(item) => {
                                                 self.bind_value(var, item.clone());
                                                 return true;
@@ -401,21 +416,26 @@ impl ConjoiningClauses {
                                         }
                                     }
                                 }
-                                _ => {},      // TODO: check constant values against cache.
+                                _ => {} // TODO: check constant values against cache.
                             }
-                        },
-                        _ => {},
+                        }
+                        _ => {}
                     }
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
         false
     }
 
     /// Transform a pattern place into a narrower type.
     /// If that's impossible, returns Empty.
-    fn make_evolved_non_value(&self, known: &Known, col: DatomsColumn, non_value: PatternNonValuePlace) -> PlaceOrEmpty<EvolvedNonValuePlace> {
+    fn make_evolved_non_value(
+        &self,
+        known: &Known,
+        col: DatomsColumn,
+        non_value: PatternNonValuePlace,
+    ) -> PlaceOrEmpty<EvolvedNonValuePlace> {
         use self::PlaceOrEmpty::*;
         match non_value {
             PatternNonValuePlace::Placeholder => Place(EvolvedNonValuePlace::Placeholder),
@@ -427,7 +447,7 @@ impl ConjoiningClauses {
                 } else {
                     Empty(EmptyBecause::UnresolvedIdent((&*kw).clone()))
                 }
-            },
+            }
             PatternNonValuePlace::Variable(var) => {
                 // See if we have it!
                 match self.bound_value(&var) {
@@ -440,25 +460,35 @@ impl ConjoiningClauses {
                         } else {
                             Empty(EmptyBecause::UnresolvedIdent((&*kw).clone()))
                         }
-                    },
-                    Some(v) => {
-                        Empty(EmptyBecause::InvalidBinding(col.into(), v))
-                    },
+                    }
+                    Some(v) => Empty(EmptyBecause::InvalidBinding(col.into(), v)),
                 }
-            },
+            }
         }
     }
 
-    fn make_evolved_entity(&self, known: &Known, entity: PatternNonValuePlace) -> PlaceOrEmpty<EvolvedNonValuePlace> {
+    fn make_evolved_entity(
+        &self,
+        known: &Known,
+        entity: PatternNonValuePlace,
+    ) -> PlaceOrEmpty<EvolvedNonValuePlace> {
         self.make_evolved_non_value(known, DatomsColumn::Entity, entity)
     }
 
-    fn make_evolved_tx(&self, known: &Known, tx: PatternNonValuePlace) -> PlaceOrEmpty<EvolvedNonValuePlace> {
+    fn make_evolved_tx(
+        &self,
+        known: &Known,
+        tx: PatternNonValuePlace,
+    ) -> PlaceOrEmpty<EvolvedNonValuePlace> {
         // TODO: make sure that, if it's an entid, it names a tx.
         self.make_evolved_non_value(known, DatomsColumn::Tx, tx)
     }
 
-    pub(crate) fn make_evolved_attribute(&self, known: &Known, attribute: PatternNonValuePlace) -> PlaceOrEmpty<(EvolvedNonValuePlace, Option<ValueType>)> {
+    pub(crate) fn make_evolved_attribute(
+        &self,
+        known: &Known,
+        attribute: PatternNonValuePlace,
+    ) -> PlaceOrEmpty<(EvolvedNonValuePlace, Option<ValueType>)> {
         use self::PlaceOrEmpty::*;
         self.make_evolved_non_value(known, DatomsColumn::Attribute, attribute)
             .and_then(|a| {
@@ -475,21 +505,21 @@ impl ConjoiningClauses {
             })
     }
 
-    pub(crate) fn make_evolved_value(&self,
-                                     known: &Known,
-                                     value_type: Option<ValueType>,
-                                     value: PatternValuePlace) -> PlaceOrEmpty<EvolvedValuePlace> {
+    pub(crate) fn make_evolved_value(
+        &self,
+        known: &Known,
+        value_type: Option<ValueType>,
+        value: PatternValuePlace,
+    ) -> PlaceOrEmpty<EvolvedValuePlace> {
         use self::PlaceOrEmpty::*;
         match value {
             PatternValuePlace::Placeholder => Place(EvolvedValuePlace::Placeholder),
-            PatternValuePlace::EntidOrInteger(e) => {
-                match value_type {
-                    Some(ValueType::Ref) => Place(EvolvedValuePlace::Entid(e)),
-                    Some(ValueType::Long) => Place(EvolvedValuePlace::Value(TypedValue::Long(e))),
-                    Some(ValueType::Double) => Place(EvolvedValuePlace::Value((e as f64).into())),
-                    Some(t) => Empty(EmptyBecause::ValueTypeMismatch(t, TypedValue::Long(e))),
-                    None => Place(EvolvedValuePlace::EntidOrInteger(e)),
-                }
+            PatternValuePlace::EntidOrInteger(e) => match value_type {
+                Some(ValueType::Ref) => Place(EvolvedValuePlace::Entid(e)),
+                Some(ValueType::Long) => Place(EvolvedValuePlace::Value(TypedValue::Long(e))),
+                Some(ValueType::Double) => Place(EvolvedValuePlace::Value((e as f64).into())),
+                Some(t) => Empty(EmptyBecause::ValueTypeMismatch(t, TypedValue::Long(e))),
+                None => Place(EvolvedValuePlace::EntidOrInteger(e)),
             },
             PatternValuePlace::IdentOrKeyword(kw) => {
                 match value_type {
@@ -500,18 +530,14 @@ impl ConjoiningClauses {
                         } else {
                             Empty(EmptyBecause::UnresolvedIdent((&*kw).clone()))
                         }
-                    },
+                    }
                     Some(ValueType::Keyword) => {
                         Place(EvolvedValuePlace::Value(TypedValue::Keyword(kw)))
-                    },
-                    Some(t) => {
-                        Empty(EmptyBecause::ValueTypeMismatch(t, TypedValue::Keyword(kw)))
-                    },
-                    None => {
-                        Place(EvolvedValuePlace::IdentOrKeyword(kw))
-                    },
+                    }
+                    Some(t) => Empty(EmptyBecause::ValueTypeMismatch(t, TypedValue::Keyword(kw))),
+                    None => Place(EvolvedValuePlace::IdentOrKeyword(kw)),
                 }
-            },
+            }
             PatternValuePlace::Variable(var) => {
                 // See if we have it!
                 match self.bound_value(&var) {
@@ -522,57 +548,64 @@ impl ConjoiningClauses {
                         } else {
                             Place(EvolvedValuePlace::Entid(entid))
                         }
-                    },
+                    }
                     Some(val) => {
-                        if let Some(empty) = self.can_constrain_var_to_type(&var, val.value_type()) {
+                        if let Some(empty) = self.can_constrain_var_to_type(&var, val.value_type())
+                        {
                             Empty(empty)
                         } else {
                             Place(EvolvedValuePlace::Value(val))
                         }
-                    },
+                    }
                 }
-            },
+            }
             PatternValuePlace::Constant(nic) => {
                 Place(EvolvedValuePlace::Value(into_typed_value(nic)))
-            },
+            }
         }
     }
 
-    pub(crate) fn make_evolved_pattern(&self, known: Known, pattern: Pattern) -> PlaceOrEmpty<EvolvedPattern> {
-        let (e, a, v, tx, source) = (pattern.entity, pattern.attribute, pattern.value, pattern.tx, pattern.source);
+    pub(crate) fn make_evolved_pattern(
+        &self,
+        known: Known,
+        pattern: Pattern,
+    ) -> PlaceOrEmpty<EvolvedPattern> {
+        let (e, a, v, tx, source) = (
+            pattern.entity,
+            pattern.attribute,
+            pattern.value,
+            pattern.tx,
+            pattern.source,
+        );
         use self::PlaceOrEmpty::*;
         match self.make_evolved_entity(&known, e) {
             Empty(because) => Empty(because),
-            Place(e) => {
-                match self.make_evolved_attribute(&known, a) {
+            Place(e) => match self.make_evolved_attribute(&known, a) {
+                Empty(because) => Empty(because),
+                Place((a, value_type)) => match self.make_evolved_value(&known, value_type, v) {
                     Empty(because) => Empty(because),
-                    Place((a, value_type)) => {
-                        match self.make_evolved_value(&known, value_type, v) {
-                            Empty(because) => Empty(because),
-                            Place(v) => {
-                                match self.make_evolved_tx(&known, tx) {
-                                    Empty(because) => Empty(because),
-                                    Place(tx) => {
-                                        PlaceOrEmpty::Place(EvolvedPattern {
-                                            source: source.unwrap_or(SrcVar::DefaultSrc),
-                                            entity: e,
-                                            attribute: a,
-                                            value: v,
-                                            tx: tx,
-                                        })
-                                    },
-                                }
-                            },
-                        }
+                    Place(v) => match self.make_evolved_tx(&known, tx) {
+                        Empty(because) => Empty(because),
+                        Place(tx) => PlaceOrEmpty::Place(EvolvedPattern {
+                            source: source.unwrap_or(SrcVar::DefaultSrc),
+                            entity: e,
+                            attribute: a,
+                            value: v,
+                            tx: tx,
+                        }),
                     },
-                }
+                },
             },
         }
     }
 
     /// Re-examine the pattern to see if it can be specialized or is now known to fail.
     #[allow(unused_variables)]
-    pub(crate) fn evolve_pattern(&mut self, known: Known, mut pattern: EvolvedPattern) -> PlaceOrEmpty<EvolvedPattern> {
+    pub(crate) fn evolve_pattern(
+        &mut self,
+        known: Known,
+        mut pattern: EvolvedPattern,
+    ) -> PlaceOrEmpty<EvolvedPattern> {
         use self::PlaceOrEmpty::*;
 
         let mut new_entity: Option<EvolvedNonValuePlace> = None;
@@ -585,16 +618,16 @@ impl ConjoiningClauses {
                     None => (),
                     Some(TypedValue::Ref(entid)) => {
                         new_entity = Some(EvolvedNonValuePlace::Entid(entid));
-                    },
+                    }
                     Some(v) => {
                         return Empty(EmptyBecause::TypeMismatch {
                             var: var.clone(),
                             existing: self.known_type_set(&var),
                             desired: ValueTypeSet::of_one(ValueType::Ref),
                         });
-                    },
+                    }
                 };
-            },
+            }
             _ => (),
         }
         match &pattern.value {
@@ -604,12 +637,11 @@ impl ConjoiningClauses {
                     None => (),
                     Some(tv) => {
                         new_value = Some(EvolvedValuePlace::Value(tv.clone()));
-                    },
+                    }
                 };
-            },
+            }
             _ => (),
         }
-
 
         if let Some(e) = new_entity {
             pattern.entity = e;
@@ -659,42 +691,17 @@ mod testing {
     use std::collections::BTreeMap;
     use std::collections::BTreeSet;
 
-    use core_traits::attribute::{
-        Unique,
-    };
-    use core_traits::{
-        Attribute,
-        ValueTypeSet,
-    };
-    use mentat_core::{
-        Schema,
-    };
+    use core_traits::attribute::Unique;
+    use core_traits::{Attribute, ValueTypeSet};
+    use mentat_core::Schema;
 
-    use edn::query::{
-        Keyword,
-        Variable,
-    };
+    use edn::query::{Keyword, Variable};
 
-    use clauses::{
-        QueryInputs,
-        add_attribute,
-        associate_ident,
-        ident,
-    };
+    use clauses::{add_attribute, associate_ident, ident, QueryInputs};
 
-    use types::{
-        Column,
-        ColumnConstraint,
-        DatomsTable,
-        QualifiedAlias,
-        QueryValue,
-        SourceAlias,
-    };
+    use types::{Column, ColumnConstraint, DatomsTable, QualifiedAlias, QueryValue, SourceAlias};
 
-    use {
-        algebrize,
-        parse_find_string,
-    };
+    use {algebrize, parse_find_string};
 
     fn alg(schema: &Schema, input: &str) -> ConjoiningClauses {
         let parsed = parse_find_string(input).expect("parse failed");
@@ -708,13 +715,16 @@ mod testing {
         let schema = Schema::default();
         let known = Known::for_schema(&schema);
 
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(Variable::from_valid_name("?x")),
-            attribute: ident("foo", "bar"),
-            value: PatternValuePlace::Constant(NonIntegerConstant::Boolean(true)),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(Variable::from_valid_name("?x")),
+                attribute: ident("foo", "bar"),
+                value: PatternValuePlace::Constant(NonIntegerConstant::Boolean(true)),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         assert!(cc.is_known_empty());
     }
@@ -727,13 +737,16 @@ mod testing {
         associate_ident(&mut schema, Keyword::namespaced("foo", "bar"), 99);
 
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(Variable::from_valid_name("?x")),
-            attribute: ident("foo", "bar"),
-            value: PatternValuePlace::Constant(NonIntegerConstant::Boolean(true)),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(Variable::from_valid_name("?x")),
+                attribute: ident("foo", "bar"),
+                value: PatternValuePlace::Constant(NonIntegerConstant::Boolean(true)),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         assert!(cc.is_known_empty());
     }
@@ -744,20 +757,27 @@ mod testing {
         let mut schema = Schema::default();
 
         associate_ident(&mut schema, Keyword::namespaced("foo", "bar"), 99);
-        add_attribute(&mut schema, 99, Attribute {
-            value_type: ValueType::Boolean,
-            ..Default::default()
-        });
+        add_attribute(
+            &mut schema,
+            99,
+            Attribute {
+                value_type: ValueType::Boolean,
+                ..Default::default()
+            },
+        );
 
         let x = Variable::from_valid_name("?x");
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: ident("foo", "bar"),
-            value: PatternValuePlace::Constant(NonIntegerConstant::Boolean(true)),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: ident("foo", "bar"),
+                value: PatternValuePlace::Constant(NonIntegerConstant::Boolean(true)),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         // println!("{:#?}", cc);
 
@@ -767,7 +787,10 @@ mod testing {
 
         // After this, we know a lot of things:
         assert!(!cc.is_known_empty());
-        assert_eq!(cc.from, vec![SourceAlias(DatomsTable::Datoms, "datoms00".to_string())]);
+        assert_eq!(
+            cc.from,
+            vec![SourceAlias(DatomsTable::Datoms, "datoms00".to_string())]
+        );
 
         // ?x must be a ref.
         assert_eq!(cc.known_type(&x).unwrap(), ValueType::Ref);
@@ -779,10 +802,14 @@ mod testing {
         // - datoms0.a = 99
         // - datoms0.v = true
         // No need for a type tag constraint, because the attribute is known.
-        assert_eq!(cc.wheres, vec![
-                   ColumnConstraint::Equals(d0_a, QueryValue::Entid(99)),
-                   ColumnConstraint::Equals(d0_v, QueryValue::TypedValue(TypedValue::Boolean(true))),
-        ].into());
+        assert_eq!(
+            cc.wheres,
+            vec![
+                ColumnConstraint::Equals(d0_a, QueryValue::Entid(99)),
+                ColumnConstraint::Equals(d0_v, QueryValue::TypedValue(TypedValue::Boolean(true))),
+            ]
+            .into()
+        );
     }
 
     #[test]
@@ -792,13 +819,16 @@ mod testing {
 
         let x = Variable::from_valid_name("?x");
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: PatternNonValuePlace::Placeholder,
-            value: PatternValuePlace::Constant(NonIntegerConstant::Boolean(true)),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: PatternNonValuePlace::Placeholder,
+                value: PatternValuePlace::Constant(NonIntegerConstant::Boolean(true)),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         // println!("{:#?}", cc);
 
@@ -806,7 +836,10 @@ mod testing {
         let d0_v = QualifiedAlias::new("datoms00".to_string(), DatomsColumn::Value);
 
         assert!(!cc.is_known_empty());
-        assert_eq!(cc.from, vec![SourceAlias(DatomsTable::Datoms, "datoms00".to_string())]);
+        assert_eq!(
+            cc.from,
+            vec![SourceAlias(DatomsTable::Datoms, "datoms00".to_string())]
+        );
 
         // ?x must be a ref.
         assert_eq!(cc.known_type(&x).unwrap(), ValueType::Ref);
@@ -818,10 +851,14 @@ mod testing {
         // - datoms0.v = true
         // - datoms0.value_type_tag = boolean
         // TODO: implement expand_type_tags.
-        assert_eq!(cc.wheres, vec![
-                   ColumnConstraint::Equals(d0_v, QueryValue::TypedValue(TypedValue::Boolean(true))),
-                   ColumnConstraint::has_unit_type("datoms00".to_string(), ValueType::Boolean),
-        ].into());
+        assert_eq!(
+            cc.wheres,
+            vec![
+                ColumnConstraint::Equals(d0_v, QueryValue::TypedValue(TypedValue::Boolean(true))),
+                ColumnConstraint::has_unit_type("datoms00".to_string(), ValueType::Boolean),
+            ]
+            .into()
+        );
     }
 
     /// This test ensures that we do less work if we know the attribute thanks to a var lookup.
@@ -830,25 +867,33 @@ mod testing {
         let mut cc = ConjoiningClauses::default();
         let mut schema = Schema::default();
         associate_ident(&mut schema, Keyword::namespaced("foo", "bar"), 99);
-        add_attribute(&mut schema, 99, Attribute {
-            value_type: ValueType::Boolean,
-            ..Default::default()
-        });
+        add_attribute(
+            &mut schema,
+            99,
+            Attribute {
+                value_type: ValueType::Boolean,
+                ..Default::default()
+            },
+        );
 
         let x = Variable::from_valid_name("?x");
         let a = Variable::from_valid_name("?a");
         let v = Variable::from_valid_name("?v");
 
         cc.input_variables.insert(a.clone());
-        cc.value_bindings.insert(a.clone(), TypedValue::typed_ns_keyword("foo", "bar"));
+        cc.value_bindings
+            .insert(a.clone(), TypedValue::typed_ns_keyword("foo", "bar"));
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: PatternNonValuePlace::Variable(a.clone()),
-            value: PatternValuePlace::Variable(v.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: PatternNonValuePlace::Variable(a.clone()),
+                value: PatternValuePlace::Variable(v.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         // println!("{:#?}", cc);
 
@@ -856,7 +901,10 @@ mod testing {
         let d0_a = QualifiedAlias::new("datoms00".to_string(), DatomsColumn::Attribute);
 
         assert!(!cc.is_known_empty());
-        assert_eq!(cc.from, vec![SourceAlias(DatomsTable::Datoms, "datoms00".to_string())]);
+        assert_eq!(
+            cc.from,
+            vec![SourceAlias(DatomsTable::Datoms, "datoms00".to_string())]
+        );
 
         // ?x must be a ref, and ?v a boolean.
         assert_eq!(cc.known_type(&x), Some(ValueType::Ref));
@@ -867,9 +915,10 @@ mod testing {
 
         // ?x is bound to datoms0.e.
         assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e.clone()]);
-        assert_eq!(cc.wheres, vec![
-                   ColumnConstraint::Equals(d0_a, QueryValue::Entid(99)),
-        ].into());
+        assert_eq!(
+            cc.wheres,
+            vec![ColumnConstraint::Equals(d0_a, QueryValue::Entid(99)),].into()
+        );
     }
 
     /// Queries that bind non-entity values to entity places can't return results.
@@ -886,18 +935,23 @@ mod testing {
         cc.input_variables.insert(a.clone());
         cc.value_bindings.insert(a.clone(), hello.clone());
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: PatternNonValuePlace::Variable(a.clone()),
-            value: PatternValuePlace::Variable(v.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: PatternNonValuePlace::Variable(a.clone()),
+                value: PatternValuePlace::Variable(v.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         assert!(cc.is_known_empty());
-        assert_eq!(cc.empty_because.unwrap(), EmptyBecause::InvalidBinding(Column::Fixed(DatomsColumn::Attribute), hello));
+        assert_eq!(
+            cc.empty_because.unwrap(),
+            EmptyBecause::InvalidBinding(Column::Fixed(DatomsColumn::Attribute), hello)
+        );
     }
-
 
     /// This test ensures that we query all_datoms if we're possibly retrieving a string.
     #[test]
@@ -909,20 +963,29 @@ mod testing {
         let a = Variable::from_valid_name("?a");
         let v = Variable::from_valid_name("?v");
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: PatternNonValuePlace::Variable(a.clone()),
-            value: PatternValuePlace::Variable(v.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: PatternNonValuePlace::Variable(a.clone()),
+                value: PatternValuePlace::Variable(v.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         // println!("{:#?}", cc);
 
         let d0_e = QualifiedAlias::new("all_datoms00".to_string(), DatomsColumn::Entity);
 
         assert!(!cc.is_known_empty());
-        assert_eq!(cc.from, vec![SourceAlias(DatomsTable::AllDatoms, "all_datoms00".to_string())]);
+        assert_eq!(
+            cc.from,
+            vec![SourceAlias(
+                DatomsTable::AllDatoms,
+                "all_datoms00".to_string()
+            )]
+        );
 
         // ?x must be a ref.
         assert_eq!(cc.known_type(&x).unwrap(), ValueType::Ref);
@@ -940,13 +1003,16 @@ mod testing {
 
         let x = Variable::from_valid_name("?x");
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: PatternNonValuePlace::Placeholder,
-            value: PatternValuePlace::Constant("hello".into()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: PatternNonValuePlace::Placeholder,
+                value: PatternValuePlace::Constant("hello".into()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         // println!("{:#?}", cc);
 
@@ -954,7 +1020,13 @@ mod testing {
         let d0_v = QualifiedAlias::new("all_datoms00".to_string(), DatomsColumn::Value);
 
         assert!(!cc.is_known_empty());
-        assert_eq!(cc.from, vec![SourceAlias(DatomsTable::AllDatoms, "all_datoms00".to_string())]);
+        assert_eq!(
+            cc.from,
+            vec![SourceAlias(
+                DatomsTable::AllDatoms,
+                "all_datoms00".to_string()
+            )]
+        );
 
         // ?x must be a ref.
         assert_eq!(cc.known_type(&x).unwrap(), ValueType::Ref);
@@ -966,10 +1038,17 @@ mod testing {
         // - datoms0.v = 'hello'
         // - datoms0.value_type_tag = string
         // TODO: implement expand_type_tags.
-        assert_eq!(cc.wheres, vec![
-                   ColumnConstraint::Equals(d0_v, QueryValue::TypedValue(TypedValue::typed_string("hello"))),
-                   ColumnConstraint::has_unit_type("all_datoms00".to_string(), ValueType::String),
-        ].into());
+        assert_eq!(
+            cc.wheres,
+            vec![
+                ColumnConstraint::Equals(
+                    d0_v,
+                    QueryValue::TypedValue(TypedValue::typed_string("hello"))
+                ),
+                ColumnConstraint::has_unit_type("all_datoms00".to_string(), ValueType::String),
+            ]
+            .into()
+        );
     }
 
     #[test]
@@ -979,32 +1058,46 @@ mod testing {
 
         associate_ident(&mut schema, Keyword::namespaced("foo", "bar"), 99);
         associate_ident(&mut schema, Keyword::namespaced("foo", "roz"), 98);
-        add_attribute(&mut schema, 99, Attribute {
-            value_type: ValueType::Boolean,
-            ..Default::default()
-        });
-        add_attribute(&mut schema, 98, Attribute {
-            value_type: ValueType::String,
-            ..Default::default()
-        });
+        add_attribute(
+            &mut schema,
+            99,
+            Attribute {
+                value_type: ValueType::Boolean,
+                ..Default::default()
+            },
+        );
+        add_attribute(
+            &mut schema,
+            98,
+            Attribute {
+                value_type: ValueType::String,
+                ..Default::default()
+            },
+        );
 
         let x = Variable::from_valid_name("?x");
         let y = Variable::from_valid_name("?y");
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: ident("foo", "roz"),
-            value: PatternValuePlace::Constant("idgoeshere".into()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: ident("foo", "bar"),
-            value: PatternValuePlace::Variable(y.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: ident("foo", "roz"),
+                value: PatternValuePlace::Constant("idgoeshere".into()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: ident("foo", "bar"),
+                value: PatternValuePlace::Variable(y.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         // Finally, expand column bindings to get the overlaps for ?x.
         cc.expand_column_bindings();
@@ -1018,32 +1111,41 @@ mod testing {
         let d1_a = QualifiedAlias::new("datoms01".to_string(), DatomsColumn::Attribute);
 
         assert!(!cc.is_known_empty());
-        assert_eq!(cc.from, vec![
-                   SourceAlias(DatomsTable::Datoms, "datoms00".to_string()),
-                   SourceAlias(DatomsTable::Datoms, "datoms01".to_string()),
-        ]);
+        assert_eq!(
+            cc.from,
+            vec![
+                SourceAlias(DatomsTable::Datoms, "datoms00".to_string()),
+                SourceAlias(DatomsTable::Datoms, "datoms01".to_string()),
+            ]
+        );
 
         // ?x must be a ref.
         assert_eq!(cc.known_type(&x).unwrap(), ValueType::Ref);
 
         // ?x is bound to datoms0.e and datoms1.e.
-        assert_eq!(cc.column_bindings.get(&x).unwrap(),
-                   &vec![
-                       d0_e.clone(),
-                       d1_e.clone(),
-                   ]);
+        assert_eq!(
+            cc.column_bindings.get(&x).unwrap(),
+            &vec![d0_e.clone(), d1_e.clone(),]
+        );
 
         // Our 'where' clauses are four:
         // - datoms0.a = 98 (:foo/roz)
         // - datoms0.v = "idgoeshere"
         // - datoms1.a = 99 (:foo/bar)
         // - datoms1.e = datoms0.e
-        assert_eq!(cc.wheres, vec![
-                   ColumnConstraint::Equals(d0_a, QueryValue::Entid(98)),
-                   ColumnConstraint::Equals(d0_v, QueryValue::TypedValue(TypedValue::typed_string("idgoeshere"))),
-                   ColumnConstraint::Equals(d1_a, QueryValue::Entid(99)),
-                   ColumnConstraint::Equals(d0_e, QueryValue::Column(d1_e)),
-        ].into());
+        assert_eq!(
+            cc.wheres,
+            vec![
+                ColumnConstraint::Equals(d0_a, QueryValue::Entid(98)),
+                ColumnConstraint::Equals(
+                    d0_v,
+                    QueryValue::TypedValue(TypedValue::typed_string("idgoeshere"))
+                ),
+                ColumnConstraint::Equals(d1_a, QueryValue::Entid(99)),
+                ColumnConstraint::Equals(d0_e, QueryValue::Column(d1_e)),
+            ]
+            .into()
+        );
     }
 
     #[test]
@@ -1051,45 +1153,57 @@ mod testing {
         let mut schema = Schema::default();
 
         associate_ident(&mut schema, Keyword::namespaced("foo", "bar"), 99);
-        add_attribute(&mut schema, 99, Attribute {
-            value_type: ValueType::Boolean,
-            ..Default::default()
-        });
+        add_attribute(
+            &mut schema,
+            99,
+            Attribute {
+                value_type: ValueType::Boolean,
+                ..Default::default()
+            },
+        );
 
         let x = Variable::from_valid_name("?x");
         let y = Variable::from_valid_name("?y");
 
-        let b: BTreeMap<Variable, TypedValue> =
-            vec![(y.clone(), TypedValue::Boolean(true))].into_iter().collect();
+        let b: BTreeMap<Variable, TypedValue> = vec![(y.clone(), TypedValue::Boolean(true))]
+            .into_iter()
+            .collect();
         let inputs = QueryInputs::with_values(b);
-        let variables: BTreeSet<Variable> = vec![Variable::from_valid_name("?y")].into_iter().collect();
+        let variables: BTreeSet<Variable> =
+            vec![Variable::from_valid_name("?y")].into_iter().collect();
         let mut cc = ConjoiningClauses::with_inputs(variables, inputs);
 
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: ident("foo", "bar"),
-            value: PatternValuePlace::Variable(y.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: ident("foo", "bar"),
+                value: PatternValuePlace::Variable(y.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         let d0_e = QualifiedAlias::new("datoms00".to_string(), DatomsColumn::Entity);
         let d0_a = QualifiedAlias::new("datoms00".to_string(), DatomsColumn::Attribute);
         let d0_v = QualifiedAlias::new("datoms00".to_string(), DatomsColumn::Value);
 
         // ?y has been expanded into `true`.
-        assert_eq!(cc.wheres, vec![
-                   ColumnConstraint::Equals(d0_a, QueryValue::Entid(99)),
-                   ColumnConstraint::Equals(d0_v, QueryValue::TypedValue(TypedValue::Boolean(true))),
-        ].into());
+        assert_eq!(
+            cc.wheres,
+            vec![
+                ColumnConstraint::Equals(d0_a, QueryValue::Entid(99)),
+                ColumnConstraint::Equals(d0_v, QueryValue::TypedValue(TypedValue::Boolean(true))),
+            ]
+            .into()
+        );
 
         // There is no binding for ?y.
         assert!(!cc.column_bindings.contains_key(&y));
 
         // ?x is bound to the entity.
-        assert_eq!(cc.column_bindings.get(&x).unwrap(),
-                   &vec![d0_e.clone()]);
+        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e.clone()]);
     }
 
     #[test]
@@ -1099,28 +1213,37 @@ mod testing {
         let mut schema = Schema::default();
 
         associate_ident(&mut schema, Keyword::namespaced("foo", "bar"), 99);
-        add_attribute(&mut schema, 99, Attribute {
-            value_type: ValueType::Boolean,
-            ..Default::default()
-        });
+        add_attribute(
+            &mut schema,
+            99,
+            Attribute {
+                value_type: ValueType::Boolean,
+                ..Default::default()
+            },
+        );
 
         let x = Variable::from_valid_name("?x");
         let y = Variable::from_valid_name("?y");
 
-        let b: BTreeMap<Variable, TypedValue> =
-            vec![(y.clone(), TypedValue::Long(42))].into_iter().collect();
+        let b: BTreeMap<Variable, TypedValue> = vec![(y.clone(), TypedValue::Long(42))]
+            .into_iter()
+            .collect();
         let inputs = QueryInputs::with_values(b);
-        let variables: BTreeSet<Variable> = vec![Variable::from_valid_name("?y")].into_iter().collect();
+        let variables: BTreeSet<Variable> =
+            vec![Variable::from_valid_name("?y")].into_iter().collect();
         let mut cc = ConjoiningClauses::with_inputs(variables, inputs);
 
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: ident("foo", "bar"),
-            value: PatternValuePlace::Variable(y.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: ident("foo", "bar"),
+                value: PatternValuePlace::Variable(y.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         // The type of the provided binding doesn't match the type of the attribute.
         assert!(cc.is_known_empty());
@@ -1133,30 +1256,39 @@ mod testing {
         let mut schema = Schema::default();
 
         associate_ident(&mut schema, Keyword::namespaced("foo", "bar"), 99);
-        add_attribute(&mut schema, 99, Attribute {
-            value_type: ValueType::String,
-            index: true,
-            fulltext: true,
-            ..Default::default()
-        });
+        add_attribute(
+            &mut schema,
+            99,
+            Attribute {
+                value_type: ValueType::String,
+                index: true,
+                fulltext: true,
+                ..Default::default()
+            },
+        );
 
         let x = Variable::from_valid_name("?x");
         let y = Variable::from_valid_name("?y");
 
-        let b: BTreeMap<Variable, TypedValue> =
-            vec![(y.clone(), TypedValue::Long(42))].into_iter().collect();
+        let b: BTreeMap<Variable, TypedValue> = vec![(y.clone(), TypedValue::Long(42))]
+            .into_iter()
+            .collect();
         let inputs = QueryInputs::with_values(b);
-        let variables: BTreeSet<Variable> = vec![Variable::from_valid_name("?y")].into_iter().collect();
+        let variables: BTreeSet<Variable> =
+            vec![Variable::from_valid_name("?y")].into_iter().collect();
         let mut cc = ConjoiningClauses::with_inputs(variables, inputs);
 
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: ident("foo", "bar"),
-            value: PatternValuePlace::Variable(y.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: ident("foo", "bar"),
+                value: PatternValuePlace::Variable(y.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         // The type of the provided binding doesn't match the type of the attribute.
         assert!(cc.is_known_empty());
@@ -1172,44 +1304,60 @@ mod testing {
 
         associate_ident(&mut schema, Keyword::namespaced("foo", "bar"), 99);
         associate_ident(&mut schema, Keyword::namespaced("foo", "roz"), 98);
-        add_attribute(&mut schema, 99, Attribute {
-            value_type: ValueType::Boolean,
-            ..Default::default()
-        });
-        add_attribute(&mut schema, 98, Attribute {
-            value_type: ValueType::String,
-            unique: Some(Unique::Identity),
-            ..Default::default()
-        });
+        add_attribute(
+            &mut schema,
+            99,
+            Attribute {
+                value_type: ValueType::Boolean,
+                ..Default::default()
+            },
+        );
+        add_attribute(
+            &mut schema,
+            98,
+            Attribute {
+                value_type: ValueType::String,
+                unique: Some(Unique::Identity),
+                ..Default::default()
+            },
+        );
 
         let x = Variable::from_valid_name("?x");
         let y = Variable::from_valid_name("?y");
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: ident("foo", "roz"),
-            value: PatternValuePlace::Variable(y.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: ident("foo", "bar"),
-            value: PatternValuePlace::Variable(y.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: ident("foo", "roz"),
+                value: PatternValuePlace::Variable(y.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: ident("foo", "bar"),
+                value: PatternValuePlace::Variable(y.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         // Finally, expand column bindings to get the overlaps for ?x.
         cc.expand_column_bindings();
 
         assert!(cc.is_known_empty());
-        assert_eq!(cc.empty_because.unwrap(),
-                   EmptyBecause::TypeMismatch {
-                       var: y.clone(),
-                       existing: ValueTypeSet::of_one(ValueType::String),
-                       desired: ValueTypeSet::of_one(ValueType::Boolean),
-                   });
+        assert_eq!(
+            cc.empty_because.unwrap(),
+            EmptyBecause::TypeMismatch {
+                var: y.clone(),
+                existing: ValueTypeSet::of_one(ValueType::String),
+                desired: ValueTypeSet::of_one(ValueType::Boolean),
+            }
+        );
     }
 
     #[test]
@@ -1228,31 +1376,39 @@ mod testing {
         let y = Variable::from_valid_name("?y");
         let z = Variable::from_valid_name("?z");
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: PatternNonValuePlace::Variable(y.clone()),
-            value: PatternValuePlace::Constant(NonIntegerConstant::Boolean(true)),
-            tx: PatternNonValuePlace::Placeholder,
-        });
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(z.clone()),
-            attribute: PatternNonValuePlace::Variable(y.clone()),
-            value: PatternValuePlace::Variable(x.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: PatternNonValuePlace::Variable(y.clone()),
+                value: PatternValuePlace::Constant(NonIntegerConstant::Boolean(true)),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(z.clone()),
+                attribute: PatternNonValuePlace::Variable(y.clone()),
+                value: PatternValuePlace::Variable(x.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         // Finally, expand column bindings to get the overlaps for ?x.
         cc.expand_column_bindings();
 
         assert!(cc.is_known_empty());
-        assert_eq!(cc.empty_because.unwrap(),
-                   EmptyBecause::TypeMismatch {
-                       var: x.clone(),
-                       existing: ValueTypeSet::of_one(ValueType::Ref),
-                       desired: ValueTypeSet::of_one(ValueType::Boolean),
-                   });
+        assert_eq!(
+            cc.empty_because.unwrap(),
+            EmptyBecause::TypeMismatch {
+                var: x.clone(),
+                existing: ValueTypeSet::of_one(ValueType::Ref),
+                desired: ValueTypeSet::of_one(ValueType::Boolean),
+            }
+        );
     }
 
     #[test]
@@ -1260,15 +1416,25 @@ mod testing {
         let query = r#"[:find ?e ?v :where [_ _ ?v] [?e :foo/bar ?v]]"#;
         let mut schema = Schema::default();
         associate_ident(&mut schema, Keyword::namespaced("foo", "bar"), 99);
-        add_attribute(&mut schema, 99, Attribute {
-            value_type: ValueType::Boolean,
-            ..Default::default()
-        });
+        add_attribute(
+            &mut schema,
+            99,
+            Attribute {
+                value_type: ValueType::Boolean,
+                ..Default::default()
+            },
+        );
         let e = Variable::from_valid_name("?e");
         let v = Variable::from_valid_name("?v");
         let cc = alg(&schema, query);
-        assert_eq!(cc.known_types.get(&e), Some(&ValueTypeSet::of_one(ValueType::Ref)));
-        assert_eq!(cc.known_types.get(&v), Some(&ValueTypeSet::of_one(ValueType::Boolean)));
+        assert_eq!(
+            cc.known_types.get(&e),
+            Some(&ValueTypeSet::of_one(ValueType::Ref))
+        );
+        assert_eq!(
+            cc.known_types.get(&v),
+            Some(&ValueTypeSet::of_one(ValueType::Boolean))
+        );
         assert!(!cc.extracted_types.contains_key(&e));
         assert!(!cc.extracted_types.contains_key(&v));
     }

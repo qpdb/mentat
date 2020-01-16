@@ -13,10 +13,7 @@
 /// Literal `Entid` values in the the "db" namespace.
 ///
 /// Used through-out the transactor to match core DB constructs.
-
-use core_traits::{
-    Entid,
-};
+use core_traits::Entid;
 
 // Added in SQL schema v1.
 pub const DB_IDENT: Entid = 1;
@@ -64,7 +61,7 @@ pub const DB_SCHEMA_CORE: Entid = 40;
 /// partitions in the partition map.
 pub fn might_update_metadata(attribute: Entid) -> bool {
     if attribute >= DB_DOC {
-        return false
+        return false;
     }
     match attribute {
         // Idents.
@@ -84,14 +81,8 @@ pub fn might_update_metadata(attribute: Entid) -> bool {
 /// Return 'false' if the given attribute might be used to describe a schema attribute.
 pub fn is_a_schema_attribute(attribute: Entid) -> bool {
     match attribute {
-        DB_IDENT |
-        DB_CARDINALITY |
-        DB_FULLTEXT |
-        DB_INDEX |
-        DB_IS_COMPONENT |
-        DB_UNIQUE |
-        DB_VALUE_TYPE =>
-            true,
+        DB_IDENT | DB_CARDINALITY | DB_FULLTEXT | DB_INDEX | DB_IS_COMPONENT | DB_UNIQUE
+        | DB_VALUE_TYPE => true,
         _ => false,
     }
 }

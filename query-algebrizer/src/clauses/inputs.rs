@@ -10,19 +10,11 @@
 
 use std::collections::BTreeMap;
 
-use core_traits::{
-    ValueType,
-    TypedValue,
-};
+use core_traits::{TypedValue, ValueType};
 
-use edn::query::{
-    Variable,
-};
+use edn::query::Variable;
 
-use query_algebrizer_traits::errors::{
-    AlgebrizerError,
-    Result,
-};
+use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
 /// Define the inputs to a query. This is in two parts: a set of values known now, and a set of
 /// types known now.
@@ -59,13 +51,18 @@ impl QueryInputs {
 
     pub fn with_values(values: BTreeMap<Variable, TypedValue>) -> QueryInputs {
         QueryInputs {
-            types: values.iter().map(|(var, val)| (var.clone(), val.value_type())).collect(),
+            types: values
+                .iter()
+                .map(|(var, val)| (var.clone(), val.value_type()))
+                .collect(),
             values: values,
         }
     }
 
-    pub fn new(mut types: BTreeMap<Variable, ValueType>,
-               values: BTreeMap<Variable, TypedValue>) -> Result<QueryInputs> {
+    pub fn new(
+        mut types: BTreeMap<Variable, ValueType>,
+        values: BTreeMap<Variable, TypedValue>,
+    ) -> Result<QueryInputs> {
         // Make sure that the types of the values agree with those in types, and collect.
         for (var, v) in values.iter() {
             let t = v.value_type();
@@ -76,6 +73,9 @@ impl QueryInputs {
                 }
             }
         }
-        Ok(QueryInputs { types: types, values: values })
+        Ok(QueryInputs {
+            types: types,
+            values: values,
+        })
     }
 }

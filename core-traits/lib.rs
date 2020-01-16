@@ -8,84 +8,57 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-extern crate enum_set;
-extern crate ordered_float;
 extern crate chrono;
+extern crate enum_set;
 extern crate indexmap;
-#[macro_use] extern crate serde_derive;
-extern crate uuid;
+extern crate ordered_float;
+#[macro_use]
+extern crate serde_derive;
 extern crate edn;
+extern crate uuid;
 #[macro_use]
 extern crate lazy_static;
 
 use std::fmt;
 
-use std::ffi::{
-    CString,
-};
+use std::ffi::CString;
 
-use std::ops::{
-    Deref,
-};
+use std::ops::Deref;
 
-use std::os::raw::{
-    c_char,
-};
+use std::os::raw::c_char;
 
-use std::rc::{
-    Rc,
-};
+use std::rc::Rc;
 
-use std::sync::{
-    Arc,
-};
+use std::sync::Arc;
 
 use std::collections::BTreeMap;
 
-use indexmap::{
-    IndexMap,
-};
+use indexmap::IndexMap;
 
 use enum_set::EnumSet;
 
 use ordered_float::OrderedFloat;
 
-use chrono::{
-    DateTime,
-    Timelike,
-};
+use chrono::{DateTime, Timelike};
 
 use uuid::Uuid;
 
-use edn::{
-    Cloned,
-    ValueRc,
-    Utc,
-    Keyword,
-    FromMicros,
-    FromRc,
-};
+use edn::{Cloned, FromMicros, FromRc, Keyword, Utc, ValueRc};
 
 use edn::entities::{
-    AttributePlace,
-    EntityPlace,
-    EntidOrIdent,
-    ValuePlace,
-    TransactableValueMarker,
+    AttributePlace, EntidOrIdent, EntityPlace, TransactableValueMarker, ValuePlace,
 };
 
-pub mod values;
 mod value_type_set;
+pub mod values;
 
-pub use value_type_set::{
-    ValueTypeSet,
-};
+pub use value_type_set::ValueTypeSet;
 
 #[macro_export]
 macro_rules! bail {
-    ($e:expr) => (
+    ($e:expr) => {
         return Err($e.into());
-    )
+    };
 }
 
 /// Represents one entid in the entid space.
@@ -129,16 +102,14 @@ impl<V: TransactableValueMarker> Into<ValuePlace<V>> for KnownEntid {
 /// When moving to a more concrete table, such as `datoms`, they are expanded out
 /// via these flags and put into their own column rather than a bit field.
 pub enum AttributeBitFlags {
-    IndexAVET     = 1 << 0,
-    IndexVAET     = 1 << 1,
+    IndexAVET = 1 << 0,
+    IndexVAET = 1 << 1,
     IndexFulltext = 1 << 2,
-    UniqueValue   = 1 << 3,
+    UniqueValue = 1 << 3,
 }
 
 pub mod attribute {
-    use ::{
-        TypedValue,
-    };
+    use TypedValue;
 
     #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
     pub enum Unique {
@@ -161,7 +132,7 @@ pub mod attribute {
 /// with the attribute are interpreted.
 ///
 /// TODO: consider packing this into a bitfield or similar.
-#[derive(Clone,Debug,Eq,Hash,Ord,PartialOrd,PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub struct Attribute {
     /// The associated value type, i.e., `:db/valueType`?
     pub value_type: ValueType,
@@ -234,13 +205,30 @@ impl Attribute {
             attribute_map.insert(values::DB_IDENT.clone(), edn::Value::Keyword(ident));
         }
 
-        attribute_map.insert(values::DB_VALUE_TYPE.clone(), self.value_type.into_edn_value());
+        attribute_map.insert(
+            values::DB_VALUE_TYPE.clone(),
+            self.value_type.into_edn_value(),
+        );
 
-        attribute_map.insert(values::DB_CARDINALITY.clone(), if self.multival { values::DB_CARDINALITY_MANY.clone() } else { values::DB_CARDINALITY_ONE.clone() });
+        attribute_map.insert(
+            values::DB_CARDINALITY.clone(),
+            if self.multival {
+                values::DB_CARDINALITY_MANY.clone()
+            } else {
+                values::DB_CARDINALITY_ONE.clone()
+            },
+        );
 
         match self.unique {
-            Some(attribute::Unique::Value) => { attribute_map.insert(values::DB_UNIQUE.clone(), values::DB_UNIQUE_VALUE.clone()); },
-            Some(attribute::Unique::Identity) => { attribute_map.insert(values::DB_UNIQUE.clone(), values::DB_UNIQUE_IDENTITY.clone()); },
+            Some(attribute::Unique::Value) => {
+                attribute_map.insert(values::DB_UNIQUE.clone(), values::DB_UNIQUE_VALUE.clone());
+            }
+            Some(attribute::Unique::Identity) => {
+                attribute_map.insert(
+                    values::DB_UNIQUE.clone(),
+                    values::DB_UNIQUE_IDENTITY.clone(),
+                );
+            }
             None => (),
         }
 
@@ -310,7 +298,6 @@ impl ValueType {
     }
 }
 
-
 impl ::enum_set::CLike for ValueType {
     fn to_u32(&self) -> u32 {
         *self as u32
@@ -323,16 +310,19 @@ impl ::enum_set::CLike for ValueType {
 
 impl ValueType {
     pub fn into_keyword(self) -> Keyword {
-        Keyword::namespaced("db.type", match self {
-            ValueType::Ref => "ref",
-            ValueType::Boolean => "boolean",
-            ValueType::Instant => "instant",
-            ValueType::Long => "long",
-            ValueType::Double => "double",
-            ValueType::String => "string",
-            ValueType::Keyword => "keyword",
-            ValueType::Uuid => "uuid",
-        })
+        Keyword::namespaced(
+            "db.type",
+            match self {
+                ValueType::Ref => "ref",
+                ValueType::Boolean => "boolean",
+                ValueType::Instant => "instant",
+                ValueType::Long => "long",
+                ValueType::Double => "double",
+                ValueType::String => "string",
+                ValueType::Keyword => "keyword",
+                ValueType::Uuid => "uuid",
+            },
+        )
     }
 
     pub fn from_keyword(keyword: &Keyword) -> Option<Self> {
@@ -350,20 +340,23 @@ impl ValueType {
             "keyword" => Some(ValueType::Keyword),
             "uuid" => Some(ValueType::Uuid),
             _ => None,
-        }
+        };
     }
 
     pub fn into_typed_value(self) -> TypedValue {
-        TypedValue::typed_ns_keyword("db.type", match self {
-            ValueType::Ref => "ref",
-            ValueType::Boolean => "boolean",
-            ValueType::Instant => "instant",
-            ValueType::Long => "long",
-            ValueType::Double => "double",
-            ValueType::String => "string",
-            ValueType::Keyword => "keyword",
-            ValueType::Uuid => "uuid",
-        })
+        TypedValue::typed_ns_keyword(
+            "db.type",
+            match self {
+                ValueType::Ref => "ref",
+                ValueType::Boolean => "boolean",
+                ValueType::Instant => "instant",
+                ValueType::Long => "long",
+                ValueType::Double => "double",
+                ValueType::String => "string",
+                ValueType::Keyword => "keyword",
+                ValueType::Uuid => "uuid",
+            },
+        )
     }
 
     pub fn into_edn_value(self) -> edn::Value {
@@ -382,23 +375,27 @@ impl ValueType {
     pub fn is_numeric(&self) -> bool {
         match self {
             &ValueType::Long | &ValueType::Double => true,
-            _ => false
+            _ => false,
         }
     }
 }
 
 impl fmt::Display for ValueType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match *self {
-            ValueType::Ref =>     ":db.type/ref",
-            ValueType::Boolean => ":db.type/boolean",
-            ValueType::Instant => ":db.type/instant",
-            ValueType::Long =>    ":db.type/long",
-            ValueType::Double =>  ":db.type/double",
-            ValueType::String =>  ":db.type/string",
-            ValueType::Keyword => ":db.type/keyword",
-            ValueType::Uuid =>    ":db.type/uuid",
-        })
+        write!(
+            f,
+            "{}",
+            match *self {
+                ValueType::Ref => ":db.type/ref",
+                ValueType::Boolean => ":db.type/boolean",
+                ValueType::Instant => ":db.type/instant",
+                ValueType::Long => ":db.type/long",
+                ValueType::Double => ":db.type/double",
+                ValueType::String => ":db.type/string",
+                ValueType::Keyword => ":db.type/keyword",
+                ValueType::Uuid => ":db.type/uuid",
+            }
+        )
     }
 }
 
@@ -415,11 +412,11 @@ pub enum TypedValue {
     Boolean(bool),
     Long(i64),
     Double(OrderedFloat<f64>),
-    Instant(DateTime<Utc>),               // Use `into()` to ensure truncation.
+    Instant(DateTime<Utc>), // Use `into()` to ensure truncation.
     // TODO: &str throughout?
     String(ValueRc<String>),
     Keyword(ValueRc<Keyword>),
-    Uuid(Uuid),                        // It's only 128 bits, so this should be acceptable to clone.
+    Uuid(Uuid), // It's only 128 bits, so this should be acceptable to clone.
 }
 
 impl From<KnownEntid> for TypedValue {
@@ -552,7 +549,7 @@ impl TypedValue {
 
                 // Return a C-owned pointer.
                 Some(c.into_raw())
-            },
+            }
             _ => None,
         }
     }
@@ -568,7 +565,7 @@ impl TypedValue {
 
                 // Return a C-owned pointer.
                 Some(c.into_raw())
-            },
+            }
             _ => None,
         }
     }
@@ -577,14 +574,14 @@ impl TypedValue {
         match self {
             TypedValue::Uuid(v) => {
                 // Get an independent copy of the string.
-                let s: String = v.hyphenated().to_string();
+                let s: String = v.to_hyphenated().to_string();
 
                 // Make a CString out of the new bytes.
                 let c: CString = CString::new(s).expect("String conversion failed!");
 
                 // Return a C-owned pointer.
                 Some(c.into_raw())
-            },
+            }
             _ => None,
         }
     }
@@ -598,7 +595,7 @@ impl TypedValue {
 
     pub fn into_uuid_string(self) -> Option<String> {
         match self {
-            TypedValue::Uuid(v) => Some(v.hyphenated().to_string()),
+            TypedValue::Uuid(v) => Some(v.to_hyphenated().to_string()),
             _ => None,
         }
     }
@@ -709,7 +706,6 @@ impl MicrosecondPrecision for DateTime<Utc> {
     }
 }
 
-
 /// The values bound in a query specification can be:
 ///
 /// * Vecs of structured values, for multi-valued component attributes or nested expressions.
@@ -729,7 +725,10 @@ pub enum Binding {
     Map(ValueRc<StructuredMap>),
 }
 
-impl<T> From<T> for Binding where T: Into<TypedValue> {
+impl<T> From<T> for Binding
+where
+    T: Into<TypedValue>,
+{
     fn from(value: T) -> Self {
         Binding::Scalar(value.into())
     }
@@ -813,7 +812,11 @@ impl Deref for StructuredMap {
 }
 
 impl StructuredMap {
-    pub fn insert<N, B>(&mut self, name: N, value: B) where N: Into<ValueRc<Keyword>>, B: Into<Binding> {
+    pub fn insert<N, B>(&mut self, name: N, value: B)
+    where
+        N: Into<ValueRc<Keyword>>,
+        B: Into<Binding>,
+    {
         self.0.insert(name.into(), value.into());
     }
 }
@@ -825,7 +828,10 @@ impl From<IndexMap<ValueRc<Keyword>, Binding>> for StructuredMap {
 }
 
 // Mostly for testing.
-impl<T> From<Vec<(Keyword, T)>> for StructuredMap where T: Into<Binding> {
+impl<T> From<Vec<(Keyword, T)>> for StructuredMap
+where
+    T: Into<Binding>,
+{
     fn from(value: Vec<(Keyword, T)>) -> Self {
         let mut sm = StructuredMap::default();
         for (k, v) in value.into_iter() {
@@ -936,7 +942,7 @@ impl Binding {
 
     pub fn into_uuid_string(self) -> Option<String> {
         match self {
-            Binding::Scalar(TypedValue::Uuid(v)) => Some(v.hyphenated().to_string()),
+            Binding::Scalar(TypedValue::Uuid(v)) => Some(v.to_hyphenated().to_string()),
             _ => None,
         }
     }

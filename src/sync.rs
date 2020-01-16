@@ -10,19 +10,11 @@
 
 use uuid::Uuid;
 
-use mentat_transaction::{
-    InProgress,
-};
+use mentat_transaction::InProgress;
 
-use errors::{
-    Result,
-};
+use super::errors::Result;
 
-use mentat_tolstoy::{
-    Syncer,
-    RemoteClient,
-    SyncReport,
-};
+use mentat_tolstoy::{RemoteClient, SyncReport, Syncer};
 
 pub trait Syncable {
     fn sync(&mut self, server_uri: &String, user_uuid: &String) -> Result<SyncReport>;
@@ -36,11 +28,8 @@ impl<'a, 'c> Syncable for InProgress<'a, 'c> {
         // and to separate concerns.
         // But for all intents and purposes, Syncer operates over a "mentat transaction",
         // which is exactly what InProgress represents.
-        let mut remote_client = RemoteClient::new(
-            server_uri.to_string(),
-            Uuid::parse_str(&user_uuid)?
-        );
-        Syncer::sync(self, &mut remote_client)
-            .map_err(|e| e.into())
+        let mut remote_client =
+            RemoteClient::new(server_uri.to_string(), Uuid::parse_str(&user_uuid)?);
+        Syncer::sync(self, &mut remote_client).map_err(|e| e.into())
     }
 }

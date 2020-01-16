@@ -9,15 +9,10 @@
 // specific language governing permissions and limitations under the License.
 
 pub mod strings {
-    use std::ffi::{
-        CString,
-        CStr
-    };
+    use std::ffi::{CStr, CString};
     use std::os::raw::c_char;
 
-    use mentat::{
-        Keyword,
-    };
+    use mentat::Keyword;
 
     pub fn c_char_to_string(cchar: *const c_char) -> &'static str {
         assert!(!cchar.is_null());
@@ -25,35 +20,38 @@ pub mod strings {
         c_str.to_str().unwrap_or("")
     }
 
-    pub fn string_to_c_char<T>(r_string: T) -> *mut c_char where T: Into<String> {
+    pub fn string_to_c_char<T>(r_string: T) -> *mut c_char
+    where
+        T: Into<String>,
+    {
         CString::new(r_string.into()).unwrap().into_raw()
     }
 
     pub fn kw_from_string(keyword_string: &'static str) -> Keyword {
         // TODO: validate. The input might not be a keyword!
-        let attr_name = keyword_string.trim_left_matches(":");
+        let attr_name = keyword_string.trim_start_matches(":");
         let parts: Vec<&str> = attr_name.split("/").collect();
         Keyword::namespaced(parts[0], parts[1])
     }
 }
 
 pub mod log {
-    #[cfg(all(target_os="android", not(test)))]
+    #[cfg(all(target_os = "android", not(test)))]
     use std::ffi::CString;
 
-    #[cfg(all(target_os="android", not(test)))]
+    #[cfg(all(target_os = "android", not(test)))]
     use android;
 
     // TODO far from ideal. And, we might actually want to println in tests.
-    #[cfg(all(not(target_os="android"), not(target_os="ios")))]
+    #[cfg(all(not(target_os = "android"), not(target_os = "ios")))]
     pub fn d(_: &str) {}
 
-    #[cfg(all(target_os="ios", not(test)))]
+    #[cfg(all(target_os = "ios", not(test)))]
     pub fn d(message: &str) {
         eprintln!("{}", message);
     }
 
-    #[cfg(all(target_os="android", not(test)))]
+    #[cfg(all(target_os = "android", not(test)))]
     pub fn d(message: &str) {
         let message = CString::new(message).unwrap();
         let message = message.as_ptr();
@@ -65,9 +63,9 @@ pub mod log {
 
 pub mod error {
     use super::strings::string_to_c_char;
-    use std::os::raw::c_char;
     use std::boxed::Box;
     use std::fmt::Display;
+    use std::os::raw::c_char;
     use std::ptr;
 
     /// Represents an error that occurred on the mentat side. Many mentat FFI functions take a
@@ -96,7 +94,9 @@ pub mod error {
 
     impl Default for ExternError {
         fn default() -> ExternError {
-            ExternError { message: ptr::null_mut() }
+            ExternError {
+                message: ptr::null_mut(),
+            }
         }
     }
 
@@ -108,7 +108,9 @@ pub mod error {
     ///   message (which was allocated on the heap and should eventually be freed) into
     ///   `error.message`
     pub unsafe fn translate_result<T, E>(result: Result<T, E>, error: *mut ExternError) -> *mut T
-    where E: Display {
+    where
+        E: Display,
+    {
         // TODO: can't unwind across FFI...
         assert!(!error.is_null(), "Error output parameter is not optional");
         let error = &mut *error;
@@ -131,8 +133,13 @@ pub mod error {
     /// - If `result` is `Err(e)`, returns a null pointer and stores a string representing the error
     ///   message (which was allocated on the heap and should eventually be freed) into
     ///   `error.message`
-    pub unsafe fn translate_opt_result<T, E>(result: Result<Option<T>, E>, error: *mut ExternError) -> *mut T
-    where E: Display {
+    pub unsafe fn translate_opt_result<T, E>(
+        result: Result<Option<T>, E>,
+        error: *mut ExternError,
+    ) -> *mut T
+    where
+        E: Display,
+    {
         assert!(!error.is_null(), "Error output parameter is not optional");
         let error = &mut *error;
         error.message = ptr::null_mut();
@@ -148,10 +155,12 @@ pub mod error {
 
     /// Identical to `translate_result`, but with additional type checking for the case that we have
     /// a `Result<(), E>` (which we're about to drop on the floor).
-    pub unsafe fn translate_void_result<E>(result: Result<(), E>, error: *mut ExternError) where E: Display {
+    pub unsafe fn translate_void_result<E>(result: Result<(), E>, error: *mut ExternError)
+    where
+        E: Display,
+    {
         // Note that Box<T> guarantees that if T is zero sized, it's not heap allocated. So not
         // only do we never need to free the return value of this, it would be a problem if someone did.
         translate_result(result, error);
     }
 }
-

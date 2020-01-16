@@ -13,85 +13,59 @@ extern crate lazy_static;
 
 #[macro_use]
 extern crate mentat;
-extern crate mentat_core;
-extern crate core_traits;
-extern crate mentat_db;
-extern crate rusqlite;
+
+use mentat_db;
+use rusqlite;
 
 use mentat::vocabulary;
 
 use mentat::vocabulary::{
-    Definition,
-    SimpleVocabularySource,
-    Version,
-    VersionedStore,
-    Vocabulary,
-    VocabularyCheck,
-    VocabularyOutcome,
-    VocabularySource,
-    VocabularyStatus,
+    Definition, SimpleVocabularySource, Version, VersionedStore, Vocabulary, VocabularyCheck,
+    VocabularyOutcome, VocabularySource, VocabularyStatus,
 };
 
 use mentat::query::IntoResult;
 
-use mentat_core::{
-    HasSchema,
-};
+use mentat_core::HasSchema;
 
-use core_traits::attribute::{
-    Unique,
-};
+use core_traits::attribute::Unique;
 
 // To check our working.
 use mentat_db::AttributeValidation;
 
 use mentat::{
-    Conn,
-    InProgress,
-    KnownEntid,
-    Keyword,
-    QueryInputs,
-    Queryable,
-    RelResult,
-    Store,
-    Binding,
-    TypedValue,
-    ValueType,
+    Binding, Conn, InProgress, Keyword, KnownEntid, QueryInputs, Queryable, RelResult, Store,
+    TypedValue, ValueType,
 };
 
-use mentat::entity_builder::{
-    BuildTerms,
-    TermBuilder,
-};
+use mentat::entity_builder::{BuildTerms, TermBuilder};
 
 use mentat::errors::MentatError;
 
 lazy_static! {
-    static ref FOO_NAME: Keyword = {
-        kw!(:foo/name)
-    };
-
-    static ref FOO_MOMENT: Keyword = {
-        kw!(:foo/moment)
-    };
-
+    static ref FOO_NAME: Keyword = { kw!(:foo/name) };
+    static ref FOO_MOMENT: Keyword = { kw!(:foo/moment) };
     static ref FOO_VOCAB: vocabulary::Definition = {
         vocabulary::Definition {
             name: kw!(:org.mozilla/foo),
             version: 1,
             attributes: vec![
-                (FOO_NAME.clone(),
-                vocabulary::AttributeBuilder::helpful()
-                    .value_type(ValueType::String)
-                    .multival(false)
-                    .unique(Unique::Identity)
-                    .build()),
-                (FOO_MOMENT.clone(),
-                vocabulary::AttributeBuilder::helpful()
-                    .value_type(ValueType::Instant)
-                    .multival(false)
-                    .index(true)
-                    .build()),
+                (
+                    FOO_NAME.clone(),
+                    vocabulary::AttributeBuilder::helpful()
+                        .value_type(ValueType::String)
+                        .multival(false)
+                        .unique(Unique::Identity)
+                        .build(),
+                ),
+                (
+                    FOO_MOMENT.clone(),
+                    vocabulary::AttributeBuilder::helpful()
+                        .value_type(ValueType::Instant)
+                        .multival(false)
+                        .index(true)
+                        .build(),
+                ),
             ],
             pre: Definition::no_op,
             post: Definition::no_op,
@@ -100,19 +74,30 @@ lazy_static! {
 }
 
 // Do some work with the appropriate level of paranoia for a shared system.
-fn be_paranoid(conn: &mut Conn, sqlite: &mut rusqlite::Connection, name: TypedValue, moment: TypedValue) {
+fn be_paranoid(
+    conn: &mut Conn,
+    sqlite: &mut rusqlite::Connection,
+    name: TypedValue,
+    moment: TypedValue,
+) {
     let mut in_progress = conn.begin_transaction(sqlite).expect("begun successfully");
     assert!(in_progress.verify_core_schema().is_ok());
     assert!(in_progress.ensure_vocabulary(&FOO_VOCAB).is_ok());
 
-    let a_moment = in_progress.attribute_for_ident(&FOO_MOMENT).expect("exists").1;
-    let a_name = in_progress.attribute_for_ident(&FOO_NAME).expect("exists").1;
+    let a_moment = in_progress
+        .attribute_for_ident(&FOO_MOMENT)
+        .expect("exists")
+        .1;
+    let a_name = in_progress
+        .attribute_for_ident(&FOO_NAME)
+        .expect("exists")
+        .1;
 
     let builder = in_progress.builder();
     let mut entity = builder.describe_tempid("s");
     entity.add(a_name, name).expect("added");
     entity.add(a_moment, moment).expect("added");
-    assert!(entity.commit().is_ok());      // Discard the TxReport.
+    assert!(entity.commit().is_ok()); // Discard the TxReport.
 }
 
 #[test]
@@ -127,60 +112,59 @@ fn test_real_world() {
     be_paranoid(&mut conn, &mut sqlite, alice.clone(), now.clone());
     be_paranoid(&mut conn, &mut sqlite, barbara.clone(), now.clone());
 
-    let results = conn.q_once(&mut sqlite, r#"[:find ?name ?when
+    let results = conn
+        .q_once(
+            &mut sqlite,
+            r#"[:find ?name ?when
                                                :order (asc ?name)
                                                :where [?x :foo/name ?name]
                                                       [?x :foo/moment ?when]
                                                ]"#,
-                              None)
-                      .into_rel_result()
-                      .expect("query succeeded");
-    assert_eq!(results,
-               vec![vec![alice, now.clone()], vec![barbara, now.clone()]].into());
+            None,
+        )
+        .into_rel_result()
+        .expect("query succeeded");
+    assert_eq!(
+        results,
+        vec![vec![alice, now.clone()], vec![barbara, now.clone()]].into()
+    );
 }
 
 #[test]
 fn test_default_attributebuilder_complains() {
     // ::new is helpful. ::default is not.
     assert!(vocabulary::AttributeBuilder::default()
-                  .value_type(ValueType::String)
-                  .multival(true)
-                  .fulltext(true)
-                  .build()
-                  .validate(|| "Foo".to_string())
-                  .is_err());
+        .value_type(ValueType::String)
+        .multival(true)
+        .fulltext(true)
+        .build()
+        .validate(|| "Foo".to_string())
+        .is_err());
 
     assert!(vocabulary::AttributeBuilder::helpful()
-                  .value_type(ValueType::String)
-                  .multival(true)
-                  .fulltext(true)
-                  .build()
-                  .validate(|| "Foo".to_string())
-                  .is_ok());
+        .value_type(ValueType::String)
+        .multival(true)
+        .fulltext(true)
+        .build()
+        .validate(|| "Foo".to_string())
+        .is_ok());
 }
 
 #[test]
 fn test_add_vocab() {
     let bar = vocabulary::AttributeBuilder::helpful()
-                  .value_type(ValueType::Instant)
-                  .multival(false)
-                  .index(true)
-                  .build();
+        .value_type(ValueType::Instant)
+        .multival(false)
+        .index(true)
+        .build();
     let baz = vocabulary::AttributeBuilder::helpful()
-                  .value_type(ValueType::String)
-                  .multival(true)
-                  .fulltext(true)
-                  .build();
-    let bar_only = vec![
-        (kw!(:foo/bar), bar.clone()),
-    ];
-    let baz_only = vec![
-        (kw!(:foo/baz), baz.clone()),
-    ];
-    let bar_and_baz = vec![
-        (kw!(:foo/bar), bar.clone()),
-        (kw!(:foo/baz), baz.clone()),
-    ];
+        .value_type(ValueType::String)
+        .multival(true)
+        .fulltext(true)
+        .build();
+    let bar_only = vec![(kw!(:foo/bar), bar.clone())];
+    let baz_only = vec![(kw!(:foo/baz), baz.clone())];
+    let bar_and_baz = vec![(kw!(:foo/bar), bar.clone()), (kw!(:foo/baz), baz.clone())];
 
     let foo_v1_a = vocabulary::Definition::new(kw!(:org.mozilla/foo), 1, bar_only.clone());
     let foo_v1_b = vocabulary::Definition::new(kw!(:org.mozilla/foo), 1, bar_and_baz.clone());
@@ -200,105 +184,156 @@ fn test_add_vocab() {
 
     // Scoped borrow of `conn`.
     {
-        let mut in_progress = conn.begin_transaction(&mut sqlite).expect("begun successfully");
+        let mut in_progress = conn
+            .begin_transaction(&mut sqlite)
+            .expect("begun successfully");
 
         assert!(in_progress.verify_core_schema().is_ok());
-        assert_eq!(VocabularyCheck::NotPresent, in_progress.check_vocabulary(&foo_v1_a).expect("check completed"));
-        assert_eq!(VocabularyCheck::NotPresent, in_progress.check_vocabulary(&foo_v1_b).expect("check completed"));
+        assert_eq!(
+            VocabularyCheck::NotPresent,
+            in_progress
+                .check_vocabulary(&foo_v1_a)
+                .expect("check completed")
+        );
+        assert_eq!(
+            VocabularyCheck::NotPresent,
+            in_progress
+                .check_vocabulary(&foo_v1_b)
+                .expect("check completed")
+        );
 
         // If we install v1.a, then it will succeed.
-        assert_eq!(VocabularyOutcome::Installed, in_progress.ensure_vocabulary(&foo_v1_a).expect("ensure succeeded"));
+        assert_eq!(
+            VocabularyOutcome::Installed,
+            in_progress
+                .ensure_vocabulary(&foo_v1_a)
+                .expect("ensure succeeded")
+        );
 
         // Now we can query to get the vocab.
-        let ver_attr =
-            in_progress.q_once(foo_version_query, None)
-                       .into_tuple_result()
-                       .expect("query returns")
-                       .expect("a result");
+        let ver_attr = in_progress
+            .q_once(foo_version_query, None)
+            .into_tuple_result()
+            .expect("query returns")
+            .expect("a result");
         assert_eq!(ver_attr[0], TypedValue::Long(1).into());
-        assert_eq!(ver_attr[1], TypedValue::typed_ns_keyword("foo", "bar").into());
+        assert_eq!(
+            ver_attr[1],
+            TypedValue::typed_ns_keyword("foo", "bar").into()
+        );
 
         // If we commit, it'll stick around.
         in_progress.commit().expect("commit succeeded");
     }
 
     // It's still there.
-    let ver_attr =
-        conn.q_once(&mut sqlite,
-                    foo_version_query,
-                    None)
-            .into_tuple_result()
-            .expect("query returns")
-            .expect("a result");
+    let ver_attr = conn
+        .q_once(&mut sqlite, foo_version_query, None)
+        .into_tuple_result()
+        .expect("query returns")
+        .expect("a result");
     assert_eq!(ver_attr[0], TypedValue::Long(1).into());
-    assert_eq!(ver_attr[1], TypedValue::typed_ns_keyword("foo", "bar").into());
-
-    // Scoped borrow of `conn`.
-    {
-        let mut in_progress = conn.begin_transaction(&mut sqlite).expect("begun successfully");
-
-        // Subsequently ensuring v1.a again will succeed with no work done.
-        assert_eq!(VocabularyCheck::Present, in_progress.check_vocabulary(&foo_v1_a).expect("check completed"));
-
-        // Checking for v1.b will say that we have work to do.
-        assert_eq!(VocabularyCheck::PresentButMissingAttributes {
-            attributes: vec![&baz_only[0]],
-        }, in_progress.check_vocabulary(&foo_v1_b).expect("check completed"));
-
-        // Ensuring v1.b will succeed.
-        assert_eq!(VocabularyOutcome::InstalledMissingAttributes,
-                   in_progress.ensure_vocabulary(&foo_v1_b).expect("ensure succeeded"));
-
-        // Checking v1.a or v1.b again will still succeed with no work done.
-        assert_eq!(VocabularyCheck::Present, in_progress.check_vocabulary(&foo_v1_a).expect("check completed"));
-        assert_eq!(VocabularyCheck::Present, in_progress.check_vocabulary(&foo_v1_b).expect("check completed"));
-
-        // Ensuring again does nothing.
-        assert_eq!(VocabularyOutcome::Existed, in_progress.ensure_vocabulary(&foo_v1_b).expect("ensure succeeded"));
-        in_progress.commit().expect("commit succeeded");
-    }
-
-    // We have both attributes.
-    let actual_attributes =
-        conn.q_once(&mut sqlite,
-                    foo_attributes_query,
-                    None)
-            .into_coll_result()
-            .expect("query returns");
-    assert_eq!(actual_attributes,
-               vec![
-                   TypedValue::typed_ns_keyword("foo", "bar").into(),
-                   TypedValue::typed_ns_keyword("foo", "baz").into(),
-               ]);
-
-    // Now let's modify our vocabulary without bumping the version. This is invalid and will result
-    // in an error.
-    let malformed_baz = vocabulary::AttributeBuilder::default()
-                            .value_type(ValueType::Instant)
-                            .multival(true)
-                            .build();
-    let bar_and_malformed_baz = vec![
-        (kw!(:foo/bar), bar),
-        (kw!(:foo/baz), malformed_baz.clone()),
-    ];
-
-    let foo_v1_malformed = vocabulary::Definition::new(
-        kw!(:org.mozilla/foo),
-        1,
-        bar_and_malformed_baz.clone()
+    assert_eq!(
+        ver_attr[1],
+        TypedValue::typed_ns_keyword("foo", "bar").into()
     );
 
     // Scoped borrow of `conn`.
     {
-        let mut in_progress = conn.begin_transaction(&mut sqlite).expect("begun successfully");
-        match in_progress.ensure_vocabulary(&foo_v1_malformed).expect_err("expected vocabulary to fail") {
+        let mut in_progress = conn
+            .begin_transaction(&mut sqlite)
+            .expect("begun successfully");
+
+        // Subsequently ensuring v1.a again will succeed with no work done.
+        assert_eq!(
+            VocabularyCheck::Present,
+            in_progress
+                .check_vocabulary(&foo_v1_a)
+                .expect("check completed")
+        );
+
+        // Checking for v1.b will say that we have work to do.
+        assert_eq!(
+            VocabularyCheck::PresentButMissingAttributes {
+                attributes: vec![&baz_only[0]],
+            },
+            in_progress
+                .check_vocabulary(&foo_v1_b)
+                .expect("check completed")
+        );
+
+        // Ensuring v1.b will succeed.
+        assert_eq!(
+            VocabularyOutcome::InstalledMissingAttributes,
+            in_progress
+                .ensure_vocabulary(&foo_v1_b)
+                .expect("ensure succeeded")
+        );
+
+        // Checking v1.a or v1.b again will still succeed with no work done.
+        assert_eq!(
+            VocabularyCheck::Present,
+            in_progress
+                .check_vocabulary(&foo_v1_a)
+                .expect("check completed")
+        );
+        assert_eq!(
+            VocabularyCheck::Present,
+            in_progress
+                .check_vocabulary(&foo_v1_b)
+                .expect("check completed")
+        );
+
+        // Ensuring again does nothing.
+        assert_eq!(
+            VocabularyOutcome::Existed,
+            in_progress
+                .ensure_vocabulary(&foo_v1_b)
+                .expect("ensure succeeded")
+        );
+        in_progress.commit().expect("commit succeeded");
+    }
+
+    // We have both attributes.
+    let actual_attributes = conn
+        .q_once(&mut sqlite, foo_attributes_query, None)
+        .into_coll_result()
+        .expect("query returns");
+    assert_eq!(
+        actual_attributes,
+        vec![
+            TypedValue::typed_ns_keyword("foo", "bar").into(),
+            TypedValue::typed_ns_keyword("foo", "baz").into(),
+        ]
+    );
+
+    // Now let's modify our vocabulary without bumping the version. This is invalid and will result
+    // in an error.
+    let malformed_baz = vocabulary::AttributeBuilder::default()
+        .value_type(ValueType::Instant)
+        .multival(true)
+        .build();
+    let bar_and_malformed_baz = vec![(kw!(:foo/bar), bar), (kw!(:foo/baz), malformed_baz.clone())];
+
+    let foo_v1_malformed =
+        vocabulary::Definition::new(kw!(:org.mozilla/foo), 1, bar_and_malformed_baz.clone());
+
+    // Scoped borrow of `conn`.
+    {
+        let mut in_progress = conn
+            .begin_transaction(&mut sqlite)
+            .expect("begun successfully");
+        match in_progress
+            .ensure_vocabulary(&foo_v1_malformed)
+            .expect_err("expected vocabulary to fail")
+        {
             MentatError::ConflictingAttributeDefinitions(vocab, version, attr, theirs, ours) => {
                 assert_eq!(vocab.as_str(), ":org.mozilla/foo");
                 assert_eq!(attr.as_str(), ":foo/baz");
                 assert_eq!(version, 1);
                 assert_eq!(&theirs, &baz);
                 assert_eq!(&ours, &malformed_baz);
-            },
+            }
             _ => panic!(),
         }
     }
@@ -308,34 +343,48 @@ fn test_add_vocab() {
     // bump the version number.
 
     let multival_bar = vocabulary::AttributeBuilder::helpful()
-                  .value_type(ValueType::Instant)
-                  .multival(true)
-                  .index(true)
-                  .build();
-    let multival_bar_and_baz = vec![
-        (kw!(:foo/bar), multival_bar),
-        (kw!(:foo/baz), baz.clone()),
-    ];
+        .value_type(ValueType::Instant)
+        .multival(true)
+        .index(true)
+        .build();
+    let multival_bar_and_baz = vec![(kw!(:foo/bar), multival_bar), (kw!(:foo/baz), baz.clone())];
 
-    let altered_vocabulary = vocabulary::Definition::new(
-        kw!(:org.mozilla/foo),
-        2,
-        multival_bar_and_baz
-    );
+    let altered_vocabulary =
+        vocabulary::Definition::new(kw!(:org.mozilla/foo), 2, multival_bar_and_baz);
 
     // foo/bar starts single-valued.
-    assert_eq!(false, conn.current_schema().attribute_for_ident(&kw!(:foo/bar)).expect("attribute").0.multival);
+    assert_eq!(
+        false,
+        conn.current_schema()
+            .attribute_for_ident(&kw!(:foo/bar))
+            .expect("attribute")
+            .0
+            .multival
+    );
 
     // Scoped borrow of `conn`.
     {
-        let mut in_progress = conn.begin_transaction(&mut sqlite).expect("begun successfully");
-        assert_eq!(in_progress.ensure_vocabulary(&altered_vocabulary).expect("success"),
-                   VocabularyOutcome::Upgraded);
+        let mut in_progress = conn
+            .begin_transaction(&mut sqlite)
+            .expect("begun successfully");
+        assert_eq!(
+            in_progress
+                .ensure_vocabulary(&altered_vocabulary)
+                .expect("success"),
+            VocabularyOutcome::Upgraded
+        );
         in_progress.commit().expect("commit succeeded");
     }
 
     // Now it's multi-valued.
-    assert_eq!(true, conn.current_schema().attribute_for_ident(&kw!(:foo/bar)).expect("attribute").0.multival);
+    assert_eq!(
+        true,
+        conn.current_schema()
+            .attribute_for_ident(&kw!(:foo/bar))
+            .expect("attribute")
+            .0
+            .multival
+    );
 }
 
 /// A helper to turn rows from `[:find ?e ?a :where [?e ?a ?v]]` into a tuple.
@@ -344,7 +393,7 @@ fn ea(row: Vec<Binding>) -> (KnownEntid, KnownEntid) {
     match (row.next(), row.next()) {
         (Some(Binding::Scalar(TypedValue::Ref(e))), Some(Binding::Scalar(TypedValue::Ref(a)))) => {
             (KnownEntid(e), KnownEntid(a))
-        },
+        }
         _ => panic!("Incorrect query shape for 'ea' helper."),
     }
 }
@@ -356,7 +405,7 @@ fn av(row: Vec<Binding>) -> (KnownEntid, TypedValue) {
     match (row.next(), row.next()) {
         (Some(Binding::Scalar(TypedValue::Ref(a))), Some(v)) => {
             (KnownEntid(a), v.into_scalar().unwrap())
-        },
+        }
         _ => panic!("Incorrect query shape for 'av' helper."),
     }
 }
@@ -378,14 +427,17 @@ fn inches_to_cm(inches: Inches) -> Centimeters {
     (inches as f64 * 2.54f64) as Centimeters
 }
 
-fn height_of_person(in_progress: &InProgress, name: &str) -> Option<i64> {
-    let h = in_progress.q_once(r#"[:find ?h .
+fn height_of_person(in_progress: &InProgress<'_, '_>, name: &str) -> Option<i64> {
+    let h = in_progress
+        .q_once(
+            r#"[:find ?h .
                                     :in ?name
                                     :where [?p :person/name ?name]
                                             [?p :person/height ?h]]"#,
-                                QueryInputs::with_value_sequence(vec![(var!(?name), TypedValue::typed_string(name))]))
-                        .into_scalar_result()
-                        .expect("result");
+            QueryInputs::with_value_sequence(vec![(var!(?name), TypedValue::typed_string(name))]),
+        )
+        .into_scalar_result()
+        .expect("result");
     match h {
         Some(Binding::Scalar(TypedValue::Long(v))) => Some(v),
         _ => None,
@@ -433,13 +485,13 @@ fn test_upgrade_with_functions() {
     let food_v1 = vocabulary::Definition {
         name: kw!(:org.mozilla/food),
         version: 1,
-        attributes: vec![
-            (kw!(:food/name),
-             vocabulary::AttributeBuilder::helpful()
+        attributes: vec![(
+            kw!(:food/name),
+            vocabulary::AttributeBuilder::helpful()
                 .value_type(ValueType::String)
                 .multival(false)
-                .build()),
-        ],
+                .build(),
+        )],
         pre: Definition::no_op,
         post: Definition::no_op,
     };
@@ -448,18 +500,22 @@ fn test_upgrade_with_functions() {
         name: kw!(:org.mozilla/movies),
         version: 1,
         attributes: vec![
-            (kw!(:movie/year),
-             vocabulary::AttributeBuilder::helpful()
-                .value_type(ValueType::Long)             // No need for Instant here.
-                .multival(false)
-                .build()),
-            (kw!(:movie/title),
-             vocabulary::AttributeBuilder::helpful()
-                .value_type(ValueType::String)
-                .multival(false)
-                .unique(Unique::Identity)
-                .index(true)
-                .build()),
+            (
+                kw!(:movie/year),
+                vocabulary::AttributeBuilder::helpful()
+                    .value_type(ValueType::Long) // No need for Instant here.
+                    .multival(false)
+                    .build(),
+            ),
+            (
+                kw!(:movie/title),
+                vocabulary::AttributeBuilder::helpful()
+                    .value_type(ValueType::String)
+                    .multival(false)
+                    .unique(Unique::Identity)
+                    .index(true)
+                    .build(),
+            ),
         ],
         pre: Definition::no_op,
         post: Definition::no_op,
@@ -469,46 +525,55 @@ fn test_upgrade_with_functions() {
         name: kw!(:org.mozilla/people),
         version: 1,
         attributes: vec![
-            (kw!(:person/name),
-             vocabulary::AttributeBuilder::helpful()
-                .value_type(ValueType::String)
-                .multival(false)
-                .unique(Unique::Identity)
-                .index(true)
-                .build()),
-            (kw!(:person/height),
-             vocabulary::AttributeBuilder::helpful()
-                .value_type(ValueType::Long)
-                .multival(false)
-                .build()),
-            (kw!(:person/likes),
-             vocabulary::AttributeBuilder::helpful()
-                .value_type(ValueType::Ref)
-                .multival(true)
-                .build()),
+            (
+                kw!(:person/name),
+                vocabulary::AttributeBuilder::helpful()
+                    .value_type(ValueType::String)
+                    .multival(false)
+                    .unique(Unique::Identity)
+                    .index(true)
+                    .build(),
+            ),
+            (
+                kw!(:person/height),
+                vocabulary::AttributeBuilder::helpful()
+                    .value_type(ValueType::Long)
+                    .multival(false)
+                    .build(),
+            ),
+            (
+                kw!(:person/likes),
+                vocabulary::AttributeBuilder::helpful()
+                    .value_type(ValueType::Ref)
+                    .multival(true)
+                    .build(),
+            ),
         ],
         pre: Definition::no_op,
         post: Definition::no_op,
     };
 
     // Apply v1 of each.
-    let mut v1_provider = SimpleVocabularySource::with_definitions(
-        vec![
-            food_v1.clone(),
-            movies_v1.clone(),
-            people_v1.clone(),
-        ]);
+    let mut v1_provider = SimpleVocabularySource::with_definitions(vec![
+        food_v1.clone(),
+        movies_v1.clone(),
+        people_v1.clone(),
+    ]);
 
     // Mutable borrow of store.
     {
         let mut in_progress = store.begin_transaction().expect("began");
 
-        in_progress.ensure_vocabularies(&mut v1_provider).expect("success");
+        in_progress
+            .ensure_vocabularies(&mut v1_provider)
+            .expect("success");
 
         // Also add some data. We do this in one transaction 'cos -- thanks to the modeling errors
         // we are about to fix! -- it's a little awkward to make references to entities without
         // unique attributes.
-        in_progress.transact(r#"[
+        in_progress
+            .transact(
+                r#"[
             {:movie/title "John Wick"
              :movie/year 2014
              :db/id "mjw"}
@@ -544,7 +609,9 @@ fn test_upgrade_with_functions() {
              :person/height 68
              :person/likes ["muc", "mp", "md", "fwbw", "fS"]}
 
-        ]"#).expect("transacted");
+        ]"#,
+            )
+            .expect("transacted");
 
         in_progress.commit().expect("commit succeeded");
     }
@@ -557,15 +624,15 @@ fn test_upgrade_with_functions() {
     let movies_v2 = vocabulary::Definition {
         name: kw!(:org.mozilla/movies),
         version: 2,
-        attributes: vec![
-            (kw!(:movie/title),
-             vocabulary::AttributeBuilder::helpful()
+        attributes: vec![(
+            kw!(:movie/title),
+            vocabulary::AttributeBuilder::helpful()
                 .value_type(ValueType::String)
                 .multival(false)
                 .non_unique()
                 .index(true)
-                .build()),
-        ],
+                .build(),
+        )],
         pre: Definition::no_op,
         post: Definition::no_op,
     };
@@ -577,20 +644,33 @@ fn test_upgrade_with_functions() {
 
         // We can now add another Dune movie: Denis Villeneuve's 2019 version.
         // (Let's just pretend that it's been released, here in 2018!)
-        in_progress.transact(r#"[
+        in_progress
+            .transact(
+                r#"[
             {:movie/title "Dune"
              :movie/year 2019}
-        ]"#).expect("transact succeeded");
+        ]"#,
+            )
+            .expect("transact succeeded");
 
         // And we can query both.
-        let years =
-            in_progress.q_once(r#"[:find [?year ...]
+        let years = in_progress
+            .q_once(
+                r#"[:find [?year ...]
                                    :where [?movie :movie/title "Dune"]
                                            [?movie :movie/year ?year]
-                                   :order (asc ?year)]"#, None)
-                       .into_coll_result()
-                       .expect("coll");
-        assert_eq!(years, vec![Binding::Scalar(TypedValue::Long(1984)), Binding::Scalar(TypedValue::Long(2019))]);
+                                   :order (asc ?year)]"#,
+                None,
+            )
+            .into_coll_result()
+            .expect("coll");
+        assert_eq!(
+            years,
+            vec![
+                Binding::Scalar(TypedValue::Long(1984)),
+                Binding::Scalar(TypedValue::Long(2019))
+            ]
+        );
         in_progress.commit().expect("commit succeeded");
     }
 
@@ -598,23 +678,35 @@ fn test_upgrade_with_functions() {
     // Migration 2: let's fix those heights!
     //
 
-    fn convert_heights_to_centimeters(ip: &mut InProgress, from: &Vocabulary) -> mentat::errors::Result<()> {
+    fn convert_heights_to_centimeters(
+        ip: &mut InProgress<'_, '_>,
+        from: &Vocabulary,
+    ) -> mentat::errors::Result<()> {
         let mut builder = TermBuilder::new();
 
         // We keep a redundant safety check here to avoid running twice!
         if from.version < 2 {
             // Find every height and multiply it by 2.54.
             let person_height = ip.get_entid(&kw!(:person/height)).unwrap();
-            for row in ip.q_once("[:find ?p ?h :where [?p :person/height ?h]]", None)
-                         .into_rel_result()?
-                         .into_iter() {
+            for row in ip
+                .q_once("[:find ?p ?h :where [?p :person/height ?h]]", None)
+                .into_rel_result()?
+                .into_iter()
+            {
                 let mut row = row.into_iter();
                 match (row.next(), row.next()) {
-                    (Some(Binding::Scalar(TypedValue::Ref(person))), Some(Binding::Scalar(TypedValue::Long(height)))) => {
+                    (
+                        Some(Binding::Scalar(TypedValue::Ref(person))),
+                        Some(Binding::Scalar(TypedValue::Long(height))),
+                    ) => {
                         // No need to explicitly retract: cardinality-one.
-                        builder.add(KnownEntid(person), person_height, TypedValue::Long(inches_to_cm(height)))?;
-                    },
-                    _ => {},
+                        builder.add(
+                            KnownEntid(person),
+                            person_height,
+                            TypedValue::Long(inches_to_cm(height)),
+                        )?;
+                    }
+                    _ => {}
                 }
             }
         }
@@ -623,17 +715,24 @@ fn test_upgrade_with_functions() {
             return Ok(());
         }
 
-        ip.transact_builder(builder).and(Ok(())).map_err(|e| e.into())
+        ip.transact_builder(builder)
+            .and(Ok(()))
+            .map_err(|e| e.into())
     }
 
-    fn people_v1_to_v2(ip: &mut InProgress, from: &Vocabulary) -> mentat::errors::Result<()> {
+    fn people_v1_to_v2(
+        ip: &mut InProgress<'_, '_>,
+        from: &Vocabulary,
+    ) -> mentat::errors::Result<()> {
         convert_heights_to_centimeters(ip, from)?;
 
         // Let's update our documentation, too.
         if from.version < 2 {
-            ip.transact(r#"[
+            ip.transact(
+                r#"[
                 [:db/add :person/height :db/doc "A person's height in centimeters."]
-            ]"#)?;
+            ]"#,
+            )?;
         }
         Ok(())
     }
@@ -655,7 +754,9 @@ fn test_upgrade_with_functions() {
         // Before, Sam's height is 64 (inches).
         assert_eq!(Some(64), height_of_person(&in_progress, "Sam"));
 
-        in_progress.ensure_vocabulary(&people_v2).expect("expected success");
+        in_progress
+            .ensure_vocabulary(&people_v2)
+            .expect("expected success");
 
         // Now, Sam's height is 162 (centimeters).
         assert_eq!(Some(162), height_of_person(&in_progress, "Sam"));
@@ -671,24 +772,32 @@ fn test_upgrade_with_functions() {
     /// This is a straightforward migration -- replace the old name with the new one.
     /// This would be everything we need if we _knew_ there were no collisions (e.g., we were
     /// cleaning up UUIDs).
-    fn lowercase_names(ip: &mut InProgress) -> mentat::errors::Result<()> {
+    fn lowercase_names(ip: &mut InProgress<'_, '_>) -> mentat::errors::Result<()> {
         let food_name = ip.get_entid(&kw!(:food/name)).unwrap();
         let mut builder = TermBuilder::new();
-        for row in ip.q_once("[:find ?f ?name :where [?f :food/name ?name]]", None)
-                     .into_rel_result()?
-                     .into_iter() {
+        for row in ip
+            .q_once("[:find ?f ?name :where [?f :food/name ?name]]", None)
+            .into_rel_result()?
+            .into_iter()
+        {
             let mut row = row.into_iter();
             match (row.next(), row.next()) {
-                (Some(Binding::Scalar(TypedValue::Ref(food))), Some(Binding::Scalar(TypedValue::String(name)))) => {
+                (
+                    Some(Binding::Scalar(TypedValue::Ref(food))),
+                    Some(Binding::Scalar(TypedValue::String(name))),
+                ) => {
                     if name.chars().any(|c| !c.is_lowercase()) {
                         let lowercased = name.to_lowercase();
-                        println!("Need to rename {} from '{}' to '{}'", food, name, lowercased);
+                        println!(
+                            "Need to rename {} from '{}' to '{}'",
+                            food, name, lowercased
+                        );
 
                         let new_name: TypedValue = lowercased.into();
                         builder.add(KnownEntid(food), food_name, new_name)?;
                     }
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
 
@@ -696,23 +805,33 @@ fn test_upgrade_with_functions() {
             return Ok(());
         }
 
-        ip.transact_builder(builder).and(Ok(())).map_err(|e| e.into())
+        ip.transact_builder(builder)
+            .and(Ok(()))
+            .map_err(|e| e.into())
     }
 
     /// This is the function we write to dedupe. This logic is very suitable for sharing:
     /// indeed, "make this attribute unique by merging entities" is something we should
     /// lift out for reuse.
-    fn merge_foods_with_same_name(ip: &mut InProgress) -> mentat::errors::Result<()> {
+    fn merge_foods_with_same_name(ip: &mut InProgress<'_, '_>) -> mentat::errors::Result<()> {
         let mut builder = TermBuilder::new();
-        for row in ip.q_once("[:find ?a ?b
+        for row in ip
+            .q_once(
+                "[:find ?a ?b
                                :where [?a :food/name ?name]
                                       [?b :food/name ?name]
-                                      [(unpermute ?a ?b)]]", None)
-                     .into_rel_result()?
-                     .into_iter() {
+                                      [(unpermute ?a ?b)]]",
+                None,
+            )
+            .into_rel_result()?
+            .into_iter()
+        {
             let mut row = row.into_iter();
             match (row.next(), row.next()) {
-                (Some(Binding::Scalar(TypedValue::Ref(left))), Some(Binding::Scalar(TypedValue::Ref(right)))) => {
+                (
+                    Some(Binding::Scalar(TypedValue::Ref(left))),
+                    Some(Binding::Scalar(TypedValue::Ref(right))),
+                ) => {
                     let keep = KnownEntid(left);
                     let replace = KnownEntid(right);
 
@@ -720,30 +839,38 @@ fn test_upgrade_with_functions() {
                     // We should offer some support for doing this, 'cos this is long-winded and has
                     // the unexpected side-effect of also trying to retract metadata about the entity…
                     println!("Replacing uses of {} to {}.", replace.0, keep.0);
-                    for (a, v) in ip.q_once("[:find ?a ?v
+                    for (a, v) in ip
+                        .q_once(
+                            "[:find ?a ?v
                                               :in ?old
                                               :where [?old ?a ?v]]",
-                                            QueryInputs::with_value_sequence(vec![(var!(?old), replace.into())]))
-                                    .into_rel_result()?
-                                    .into_iter()
-                                    .map(av) {
+                            QueryInputs::with_value_sequence(vec![(var!(?old), replace.into())]),
+                        )
+                        .into_rel_result()?
+                        .into_iter()
+                        .map(av)
+                    {
                         builder.retract(replace, a, v.clone())?;
                         builder.add(keep, a, v)?;
                     }
-                    for (e, a) in ip.q_once("[:find ?e ?a
+                    for (e, a) in ip
+                        .q_once(
+                            "[:find ?e ?a
                                               :in ?old
                                               :where [?e ?a ?old]]",
-                                            QueryInputs::with_value_sequence(vec![(var!(?old), replace.into())]))
-                                    .into_rel_result()?
-                                    .into_iter()
-                                    .map(ea) {
+                            QueryInputs::with_value_sequence(vec![(var!(?old), replace.into())]),
+                        )
+                        .into_rel_result()?
+                        .into_iter()
+                        .map(ea)
+                    {
                         builder.retract(e, a, replace)?;
                         builder.add(e, a, keep)?;
                     }
 
                     // TODO: `retractEntity` on `replace` (when we support that).
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
 
@@ -751,7 +878,9 @@ fn test_upgrade_with_functions() {
             return Ok(());
         }
 
-        ip.transact_builder(builder).and(Ok(())).map_err(|e| e.into())
+        ip.transact_builder(builder)
+            .and(Ok(()))
+            .map_err(|e| e.into())
     }
 
     // This migration is bad: it can't impose the uniqueness constraint because we end up with
@@ -759,17 +888,17 @@ fn test_upgrade_with_functions() {
     let food_v2_bad = vocabulary::Definition {
         name: kw!(:org.mozilla/food),
         version: 2,
-        attributes: vec![
-            (kw!(:food/name),
-             vocabulary::AttributeBuilder::helpful()
+        attributes: vec![(
+            kw!(:food/name),
+            vocabulary::AttributeBuilder::helpful()
                 .value_type(ValueType::String)
                 .multival(false)
                 .unique(Unique::Identity)
-                .build()),
-        ],
+                .build(),
+        )],
         pre: |ip, from| {
             if from.version < 2 {
-                lowercase_names(ip)                    // <- no merging!
+                lowercase_names(ip) // <- no merging!
             } else {
                 Ok(())
             }
@@ -781,14 +910,14 @@ fn test_upgrade_with_functions() {
     let food_v2_good = vocabulary::Definition {
         name: kw!(:org.mozilla/food),
         version: 2,
-        attributes: vec![
-            (kw!(:food/name),
-             vocabulary::AttributeBuilder::helpful()
+        attributes: vec![(
+            kw!(:food/name),
+            vocabulary::AttributeBuilder::helpful()
                 .value_type(ValueType::String)
                 .multival(false)
                 .unique(Unique::Identity)
-                .build()),
-        ],
+                .build(),
+        )],
         pre: |ip, from| {
             if from.version < 2 {
                 lowercase_names(ip).and_then(|_| merge_foods_with_same_name(ip))
@@ -804,39 +933,53 @@ fn test_upgrade_with_functions() {
         let mut in_progress = store.begin_transaction().expect("began");
 
         // Yep, the bad one fails!
-        let _err = in_progress.ensure_vocabulary(&food_v2_bad).expect_err("expected error");
+        let _err = in_progress
+            .ensure_vocabulary(&food_v2_bad)
+            .expect_err("expected error");
     }
 
     // Before the good migration, Sam and Beth don't like any of the same foods.
-    assert!(store.q_once(r#"[:find [?food ...]
+    assert!(store
+        .q_once(
+            r#"[:find [?food ...]
                              :where [?sam :person/name "Sam"]
                                     [?beth :person/name "Beth"]
                                     [?sam :person/likes ?f]
                                     [?beth :person/likes ?f]
-                                    [?f :food/name ?food]]"#, None)
-                 .into_coll_result()
-                 .expect("success")
-                 .is_empty());
+                                    [?f :food/name ?food]]"#,
+            None
+        )
+        .into_coll_result()
+        .expect("success")
+        .is_empty());
 
     // Mutable borrow of store.
     {
         let mut in_progress = store.begin_transaction().expect("began");
 
         // The good one succeeded!
-        in_progress.ensure_vocabulary(&food_v2_good).expect("expected success");
+        in_progress
+            .ensure_vocabulary(&food_v2_good)
+            .expect("expected success");
         in_progress.commit().expect("commit succeeded");
     }
 
     // After, Sam and Beth both like "spice" — the same entity.
-    assert_eq!(store.q_once(r#"[:find [?food ...]
+    assert_eq!(
+        store
+            .q_once(
+                r#"[:find [?food ...]
                                 :where [?sam :person/name "Sam"]
                                        [?beth :person/name "Beth"]
                                        [?sam :person/likes ?f]
                                        [?beth :person/likes ?f]
-                                       [?f :food/name ?food]]"#, None)
-                    .into_coll_result()
-                    .expect("success"),
-               vec![TypedValue::typed_string("spice").into()]);
+                                       [?f :food/name ?food]]"#,
+                None
+            )
+            .into_coll_result()
+            .expect("success"),
+        vec![TypedValue::typed_string("spice").into()]
+    );
 
     //
     // Migration 4: multi-definition migration.
@@ -856,20 +999,23 @@ fn test_upgrade_with_functions() {
         name: kw!(:org.mozilla/movies),
         version: 3,
         attributes: vec![
-            (kw!(:movie/title),
-             vocabulary::AttributeBuilder::helpful()
-                .value_type(ValueType::String)
-                .multival(false)
-                .non_unique()
-                .index(true)
-                .build()),
-
+            (
+                kw!(:movie/title),
+                vocabulary::AttributeBuilder::helpful()
+                    .value_type(ValueType::String)
+                    .multival(false)
+                    .non_unique()
+                    .index(true)
+                    .build(),
+            ),
             // This phrasing is backward, but this is just a test.
-            (kw!(:movie/likes),
-             vocabulary::AttributeBuilder::helpful()
-                .value_type(ValueType::Ref)
-                .multival(true)
-                .build()),
+            (
+                kw!(:movie/likes),
+                vocabulary::AttributeBuilder::helpful()
+                    .value_type(ValueType::Ref)
+                    .multival(true)
+                    .build(),
+            ),
         ],
         pre: Definition::no_op,
         post: Definition::no_op,
@@ -878,19 +1024,22 @@ fn test_upgrade_with_functions() {
         name: kw!(:org.mozilla/food),
         version: 3,
         attributes: vec![
-            (kw!(:food/name),
-             vocabulary::AttributeBuilder::helpful()
-                .value_type(ValueType::String)
-                .multival(false)
-                .unique(Unique::Identity)
-                .build()),
-
+            (
+                kw!(:food/name),
+                vocabulary::AttributeBuilder::helpful()
+                    .value_type(ValueType::String)
+                    .multival(false)
+                    .unique(Unique::Identity)
+                    .build(),
+            ),
             // This phrasing is backward, but this is just a test.
-            (kw!(:food/likes),
-             vocabulary::AttributeBuilder::helpful()
-                .value_type(ValueType::Ref)
-                .multival(true)
-                .build()),
+            (
+                kw!(:food/likes),
+                vocabulary::AttributeBuilder::helpful()
+                    .value_type(ValueType::Ref)
+                    .multival(true)
+                    .build(),
+            ),
         ],
         pre: |ip, from| {
             if from.version < 2 {
@@ -939,7 +1088,11 @@ fn test_upgrade_with_functions() {
             self.definitions.clone()
         }
 
-        fn pre(&mut self, _in_progress: &mut InProgress, checks: &VocabularyStatus) -> mentat::errors::Result<()> {
+        fn pre(
+            &mut self,
+            _in_progress: &mut InProgress<'_, '_>,
+            checks: &dyn VocabularyStatus,
+        ) -> mentat::errors::Result<()> {
             // Take a look at the work the vocabulary manager thinks needs to be done, and see whether we
             // need to migrate data.
             // We'll simulate that here by tracking the version.
@@ -947,14 +1100,14 @@ fn test_upgrade_with_functions() {
                 Some((_, &VocabularyCheck::PresentButNeedsUpdate { ref older_version })) => {
                     self.pre_food_version = older_version.version;
                     Ok(())
-                },
+                }
                 _ => {
                     panic!("Test expected a different state.");
-                },
+                }
             }
         }
 
-        fn post(&mut self, ip: &mut InProgress) -> mentat::errors::Result<()> {
+        fn post(&mut self, ip: &mut InProgress<'_, '_>) -> mentat::errors::Result<()> {
             self.post_done = true;
 
             // We know that if this function is running, some upgrade was necessary, and we're now
@@ -968,31 +1121,44 @@ fn test_upgrade_with_functions() {
 
             // Find all uses of :person/likes, splitting them into the two properties we just
             // introduced.
-            for (e, v) in ip.q_once("[:find ?e ?v
+            for (e, v) in ip
+                .q_once(
+                    "[:find ?e ?v
                                       :where [?e :person/likes ?v]
                                              [?v :food/name _]]",
-                                    None)
-                            .into_rel_result()?
-                            .into_iter()
-                            .map(ev) {
+                    None,
+                )
+                .into_rel_result()?
+                .into_iter()
+                .map(ev)
+            {
                 builder.retract(e, person_likes, v.clone())?;
                 builder.add(e, food_likes, v)?;
             }
 
-            for (e, v) in ip.q_once("[:find ?e ?v
+            for (e, v) in ip
+                .q_once(
+                    "[:find ?e ?v
                                       :where [?e :person/likes ?v]
                                              [?v :movie/title _]]",
-                                    None)
-                            .into_rel_result()?
-                            .into_iter()
-                            .map(ev) {
+                    None,
+                )
+                .into_rel_result()?
+                .into_iter()
+                .map(ev)
+            {
                 builder.retract(e, person_likes, v.clone())?;
                 builder.add(e, movie_likes, v)?;
             }
 
-            builder.add(person_likes, db_doc,
-                        TypedValue::typed_string("Deprecated. Use :movie/likes or :food/likes instead."))?;
-            ip.transact_builder(builder).and(Ok(())).map_err(|e| e.into())
+            builder.add(
+                person_likes,
+                db_doc,
+                TypedValue::typed_string("Deprecated. Use :movie/likes or :food/likes instead."),
+            )?;
+            ip.transact_builder(builder)
+                .and(Ok(()))
+                .map_err(|e| e.into())
         }
     };
 
@@ -1000,7 +1166,9 @@ fn test_upgrade_with_functions() {
         let mut in_progress = store.begin_transaction().expect("began");
 
         // The good one succeeded!
-        in_progress.ensure_vocabularies(&mut all_three).expect("expected success");
+        in_progress
+            .ensure_vocabularies(&mut all_three)
+            .expect("expected success");
         in_progress.commit().expect("commit succeeded");
     }
 
@@ -1010,20 +1178,32 @@ fn test_upgrade_with_functions() {
 
     // Now we can fetch just the foods or movies that Sam likes, without having to filter on
     // :food/name or :movie/title -- they're separate relations.
-    assert_eq!(store.q_once(r#"[:find [?f ...]
+    assert_eq!(
+        store
+            .q_once(
+                r#"[:find [?f ...]
                                 :where [?sam :person/name "Sam"]
-                                       [?sam :food/likes ?f]]"#, None)
-                    .into_coll_result()
-                    .expect("success")
-                    .len(),
-               2);
-    assert_eq!(store.q_once(r#"[:find [?m ...]
+                                       [?sam :food/likes ?f]]"#,
+                None
+            )
+            .into_coll_result()
+            .expect("success")
+            .len(),
+        2
+    );
+    assert_eq!(
+        store
+            .q_once(
+                r#"[:find [?m ...]
                                 :where [?sam :person/name "Sam"]
-                                       [?sam :movie/likes ?m]]"#, None)
-                    .into_coll_result()
-                    .expect("success")
-                    .len(),
-               2);
+                                       [?sam :movie/likes ?m]]"#,
+                None
+            )
+            .into_coll_result()
+            .expect("success")
+            .len(),
+        2
+    );
 
     // Find the height and name of anyone who likes both spice and movies released after 2012,
     // sorted by height.
@@ -1037,9 +1217,11 @@ fn test_upgrade_with_functions() {
                        [?p :person/height ?height]
                        [?p :person/name ?name]]"#;
     let r = store.q_once(q, None).into_rel_result().unwrap();
-    let expected: RelResult<Binding> =
-        vec![vec![TypedValue::typed_string("Sam"), TypedValue::Long(162)],
-             vec![TypedValue::typed_string("Beth"), TypedValue::Long(172)]].into();
+    let expected: RelResult<Binding> = vec![
+        vec![TypedValue::typed_string("Sam"), TypedValue::Long(162)],
+        vec![TypedValue::typed_string("Beth"), TypedValue::Long(172)],
+    ]
+    .into();
     assert_eq!(expected, r);
 
     // Find foods that Upstream Color fans like.
@@ -1050,8 +1232,9 @@ fn test_upgrade_with_functions() {
                        [?p :food/likes ?f]
                        [?f :food/name ?food]]"#;
     let r = store.q_once(q, None).into_coll_result().unwrap();
-    let expected: Vec<Binding> =
-        vec![TypedValue::typed_string("spice").into(),
-             TypedValue::typed_string("weird blue worms").into()];
+    let expected: Vec<Binding> = vec![
+        TypedValue::typed_string("spice").into(),
+        TypedValue::typed_string("weird blue worms").into(),
+    ];
     assert_eq!(expected, r);
 }

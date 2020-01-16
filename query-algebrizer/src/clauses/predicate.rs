@@ -8,37 +8,19 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use core_traits::{
-    ValueType,
-    ValueTypeSet,
-};
+use core_traits::{ValueType, ValueTypeSet};
 
-use mentat_core::{
-    Schema,
-};
+use mentat_core::Schema;
 
-use edn::query::{
-    FnArg,
-    PlainSymbol,
-    Predicate,
-    TypeAnnotation,
-};
+use edn::query::{FnArg, PlainSymbol, Predicate, TypeAnnotation};
 
 use clauses::ConjoiningClauses;
 
 use clauses::convert::ValueTypes;
 
-use query_algebrizer_traits::errors::{
-    AlgebrizerError,
-    Result,
-};
+use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
-use types::{
-    ColumnConstraint,
-    EmptyBecause,
-    Inequality,
-    QueryValue,
-};
+use types::{ColumnConstraint, EmptyBecause, Inequality, QueryValue};
 
 use Known;
 
@@ -71,8 +53,14 @@ impl ConjoiningClauses {
     /// to be a specific ValueType.
     pub(crate) fn apply_type_anno(&mut self, anno: &TypeAnnotation) -> Result<()> {
         match ValueType::from_keyword(&anno.value_type) {
-            Some(value_type) => self.add_type_requirement(anno.variable.clone(), ValueTypeSet::of_one(value_type)),
-            None => bail!(AlgebrizerError::InvalidArgumentType(PlainSymbol::plain("type"), ValueTypeSet::any(), 2)),
+            Some(value_type) => {
+                self.add_type_requirement(anno.variable.clone(), ValueTypeSet::of_one(value_type))
+            }
+            None => bail!(AlgebrizerError::InvalidArgumentType(
+                PlainSymbol::plain("type"),
+                ValueTypeSet::any(),
+                2
+            )),
         }
         Ok(())
     }
@@ -81,9 +69,18 @@ impl ConjoiningClauses {
     /// - Resolves variables and converts types to those more amenable to SQL.
     /// - Ensures that the predicate functions name a known operator.
     /// - Accumulates an `Inequality` constraint into the `wheres` list.
-    pub(crate) fn apply_inequality(&mut self, known: Known, comparison: Inequality, predicate: Predicate) -> Result<()> {
+    pub(crate) fn apply_inequality(
+        &mut self,
+        known: Known,
+        comparison: Inequality,
+        predicate: Predicate,
+    ) -> Result<()> {
         if predicate.args.len() != 2 {
-            bail!(AlgebrizerError::InvalidNumberOfArguments(predicate.operator.clone(), predicate.args.len(), 2));
+            bail!(AlgebrizerError::InvalidNumberOfArguments(
+                predicate.operator.clone(),
+                predicate.args.len(),
+                2
+            ));
         }
 
         // Go from arguments -- parser output -- to columns or values.
@@ -93,20 +90,29 @@ impl ConjoiningClauses {
         let left = args.next().expect("two args");
         let right = args.next().expect("two args");
 
-
         // The types we're handling here must be the intersection of the possible types of the arguments,
         // the known types of any variables, and the types supported by our inequality operators.
         let supported_types = comparison.supported_types();
-        let mut left_types = self.potential_types(known.schema, &left)?
-                                 .intersection(&supported_types);
+        let mut left_types = self
+            .potential_types(known.schema, &left)?
+            .intersection(&supported_types);
         if left_types.is_empty() {
-            bail!(AlgebrizerError::InvalidArgumentType(predicate.operator.clone(), supported_types, 0));
+            bail!(AlgebrizerError::InvalidArgumentType(
+                predicate.operator.clone(),
+                supported_types,
+                0
+            ));
         }
 
-        let mut right_types = self.potential_types(known.schema, &right)?
-                                  .intersection(&supported_types);
+        let mut right_types = self
+            .potential_types(known.schema, &right)?
+            .intersection(&supported_types);
         if right_types.is_empty() {
-            bail!(AlgebrizerError::InvalidArgumentType(predicate.operator.clone(), supported_types, 1));
+            bail!(AlgebrizerError::InvalidArgumentType(
+                predicate.operator.clone(),
+                supported_types,
+                1
+            ));
         }
 
         // We would like to allow longs to compare to doubles.
@@ -135,7 +141,8 @@ impl ConjoiningClauses {
                         left: left_types,
                         right: right_types,
                     }
-                });
+                },
+            );
             return Ok(());
         }
 
@@ -153,7 +160,11 @@ impl ConjoiningClauses {
             left_v = self.resolve_ref_argument(known.schema, &predicate.operator, 0, left)?;
             right_v = self.resolve_ref_argument(known.schema, &predicate.operator, 1, right)?;
         } else {
-            bail!(AlgebrizerError::InvalidArgumentType(predicate.operator.clone(), supported_types, 0));
+            bail!(AlgebrizerError::InvalidArgumentType(
+                predicate.operator.clone(),
+                supported_types,
+                0
+            ));
         }
 
         // These arguments must be variables or instant/numeric constants.
@@ -167,15 +178,13 @@ impl ConjoiningClauses {
 impl Inequality {
     fn to_constraint(&self, left: QueryValue, right: QueryValue) -> ColumnConstraint {
         match *self {
-            Inequality::TxAfter |
-            Inequality::TxBefore => {
+            Inequality::TxAfter | Inequality::TxBefore => {
                 // TODO: both ends of the range must be inside the tx partition!
                 // If we know the partition map -- and at this point we do, it's just
                 // not passed to this function -- then we can generate two constraints,
                 // or clamp a fixed value.
-            },
-            _ => {
-            },
+            }
+            _ => {}
         }
 
         ColumnConstraint::Inequality {
@@ -190,36 +199,16 @@ impl Inequality {
 mod testing {
     use super::*;
 
-    use core_traits::attribute::{
-        Unique,
-    };
-    use core_traits::{
-        Attribute,
-        TypedValue,
-        ValueType,
-    };
+    use core_traits::attribute::Unique;
+    use core_traits::{Attribute, TypedValue, ValueType};
 
     use edn::query::{
-        FnArg,
-        Keyword,
-        Pattern,
-        PatternNonValuePlace,
-        PatternValuePlace,
-        PlainSymbol,
-        Variable,
+        FnArg, Keyword, Pattern, PatternNonValuePlace, PatternValuePlace, PlainSymbol, Variable,
     };
 
-    use clauses::{
-        add_attribute,
-        associate_ident,
-        ident,
-    };
+    use clauses::{add_attribute, associate_ident, ident};
 
-    use types::{
-        ColumnConstraint,
-        EmptyBecause,
-        QueryValue,
-    };
+    use types::{ColumnConstraint, EmptyBecause, QueryValue};
 
     #[test]
     /// Apply two patterns: a pattern and a numeric predicate.
@@ -230,30 +219,45 @@ mod testing {
         let mut schema = Schema::default();
 
         associate_ident(&mut schema, Keyword::namespaced("foo", "bar"), 99);
-        add_attribute(&mut schema, 99, Attribute {
-            value_type: ValueType::Long,
-            ..Default::default()
-        });
+        add_attribute(
+            &mut schema,
+            99,
+            Attribute {
+                value_type: ValueType::Long,
+                ..Default::default()
+            },
+        );
 
         let x = Variable::from_valid_name("?x");
         let y = Variable::from_valid_name("?y");
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: PatternNonValuePlace::Placeholder,
-            value: PatternValuePlace::Variable(y.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: PatternNonValuePlace::Placeholder,
+                value: PatternValuePlace::Variable(y.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
         assert!(!cc.is_known_empty());
 
         let op = PlainSymbol::plain("<");
         let comp = Inequality::from_datalog_operator(op.name()).unwrap();
-        assert!(cc.apply_inequality(known, comp, Predicate {
-             operator: op,
-             args: vec![
-                FnArg::Variable(Variable::from_valid_name("?y")), FnArg::EntidOrInteger(10),
-            ]}).is_ok());
+        assert!(cc
+            .apply_inequality(
+                known,
+                comp,
+                Predicate {
+                    operator: op,
+                    args: vec![
+                        FnArg::Variable(Variable::from_valid_name("?y")),
+                        FnArg::EntidOrInteger(10),
+                    ]
+                }
+            )
+            .is_ok());
 
         assert!(!cc.is_known_empty());
 
@@ -263,17 +267,21 @@ mod testing {
 
         // After processing those two clauses, we know that ?y must be numeric, but not exactly
         // which type it must be.
-        assert_eq!(None, cc.known_type(&y));      // Not just one.
+        assert_eq!(None, cc.known_type(&y)); // Not just one.
         let expected = ValueTypeSet::of_numeric_types();
         assert_eq!(Some(&expected), cc.known_types.get(&y));
 
         let clauses = cc.wheres;
         assert_eq!(clauses.len(), 1);
-        assert_eq!(clauses.0[0], ColumnConstraint::Inequality {
-            operator: Inequality::LessThan,
-            left: QueryValue::Column(cc.column_bindings.get(&y).unwrap()[0].clone()),
-            right: QueryValue::TypedValue(TypedValue::Long(10)),
-        }.into());
+        assert_eq!(
+            clauses.0[0],
+            ColumnConstraint::Inequality {
+                operator: Inequality::LessThan,
+                left: QueryValue::Column(cc.column_bindings.get(&y).unwrap()[0].clone()),
+                right: QueryValue::TypedValue(TypedValue::Long(10)),
+            }
+            .into()
+        );
     }
 
     #[test]
@@ -286,54 +294,78 @@ mod testing {
 
         associate_ident(&mut schema, Keyword::namespaced("foo", "bar"), 99);
         associate_ident(&mut schema, Keyword::namespaced("foo", "roz"), 98);
-        add_attribute(&mut schema, 99, Attribute {
-            value_type: ValueType::Long,
-            ..Default::default()
-        });
-        add_attribute(&mut schema, 98, Attribute {
-            value_type: ValueType::String,
-            unique: Some(Unique::Identity),
-            ..Default::default()
-        });
+        add_attribute(
+            &mut schema,
+            99,
+            Attribute {
+                value_type: ValueType::Long,
+                ..Default::default()
+            },
+        );
+        add_attribute(
+            &mut schema,
+            98,
+            Attribute {
+                value_type: ValueType::String,
+                unique: Some(Unique::Identity),
+                ..Default::default()
+            },
+        );
 
         let x = Variable::from_valid_name("?x");
         let y = Variable::from_valid_name("?y");
         let known = Known::for_schema(&schema);
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: PatternNonValuePlace::Placeholder,
-            value: PatternValuePlace::Variable(y.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: PatternNonValuePlace::Placeholder,
+                value: PatternValuePlace::Variable(y.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
         assert!(!cc.is_known_empty());
 
         let op = PlainSymbol::plain(">=");
         let comp = Inequality::from_datalog_operator(op.name()).unwrap();
-        assert!(cc.apply_inequality(known, comp, Predicate {
-             operator: op,
-             args: vec![
-                FnArg::Variable(Variable::from_valid_name("?y")), FnArg::EntidOrInteger(10),
-            ]}).is_ok());
+        assert!(cc
+            .apply_inequality(
+                known,
+                comp,
+                Predicate {
+                    operator: op,
+                    args: vec![
+                        FnArg::Variable(Variable::from_valid_name("?y")),
+                        FnArg::EntidOrInteger(10),
+                    ]
+                }
+            )
+            .is_ok());
 
         assert!(!cc.is_known_empty());
-        cc.apply_parsed_pattern(known, Pattern {
-            source: None,
-            entity: PatternNonValuePlace::Variable(x.clone()),
-            attribute: ident("foo", "roz"),
-            value: PatternValuePlace::Variable(y.clone()),
-            tx: PatternNonValuePlace::Placeholder,
-        });
+        cc.apply_parsed_pattern(
+            known,
+            Pattern {
+                source: None,
+                entity: PatternNonValuePlace::Variable(x.clone()),
+                attribute: ident("foo", "roz"),
+                value: PatternValuePlace::Variable(y.clone()),
+                tx: PatternNonValuePlace::Placeholder,
+            },
+        );
 
         // Finally, expand column bindings to get the overlaps for ?x.
         cc.expand_column_bindings();
 
         assert!(cc.is_known_empty());
-        assert_eq!(cc.empty_because.unwrap(),
-                   EmptyBecause::TypeMismatch {
-                       var: y.clone(),
-                       existing: ValueTypeSet::of_numeric_types(),
-                       desired: ValueTypeSet::of_one(ValueType::String),
-                   });
+        assert_eq!(
+            cc.empty_because.unwrap(),
+            EmptyBecause::TypeMismatch {
+                var: y.clone(),
+                existing: ValueTypeSet::of_numeric_types(),
+                desired: ValueTypeSet::of_one(ValueType::String),
+            }
+        );
     }
 }

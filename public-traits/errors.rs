@@ -20,31 +20,16 @@ use uuid;
 
 use edn;
 
-use core_traits::{
-    Attribute,
-    ValueType,
-};
+use core_traits::{Attribute, ValueType};
 
-use db_traits::errors::{
-    DbError,
-};
-use query_algebrizer_traits::errors::{
-    AlgebrizerError,
-};
-use query_projector_traits::errors::{
-    ProjectorError,
-};
-use query_pull_traits::errors::{
-    PullError,
-};
-use sql_traits::errors::{
-    SQLError,
-};
+use db_traits::errors::DbError;
+use query_algebrizer_traits::errors::AlgebrizerError;
+use query_projector_traits::errors::ProjectorError;
+use query_pull_traits::errors::PullError;
+use sql_traits::errors::SQLError;
 
 #[cfg(feature = "syncable")]
-use tolstoy_traits::errors::{
-    TolstoyError,
-};
+use tolstoy_traits::errors::TolstoyError;
 
 #[cfg(feature = "syncable")]
 use hyper;
@@ -74,10 +59,16 @@ pub enum MentatError {
     #[fail(display = "invalid vocabulary version")]
     InvalidVocabularyVersion,
 
-    #[fail(display = "vocabulary {}/version {} already has attribute {}, and the requested definition differs", _0, _1, _2)]
+    #[fail(
+        display = "vocabulary {}/version {} already has attribute {}, and the requested definition differs",
+        _0, _1, _2
+    )]
     ConflictingAttributeDefinitions(String, u32, String, Attribute, Attribute),
 
-    #[fail(display = "existing vocabulary {} too new: wanted version {}, got version {}", _0, _1, _2)]
+    #[fail(
+        display = "existing vocabulary {} too new: wanted version {}, got version {}",
+        _0, _1, _2
+    )]
     ExistingVocabularyTooNew(String, u32, u32),
 
     #[fail(display = "core schema: wanted version {}, got version {:?}", _0, _1)]
@@ -92,7 +83,10 @@ pub enum MentatError {
     #[fail(display = "schema changed since query was prepared")]
     PreparedQuerySchemaMismatch,
 
-    #[fail(display = "provided value of type {} doesn't match attribute value type {}", _0, _1)]
+    #[fail(
+        display = "provided value of type {} doesn't match attribute value type {}",
+        _0, _1
+    )]
     ValueTypeMismatch(ValueType, ValueType),
 
     #[fail(display = "{}", _0)]
@@ -127,7 +121,7 @@ pub enum MentatError {
     SQLError(#[cause] SQLError),
 
     #[fail(display = "{}", _0)]
-    UuidError(#[cause] uuid::ParseError),
+    UuidError(#[cause] uuid::Error),
 
     #[cfg(feature = "syncable")]
     #[fail(display = "{}", _0)]
@@ -139,7 +133,7 @@ pub enum MentatError {
 
     #[cfg(feature = "syncable")]
     #[fail(display = "{}", _0)]
-    UriError(#[cause] hyper::error::UriError),
+    UriError(#[cause] http::uri::InvalidUri),
 
     #[cfg(feature = "syncable")]
     #[fail(display = "{}", _0)]
@@ -147,87 +141,87 @@ pub enum MentatError {
 }
 
 impl From<std::io::Error> for MentatError {
-    fn from(error: std::io::Error) -> MentatError {
+    fn from(error: std::io::Error) -> Self {
         MentatError::IoError(error)
     }
 }
 
 impl From<rusqlite::Error> for MentatError {
-    fn from(error: rusqlite::Error) -> MentatError {
-        let cause = match error.cause() {
+    fn from(error: rusqlite::Error) -> Self {
+        let cause = match error.source() {
             Some(e) => e.to_string(),
-            None => "".to_string()
+            None => "".to_string(),
         };
         MentatError::RusqliteError(error.to_string(), cause)
     }
 }
 
-impl From<uuid::ParseError> for MentatError {
-    fn from(error: uuid::ParseError) -> MentatError {
+impl From<uuid::Error> for MentatError {
+    fn from(error: uuid::Error) -> Self {
         MentatError::UuidError(error)
     }
 }
 
 impl From<edn::ParseError> for MentatError {
-    fn from(error: edn::ParseError) -> MentatError {
+    fn from(error: edn::ParseError) -> Self {
         MentatError::EdnParseError(error)
     }
 }
 
 impl From<DbError> for MentatError {
-    fn from(error: DbError) -> MentatError {
+    fn from(error: DbError) -> Self {
         MentatError::DbError(error)
     }
 }
 
 impl From<AlgebrizerError> for MentatError {
-    fn from(error: AlgebrizerError) -> MentatError {
+    fn from(error: AlgebrizerError) -> Self {
         MentatError::AlgebrizerError(error)
     }
 }
 
 impl From<ProjectorError> for MentatError {
-    fn from(error: ProjectorError) -> MentatError {
+    fn from(error: ProjectorError) -> Self {
         MentatError::ProjectorError(error)
     }
 }
 
 impl From<PullError> for MentatError {
-    fn from(error: PullError) -> MentatError {
+    fn from(error: PullError) -> Self {
         MentatError::PullError(error)
     }
 }
 
 impl From<SQLError> for MentatError {
-    fn from(error: SQLError) -> MentatError {
+    fn from(error: SQLError) -> Self {
         MentatError::SQLError(error)
     }
 }
 
 #[cfg(feature = "syncable")]
 impl From<TolstoyError> for MentatError {
-    fn from(error: TolstoyError) -> MentatError {
+    fn from(error: TolstoyError) -> Self {
         MentatError::TolstoyError(error)
     }
 }
 
 #[cfg(feature = "syncable")]
 impl From<serde_json::Error> for MentatError {
-    fn from(error: serde_json::Error) -> MentatError {
+    fn from(error: serde_json::Error) -> Self {
         MentatError::SerializationError(error)
     }
 }
 
 #[cfg(feature = "syncable")]
 impl From<hyper::Error> for MentatError {
-    fn from(error: hyper::Error) -> MentatError {
+    fn from(error: hyper::Error) -> Self {
         MentatError::NetworkError(error)
     }
 }
 
 #[cfg(feature = "syncable")]
-impl From<hyper::error::UriError> for MentatError {
-    fn from(error: hyper::error::UriError) -> MentatError {
+impl From<http::uri::InvalidUri> for MentatError {
+    fn from(error: http::uri::InvalidUri) -> Self {
         MentatError::UriError(error)
     }
 }

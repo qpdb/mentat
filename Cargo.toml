@@ -1,4 +1,5 @@
 [package]
+edition = "2018"
 authors = [
   "Richard Newman <rnewman@twinql.com>",
   "Nicholas Alexander <nalexander@mozilla.com>",
@@ -12,7 +13,7 @@ authors = [
   "Thom Chiovoloni <tchiovoloni@mozilla.com>",
 ]
 name = "mentat"
-version = "0.11.1"
+version = "0.11.2"
 build = "build/version.rs"
 
 [features]
@@ -29,14 +30,15 @@ rustc_version = "0.2"
 
 [dependencies]
 chrono = "0.4"
-failure = "0.1.1"
-lazy_static = "0.2"
-time = "0.1"
+failure = "0.1.6"
+lazy_static = "1.4.0"
+time = "0.2"
 log = "0.4"
-uuid = { version = "0.5", features = ["v4", "serde"] }
+uuid = { version = "0.8", features = ["v4", "serde"] }
+
 
 [dependencies.rusqlite]
-version = "0.13"
+version = "0.21.0"
 # System sqlite might be very old.
 features = ["limits"]
 

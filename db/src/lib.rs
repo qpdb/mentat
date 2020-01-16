@@ -11,113 +11,87 @@
 extern crate failure;
 extern crate indexmap;
 extern crate itertools;
-#[macro_use] extern crate lazy_static;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate lazy_static;
+#[macro_use]
+extern crate log;
 
 #[cfg(feature = "syncable")]
-#[macro_use] extern crate serde_derive;
+#[macro_use]
+extern crate serde_derive;
 
 extern crate petgraph;
 extern crate rusqlite;
 extern crate tabwriter;
 extern crate time;
 
-#[macro_use] extern crate edn;
-#[macro_use] extern crate mentat_core;
+#[macro_use]
+extern crate edn;
+#[macro_use]
+extern crate mentat_core;
 extern crate db_traits;
-#[macro_use] extern crate core_traits;
+#[macro_use]
+extern crate core_traits;
 extern crate mentat_sql;
 
 use std::iter::repeat;
 
 use itertools::Itertools;
 
-use db_traits::errors::{
-    DbErrorKind,
-    Result,
-};
+use db_traits::errors::{DbErrorKind, Result};
 
-#[macro_use] pub mod debug;
+#[macro_use]
+pub mod debug;
 
 mod add_retract_alter_set;
+mod bootstrap;
 pub mod cache;
 pub mod db;
-mod bootstrap;
 pub mod entids;
-pub mod internal_types;    // pub because we need them for building entities programmatically.
+pub mod internal_types; // pub because we need them for building entities programmatically.
 mod metadata;
 mod schema;
-pub mod tx_observer;
-mod watcher;
 pub mod timelines;
 mod tx;
 mod tx_checking;
+pub mod tx_observer;
 pub mod types;
 mod upsert_resolution;
+mod watcher;
 
 // Export these for reference from sync code and tests.
-pub use bootstrap::{
-    TX0,
-    USER0,
-    V1_PARTS,
-};
+pub use bootstrap::{TX0, USER0, V1_PARTS};
 
 pub static TIMELINE_MAIN: i64 = 0;
 
-pub use schema::{
-    AttributeBuilder,
-    AttributeValidation,
-};
+pub use schema::{AttributeBuilder, AttributeValidation};
 
-pub use bootstrap::{
-    CORE_SCHEMA_VERSION,
-};
+pub use bootstrap::CORE_SCHEMA_VERSION;
 
 use edn::symbols;
 
-pub use entids::{
-    DB_SCHEMA_CORE,
-};
+pub use entids::DB_SCHEMA_CORE;
 
-pub use db::{
-    TypedSQLValue,
-    new_connection,
-};
+pub use db::{new_connection, TypedSQLValue};
 
 #[cfg(feature = "sqlcipher")]
-pub use db::{
-    new_connection_with_key,
-    change_encryption_key,
-};
+pub use db::{change_encryption_key, new_connection_with_key};
 
-pub use watcher::{
-    TransactWatcher,
-};
+pub use watcher::TransactWatcher;
 
-pub use tx::{
-    transact,
-    transact_terms,
-};
+pub use tx::{transact, transact_terms};
 
-pub use tx_observer::{
-    InProgressObserverTransactWatcher,
-    TxObservationService,
-    TxObserver,
-};
+pub use tx_observer::{InProgressObserverTransactWatcher, TxObservationService, TxObserver};
 
-pub use types::{
-    AttributeSet,
-    DB,
-    Partition,
-    PartitionMap,
-    TransactableValue,
-};
+pub use types::{AttributeSet, Partition, PartitionMap, TransactableValue, DB};
 
 pub fn to_namespaced_keyword(s: &str) -> Result<symbols::Keyword> {
     let splits = [':', '/'];
     let mut i = s.split(&splits[..]);
     let nsk = match (i.next(), i.next(), i.next(), i.next()) {
-        (Some(""), Some(namespace), Some(name), None) => Some(symbols::Keyword::namespaced(namespace, name)),
+        (Some(""), Some(namespace), Some(name), None) => {
+            Some(symbols::Keyword::namespaced(namespace, name))
+        }
         _ => None,
     };
 

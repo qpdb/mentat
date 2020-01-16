@@ -8,9 +8,9 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use std::collections::HashMap;
-use std::cell::RefCell;
 use itertools::diff_with;
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 use symbols;
 use types::Value;
@@ -21,7 +21,7 @@ trait PatternMatchingRules<'a, T> {
     fn matches_any(pattern: &T) -> bool;
 
     /// Return the placeholder name if the given pattern matches a placeholder.
-    fn matches_placeholder(pattern: &'a T) -> Option<(&'a String)>;
+    fn matches_placeholder(pattern: &'a T) -> Option<&'a String>;
 }
 
 /// A default type implementing `PatternMatchingRules` specialized on
@@ -34,14 +34,20 @@ impl<'a> PatternMatchingRules<'a, Value> for DefaultPatternMatchingRules {
     fn matches_any(pattern: &Value) -> bool {
         match *pattern {
             Value::PlainSymbol(symbols::PlainSymbol(ref s)) => s.starts_with('_'),
-            _ => false
+            _ => false,
         }
     }
 
-    fn matches_placeholder(pattern: &'a Value) -> Option<(&'a String)> {
+    fn matches_placeholder(pattern: &'a Value) -> Option<&'a String> {
         match *pattern {
-            Value::PlainSymbol(symbols::PlainSymbol(ref s)) => if s.starts_with('?') { Some(s) } else { None },
-            _ => None
+            Value::PlainSymbol(symbols::PlainSymbol(ref s)) => {
+                if s.starts_with('?') {
+                    Some(s)
+                } else {
+                    None
+                }
+            }
+            _ => None,
         }
     }
 }
@@ -52,14 +58,14 @@ impl<'a> PatternMatchingRules<'a, Value> for DefaultPatternMatchingRules {
 /// * `[_ _]` matches an arbitrary two-element vector;
 /// * `[?x ?x]` matches `[1 1]` and `[#{} #{}]` but not `[1 2]` or `[[] #{}]`;
 struct Matcher<'a> {
-    placeholders: RefCell<HashMap<&'a String, &'a Value>>
+    placeholders: RefCell<HashMap<&'a String, &'a Value>>,
 }
 
 impl<'a> Matcher<'a> {
     /// Creates a Matcher instance.
     fn new() -> Matcher<'a> {
         Matcher {
-            placeholders: RefCell::default()
+            placeholders: RefCell::default(),
         }
     }
 
@@ -67,7 +73,9 @@ impl<'a> Matcher<'a> {
     /// and `pattern`) utilizing a specified pattern matching ruleset `T`.
     /// Returns true if matching succeeds.
     fn match_with_rules<T>(value: &'a Value, pattern: &'a Value) -> bool
-    where T: PatternMatchingRules<'a, Value> {
+    where
+        T: PatternMatchingRules<'a, Value>,
+    {
         let matcher = Matcher::new();
         matcher.match_internal::<T>(value, pattern)
     }
@@ -76,7 +84,9 @@ impl<'a> Matcher<'a> {
     /// performing pattern matching. Note that the internal `placeholders` cache
     /// might not be empty on invocation.
     fn match_internal<T>(&self, value: &'a Value, pattern: &'a Value) -> bool
-    where T: PatternMatchingRules<'a, Value> {
+    where
+        T: PatternMatchingRules<'a, Value>,
+    {
         use Value::*;
 
         if T::matches_any(pattern) {
@@ -86,19 +96,35 @@ impl<'a> Matcher<'a> {
             value == *placeholders.entry(symbol).or_insert(value)
         } else {
             match (value, pattern) {
-                (&Vector(ref v), &Vector(ref p)) =>
-                    diff_with(v, p, |a, b| self.match_internal::<T>(a, b)).is_none(),
-                (&List(ref v), &List(ref p)) =>
-                    diff_with(v, p, |a, b| self.match_internal::<T>(a, b)).is_none(),
-                (&Set(ref v), &Set(ref p)) =>
-                    v.len() == p.len() &&
-                    v.iter().all(|a| p.iter().any(|b| self.match_internal::<T>(a, b))) &&
-                    p.iter().all(|b| v.iter().any(|a| self.match_internal::<T>(a, b))),
-                (&Map(ref v), &Map(ref p)) =>
-                    v.len() == p.len() &&
-                    v.iter().all(|a| p.iter().any(|b| self.match_internal::<T>(a.0, b.0) && self.match_internal::<T>(a.1, b.1))) &&
-                    p.iter().all(|b| v.iter().any(|a| self.match_internal::<T>(a.0, b.0) && self.match_internal::<T>(a.1, b.1))),
-                _ => value == pattern
+                (&Vector(ref v), &Vector(ref p)) => {
+                    diff_with(v, p, |a, b| self.match_internal::<T>(a, b)).is_none()
+                }
+                (&List(ref v), &List(ref p)) => {
+                    diff_with(v, p, |a, b| self.match_internal::<T>(a, b)).is_none()
+                }
+                (&Set(ref v), &Set(ref p)) => {
+                    v.len() == p.len()
+                        && v.iter()
+                            .all(|a| p.iter().any(|b| self.match_internal::<T>(a, b)))
+                        && p.iter()
+                            .all(|b| v.iter().any(|a| self.match_internal::<T>(a, b)))
+                }
+                (&Map(ref v), &Map(ref p)) => {
+                    v.len() == p.len()
+                        && v.iter().all(|a| {
+                            p.iter().any(|b| {
+                                self.match_internal::<T>(a.0, b.0)
+                                    && self.match_internal::<T>(a.1, b.1)
+                            })
+                        })
+                        && p.iter().all(|b| {
+                            v.iter().any(|a| {
+                                self.match_internal::<T>(a.0, b.0)
+                                    && self.match_internal::<T>(a.1, b.1)
+                            })
+                        })
+                }
+                _ => value == pattern,
             }
         }
     }
@@ -127,7 +153,7 @@ mod test {
         };
         ( $pattern:tt !~ $value:tt ) => {
             assert_match!($pattern, $value, false);
-        }
+        };
     }
 
     #[test]

@@ -8,16 +8,14 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
+use hyper;
+use rusqlite;
+use serde_json;
 use std;
 use std::error::Error;
-use rusqlite;
 use uuid;
-use hyper;
-use serde_json;
 
-use db_traits::errors::{
-    DbError,
-};
+use db_traits::errors::DbError;
 
 #[derive(Debug, Fail)]
 pub enum TolstoyError {
@@ -58,57 +56,57 @@ pub enum TolstoyError {
     IoError(#[cause] std::io::Error),
 
     #[fail(display = "{}", _0)]
-    UuidError(#[cause] uuid::ParseError),
+    UuidError(#[cause] uuid::Error),
 
     #[fail(display = "{}", _0)]
     NetworkError(#[cause] hyper::Error),
 
     #[fail(display = "{}", _0)]
-    UriError(#[cause] hyper::error::UriError),
+    UriError(#[cause] http::uri::InvalidUri),
 }
 
 impl From<DbError> for TolstoyError {
-    fn from(error: DbError) -> TolstoyError {
+    fn from(error: DbError) -> Self {
         TolstoyError::DbError(error)
     }
 }
 
 impl From<serde_json::Error> for TolstoyError {
-    fn from(error: serde_json::Error) -> TolstoyError {
+    fn from(error: serde_json::Error) -> Self {
         TolstoyError::SerializationError(error)
     }
 }
 
 impl From<rusqlite::Error> for TolstoyError {
-    fn from(error: rusqlite::Error) -> TolstoyError {
-        let cause = match error.cause() {
+    fn from(error: rusqlite::Error) -> Self {
+        let cause = match error.source() {
             Some(e) => e.to_string(),
-            None => "".to_string()
+            None => "".to_string(),
         };
         TolstoyError::RusqliteError(error.to_string(), cause)
     }
 }
 
 impl From<std::io::Error> for TolstoyError {
-    fn from(error: std::io::Error) -> TolstoyError {
+    fn from(error: std::io::Error) -> Self {
         TolstoyError::IoError(error)
     }
 }
 
-impl From<uuid::ParseError> for TolstoyError {
-    fn from(error: uuid::ParseError) -> TolstoyError {
+impl From<uuid::Error> for TolstoyError {
+    fn from(error: uuid::Error) -> Self {
         TolstoyError::UuidError(error)
     }
 }
 
 impl From<hyper::Error> for TolstoyError {
-    fn from(error: hyper::Error) -> TolstoyError {
+    fn from(error: hyper::Error) -> Self {
         TolstoyError::NetworkError(error)
     }
 }
 
-impl From<hyper::error::UriError> for TolstoyError {
-    fn from(error: hyper::error::UriError) -> TolstoyError {
+impl From<http::uri::InvalidUri> for TolstoyError {
+    fn from(error: http::uri::InvalidUri) -> Self {
         TolstoyError::UriError(error)
     }
 }

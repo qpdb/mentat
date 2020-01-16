@@ -8,18 +8,11 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use std::collections::{
-    BTreeSet,
-};
+use std::collections::BTreeSet;
 
-use core_traits::{
-    ValueType,
-    ValueTypeSet,
-};
+use core_traits::{ValueType, ValueTypeSet};
 
-use types::{
-    ValueTypeTag,
-};
+use types::ValueTypeTag;
 
 /// Type safe representation of the possible return values from SQLite's `typeof`
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
@@ -48,15 +41,15 @@ pub trait SQLValueType {
 impl SQLValueType for ValueType {
     fn sql_representation(&self) -> (ValueTypeTag, Option<SQLTypeAffinity>) {
         match *self {
-            ValueType::Ref     => (0, None),
+            ValueType::Ref => (0, None),
             ValueType::Boolean => (1, None),
             ValueType::Instant => (4, None),
 
             // SQLite distinguishes integral from decimal types, allowing long and double to share a tag.
-            ValueType::Long    => (5, Some(SQLTypeAffinity::Integer)),
-            ValueType::Double  => (5, Some(SQLTypeAffinity::Real)),
-            ValueType::String  => (10, None),
-            ValueType::Uuid    => (11, None),
+            ValueType::Long => (5, Some(SQLTypeAffinity::Integer)),
+            ValueType::Double => (5, Some(SQLTypeAffinity::Real)),
+            ValueType::String => (10, None),
+            ValueType::Uuid => (11, None),
             ValueType::Keyword => (13, None),
         }
     }
@@ -71,13 +64,13 @@ impl SQLValueType for ValueType {
     fn accommodates_integer(&self, int: i64) -> bool {
         use ValueType::*;
         match *self {
-            Instant                 => false,          // Always use #inst.
-            Long | Double           => true,
-            Ref                     => int >= 0,
-            Boolean                 => (int == 0) || (int == 1),
-            ValueType::String       => false,
-            Keyword                 => false,
-            Uuid                    => false,
+            Instant => false, // Always use #inst.
+            Long | Double => true,
+            Ref => int >= 0,
+            Boolean => (int == 0) || (int == 1),
+            ValueType::String => false,
+            Keyword => false,
+            Uuid => false,
         }
     }
 }
@@ -130,12 +123,8 @@ impl SQLValueTypeSet for ValueTypeSet {
 
 #[cfg(test)]
 mod tests {
-    use core_traits::{
-        ValueType,
-    };
-    use sql_types::{
-        SQLValueType,
-    };
+    use core_traits::ValueType;
+    use sql_types::SQLValueType;
 
     #[test]
     fn test_accommodates_integer() {

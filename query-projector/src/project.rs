@@ -8,74 +8,35 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use std::collections::{
-    BTreeSet,
-};
+use std::collections::BTreeSet;
 
-use indexmap::{
-    IndexSet,
-};
+use indexmap::IndexSet;
 
-use core_traits::{
-    ValueTypeSet,
-};
+use core_traits::ValueTypeSet;
 
-use mentat_core::{
-    SQLValueType,
-    SQLValueTypeSet,
-};
+use mentat_core::{SQLValueType, SQLValueTypeSet};
 
-use mentat_core::util::{
-    Either,
-};
+use mentat_core::util::Either;
 
-use edn::query::{
-    Element,
-    Pull,
-    Variable,
-};
+use edn::query::{Element, Pull, Variable};
 
 use mentat_query_algebrizer::{
-    AlgebraicQuery,
-    ColumnName,
-    ConjoiningClauses,
-    QualifiedAlias,
-    VariableColumn,
+    AlgebraicQuery, ColumnName, ConjoiningClauses, QualifiedAlias, VariableColumn,
 };
 
-
-use mentat_query_sql::{
-    ColumnOrExpression,
-    GroupBy,
-    Name,
-    Projection,
-    ProjectedColumn,
-};
+use mentat_query_sql::{ColumnOrExpression, GroupBy, Name, ProjectedColumn, Projection};
 
 use query_projector_traits::aggregates::{
-    SimpleAggregation,
-    projected_column_for_simple_aggregate,
+    projected_column_for_simple_aggregate, SimpleAggregation,
 };
 
-use query_projector_traits::errors::{
-    ProjectorError,
-    Result,
-};
+use query_projector_traits::errors::{ProjectorError, Result};
 
-use projectors::{
-    Projector,
-};
+use projectors::Projector;
 
-use pull::{
-    PullIndices,
-    PullOperation,
-    PullTemplate,
-};
+use pull::{PullIndices, PullOperation, PullTemplate};
 
-use super::{
-    CombinedProjection,
-    TypedIndex,
-};
+use super::{CombinedProjection, TypedIndex};
 
 /// An internal temporary struct to pass between the projection 'walk' and the
 /// resultant projector.
@@ -97,7 +58,11 @@ pub(crate) struct ProjectedElements {
 }
 
 impl ProjectedElements {
-    pub(crate) fn combine(self, projector: Box<Projector>, distinct: bool) -> Result<CombinedProjection> {
+    pub(crate) fn combine(
+        self,
+        projector: Box<dyn Projector>,
+        distinct: bool,
+    ) -> Result<CombinedProjection> {
         Ok(CombinedProjection {
             sql_projection: self.sql_projection,
             pre_aggregate_projection: self.pre_aggregate_projection,
@@ -122,44 +87,52 @@ impl ProjectedElements {
     }
 }
 
-fn candidate_type_column(cc: &ConjoiningClauses, var: &Variable) -> Result<(ColumnOrExpression, Name)> {
+fn candidate_type_column(
+    cc: &ConjoiningClauses,
+    var: &Variable,
+) -> Result<(ColumnOrExpression, Name)> {
     cc.extracted_types
-      .get(var)
-      .cloned()
-      .map(|alias| {
-          let type_name = VariableColumn::VariableTypeTag(var.clone()).column_name();
-          (ColumnOrExpression::Column(alias), type_name)
-      })
-      .ok_or_else(|| ProjectorError::UnboundVariable(var.name()).into())
+        .get(var)
+        .cloned()
+        .map(|alias| {
+            let type_name = VariableColumn::VariableTypeTag(var.clone()).column_name();
+            (ColumnOrExpression::Column(alias), type_name)
+        })
+        .ok_or_else(|| ProjectorError::UnboundVariable(var.name()).into())
 }
 
 fn cc_column(cc: &ConjoiningClauses, var: &Variable) -> Result<QualifiedAlias> {
     cc.column_bindings
-      .get(var)
-      .and_then(|cols| cols.get(0).cloned())
-      .ok_or_else(|| ProjectorError::UnboundVariable(var.name()).into())
+        .get(var)
+        .and_then(|cols| cols.get(0).cloned())
+        .ok_or_else(|| ProjectorError::UnboundVariable(var.name()).into())
 }
 
 fn candidate_column(cc: &ConjoiningClauses, var: &Variable) -> Result<(ColumnOrExpression, Name)> {
     // Every variable should be bound by the top-level CC to at least
     // one column in the query. If that constraint is violated it's a
     // bug in our code, so it's appropriate to panic here.
-    cc_column(cc, var)
-        .map(|qa| {
-            let name = VariableColumn::Variable(var.clone()).column_name();
-            (ColumnOrExpression::Column(qa), name)
-        })
+    cc_column(cc, var).map(|qa| {
+        let name = VariableColumn::Variable(var.clone()).column_name();
+        (ColumnOrExpression::Column(qa), name)
+    })
 }
 
 /// Return the projected column -- that is, a value or SQL column and an associated name -- for a
 /// given variable. Also return the type.
 /// Callers are expected to determine whether to project a type tag as an additional SQL column.
-pub fn projected_column_for_var(var: &Variable, cc: &ConjoiningClauses) -> Result<(ProjectedColumn, ValueTypeSet)> {
+pub fn projected_column_for_var(
+    var: &Variable,
+    cc: &ConjoiningClauses,
+) -> Result<(ProjectedColumn, ValueTypeSet)> {
     if let Some(value) = cc.bound_value(&var) {
         // If we already know the value, then our lives are easy.
         let tag = value.value_type();
         let name = VariableColumn::Variable(var.clone()).column_name();
-        Ok((ProjectedColumn(ColumnOrExpression::Value(value.clone()), name), ValueTypeSet::of_one(tag)))
+        Ok((
+            ProjectedColumn(ColumnOrExpression::Value(value.clone()), name),
+            ValueTypeSet::of_one(tag),
+        ))
     } else {
         // If we don't, then the CC *must* have bound the variable.
         let (column, name) = candidate_column(cc, var)?;
@@ -182,8 +155,8 @@ pub fn projected_column_for_var(var: &Variable, cc: &ConjoiningClauses) -> Resul
 pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
     count: usize,
     elements: I,
-    query: &AlgebraicQuery) -> Result<ProjectedElements> {
-
+    query: &AlgebraicQuery,
+) -> Result<ProjectedElements> {
     // Give a little padding for type tags.
     let mut inner_projection = Vec::with_capacity(count + 2);
 
@@ -192,7 +165,7 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
     // We'll expand them later.
     let mut outer_projection: Vec<Either<Name, ProjectedColumn>> = Vec::with_capacity(count + 2);
 
-    let mut i: i32 = 0;
+    let mut i: usize = 0;
     let mut min_max_count: usize = 0;
     let mut templates = vec![];
     let mut pulls: Vec<PullTemplate> = vec![];
@@ -214,24 +187,34 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
         match e {
             &Element::Variable(ref var) => {
                 if outer_variables.contains(var) {
-                    bail!(ProjectorError::InvalidProjection(format!("Duplicate variable {} in query.", var)));
+                    bail!(ProjectorError::InvalidProjection(format!(
+                        "Duplicate variable {} in query.",
+                        var
+                    )));
                 }
                 if corresponded_variables.contains(var) {
-                    bail!(ProjectorError::InvalidProjection(format!("Can't project both {} and `(the {})` from a query.", var, var)));
+                    bail!(ProjectorError::InvalidProjection(format!(
+                        "Can't project both {} and `(the {})` from a query.",
+                        var, var
+                    )));
                 }
-            },
+            }
             &Element::Corresponding(ref var) => {
                 if outer_variables.contains(var) {
-                    bail!(ProjectorError::InvalidProjection(format!("Can't project both {} and `(the {})` from a query.", var, var)));
+                    bail!(ProjectorError::InvalidProjection(format!(
+                        "Can't project both {} and `(the {})` from a query.",
+                        var, var
+                    )));
                 }
                 if corresponded_variables.contains(var) {
-                    bail!(ProjectorError::InvalidProjection(format!("`(the {})` appears twice in query.", var)));
+                    bail!(ProjectorError::InvalidProjection(format!(
+                        "`(the {})` appears twice in query.",
+                        var
+                    )));
                 }
-            },
-            &Element::Aggregate(_) => {
-            },
-            &Element::Pull(_) => {
-            },
+            }
+            &Element::Aggregate(_) => {}
+            &Element::Pull(_) => {}
         };
 
         // Record variables -- `(the ?x)` and `?x` are different in this regard, because we don't want
@@ -239,19 +222,21 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
         match e {
             &Element::Variable(ref var) => {
                 outer_variables.insert(var.clone());
-            },
+            }
             &Element::Corresponding(ref var) => {
                 // We will project these later; don't put them in `outer_variables`
                 // so we know not to group them.
                 corresponded_variables.insert(var.clone());
-            },
-            &Element::Pull(Pull { ref var, patterns: _ }) => {
+            }
+            &Element::Pull(Pull {
+                ref var,
+                patterns: _,
+            }) => {
                 // We treat `pull` as an ordinary variable extraction,
                 // and we expand it later.
                 outer_variables.insert(var.clone());
-            },
-            &Element::Aggregate(_) => {
-            },
+            }
+            &Element::Aggregate(_) => {}
         };
 
         // Now do the main processing of each element.
@@ -259,8 +244,7 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
             // Each time we come across a variable, we push a SQL column
             // into the SQL projection, aliased to the name of the variable,
             // and we push an annotated index into the projector.
-            &Element::Variable(ref var) |
-            &Element::Corresponding(ref var) => {
+            &Element::Variable(ref var) | &Element::Corresponding(ref var) => {
                 inner_variables.insert(var.clone());
 
                 let (projected_column, type_set) = projected_column_for_var(&var, &query.cc)?;
@@ -269,18 +253,21 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
 
                 if let Some(tag) = type_set.unique_type_tag() {
                     templates.push(TypedIndex::Known(i, tag));
-                    i += 1;     // We used one SQL column.
+                    i += 1; // We used one SQL column.
                 } else {
                     templates.push(TypedIndex::Unknown(i, i + 1));
-                    i += 2;     // We used two SQL columns.
+                    i += 2; // We used two SQL columns.
 
                     // Also project the type from the SQL query.
                     let (type_column, type_name) = candidate_type_column(&query.cc, &var)?;
                     inner_projection.push(ProjectedColumn(type_column, type_name.clone()));
                     outer_projection.push(Either::Left(type_name));
                 }
-            },
-            &Element::Pull(Pull { ref var, ref patterns }) => {
+            }
+            &Element::Pull(Pull {
+                ref var,
+                ref patterns,
+            }) => {
                 inner_variables.insert(var.clone());
 
                 let (projected_column, type_set) = projected_column_for_var(&var, &query.cc)?;
@@ -303,12 +290,12 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
                         },
                         op: PullOperation((*patterns).clone()),
                     });
-                    i += 1;     // We used one SQL column.
+                    i += 1; // We used one SQL column.
                 } else {
                     // This should be impossible: (pull ?x) implies that ?x is a ref.
                     unreachable!();
                 }
-            },
+            }
             &Element::Aggregate(ref a) => {
                 if let Some(simple) = a.to_simple() {
                     aggregates = true;
@@ -317,7 +304,7 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
                     match simple.op {
                         Max | Min => {
                             min_max_count += 1;
-                        },
+                        }
                         Avg | Count | Sum => (),
                     }
 
@@ -330,16 +317,24 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
                     // - The type set must be appropriate for the operation. E.g., `Sum` is not a
                     //   meaningful operation on instants.
 
-                    let (projected_column, return_type) = projected_column_for_simple_aggregate(&simple, &query.cc)?;
+                    let (projected_column, return_type) =
+                        projected_column_for_simple_aggregate(&simple, &query.cc)?;
                     outer_projection.push(Either::Right(projected_column));
 
                     if !inner_variables.contains(&simple.var) {
                         inner_variables.insert(simple.var.clone());
-                        let (projected_column, _type_set) = projected_column_for_var(&simple.var, &query.cc)?;
+                        let (projected_column, _type_set) =
+                            projected_column_for_var(&simple.var, &query.cc)?;
                         inner_projection.push(projected_column);
-                        if query.cc.known_type_set(&simple.var).unique_type_tag().is_none() {
+                        if query
+                            .cc
+                            .known_type_set(&simple.var)
+                            .unique_type_tag()
+                            .is_none()
+                        {
                             // Also project the type from the SQL query.
-                            let (type_column, type_name) = candidate_type_column(&query.cc, &simple.var)?;
+                            let (type_column, type_name) =
+                                candidate_type_column(&query.cc, &simple.var)?;
                             inner_projection.push(ProjectedColumn(type_column, type_name.clone()));
                         }
                     }
@@ -349,23 +344,27 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
                     i += 1;
                 } else {
                     // TODO: complex aggregates.
-                    bail!(ProjectorError::NotYetImplemented("complex aggregates".into()));
+                    bail!(ProjectorError::NotYetImplemented(
+                        "complex aggregates".into()
+                    ));
                 }
-            },
+            }
         }
     }
 
     match (min_max_count, corresponded_variables.len()) {
-        (0, 0) | (_, 0) => {},
+        (0, 0) | (_, 0) => {}
         (0, _) => {
-            bail!(ProjectorError::InvalidProjection("Warning: used `the` without `min` or `max`.".to_string()));
-        },
+            bail!(ProjectorError::InvalidProjection(
+                "Warning: used `the` without `min` or `max`.".to_string()
+            ));
+        }
         (1, _) => {
             // This is the success case!
-        },
+        }
         (n, c) => {
             bail!(ProjectorError::AmbiguousAggregates(n, c));
-        },
+        }
     }
 
     // Anything used in ORDER BY (which we're given in `named_projection`)
@@ -412,12 +411,12 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
     if !aggregates {
         // We're done -- we never need to group unless we're aggregating.
         return Ok(ProjectedElements {
-                      sql_projection: Projection::Columns(inner_projection),
-                      pre_aggregate_projection: None,
-                      templates,
-                      pulls,
-                      group_by: vec![],
-                  });
+            sql_projection: Projection::Columns(inner_projection),
+            pre_aggregate_projection: None,
+            templates,
+            pulls,
+            group_by: vec![],
+        });
     }
 
     // OK, on to aggregates.
@@ -439,7 +438,9 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
     let mut group_by = Vec::with_capacity(outer_variables.len() + 2);
 
     let vars = outer_variables.into_iter().zip(::std::iter::repeat(true));
-    let corresponds = corresponded_variables.into_iter().zip(::std::iter::repeat(false));
+    let corresponds = corresponded_variables
+        .into_iter()
+        .zip(::std::iter::repeat(false));
 
     for (var, group) in vars.chain(corresponds) {
         if query.cc.is_value_bound(&var) {
@@ -464,12 +465,13 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
         if needs_type_projection {
             let type_name = VariableColumn::VariableTypeTag(var.clone()).column_name();
             if !already_inner {
-                let type_col = query.cc
-                                    .extracted_types
-                                    .get(&var)
-                                    .cloned()
-                                    .ok_or_else(|| ProjectorError::NoTypeAvailableForVariable(var.name().clone()))?;
-                inner_projection.push(ProjectedColumn(ColumnOrExpression::Column(type_col), type_name.clone()));
+                let type_col = query.cc.extracted_types.get(&var).cloned().ok_or_else(|| {
+                    ProjectorError::NoTypeAvailableForVariable(var.name().clone())
+                })?;
+                inner_projection.push(ProjectedColumn(
+                    ColumnOrExpression::Column(type_col),
+                    type_name.clone(),
+                ));
             }
             if group {
                 group_by.push(GroupBy::ProjectedColumn(type_name));
@@ -505,15 +507,15 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
     // `ground` and known values?)
     // Walk the projection, switching the outer columns to use the inner names.
 
-    let outer_projection = outer_projection.into_iter().map(|c| {
-        match c {
+    let outer_projection = outer_projection
+        .into_iter()
+        .map(|c| match c {
             Either::Left(name) => {
-                ProjectedColumn(ColumnOrExpression::ExistingColumn(name.clone()),
-                                name)
-            },
+                ProjectedColumn(ColumnOrExpression::ExistingColumn(name.clone()), name)
+            }
             Either::Right(pc) => pc,
-        }
-    }).collect();
+        })
+        .collect();
 
     Ok(ProjectedElements {
         sql_projection: Projection::Columns(outer_projection),

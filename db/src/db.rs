@@ -10,14 +10,10 @@
 
 #![allow(dead_code)]
 
-use failure::{
-    ResultExt,
-};
+use failure::ResultExt;
 
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::collections::hash_map::{
-    Entry,
-};
 use std::iter::{once, repeat};
 use std::ops::Range;
 use std::path::Path;
@@ -25,61 +21,30 @@ use std::path::Path;
 use itertools;
 use itertools::Itertools;
 use rusqlite;
-use rusqlite::TransactionBehavior;
 use rusqlite::limits::Limit;
 use rusqlite::types::{ToSql, ToSqlOutput};
+use rusqlite::TransactionBehavior;
 
-use ::{repeat_values, to_namespaced_keyword};
 use bootstrap;
+use {repeat_values, to_namespaced_keyword};
 
-use edn::{
-    DateTime,
-    Utc,
-    Uuid,
-    Value,
-};
+use edn::{DateTime, Utc, Uuid, Value};
 
 use entids;
 
-use core_traits::{
-    attribute,
-    Attribute,
-    AttributeBitFlags,
-    Entid,
-    TypedValue,
-    ValueType,
-};
+use core_traits::{attribute, Attribute, AttributeBitFlags, Entid, TypedValue, ValueType};
 
-use mentat_core::{
-    AttributeMap,
-    FromMicros,
-    IdentMap,
-    Schema,
-    ToMicros,
-    ValueRc,
-};
+use mentat_core::{AttributeMap, FromMicros, IdentMap, Schema, ToMicros, ValueRc};
 
-use db_traits::errors::{
-    DbErrorKind,
-    Result,
-};
+use db_traits::errors::{DbErrorKind, Result};
 
 use metadata;
-use schema::{
-    SchemaBuilding,
-};
-use types::{
-    AVMap,
-    AVPair,
-    DB,
-    Partition,
-    PartitionMap,
-};
+use schema::SchemaBuilding;
 use tx::transact;
+use types::{AVMap, AVPair, Partition, PartitionMap, DB};
 
-use watcher::{
-    NullWatcher,
-};
+use std::convert::TryInto;
+use watcher::NullWatcher;
 
 // In PRAGMA foo='bar', `'bar'` must be a constant string (it cannot be a
 // bound parameter), so we need to escape manually. According to
@@ -89,7 +54,10 @@ fn escape_string_for_pragma(s: &str) -> String {
     s.replace("'", "''")
 }
 
-fn make_connection(uri: &Path, maybe_encryption_key: Option<&str>) -> rusqlite::Result<rusqlite::Connection> {
+fn make_connection(
+    uri: &Path,
+    maybe_encryption_key: Option<&str>,
+) -> rusqlite::Result<rusqlite::Connection> {
     let conn = match uri.to_string_lossy().len() {
         0 => rusqlite::Connection::open_in_memory()?,
         _ => rusqlite::Connection::open(uri)?,
@@ -98,16 +66,22 @@ fn make_connection(uri: &Path, maybe_encryption_key: Option<&str>) -> rusqlite::
     let page_size = 32768;
 
     let initial_pragmas = if let Some(encryption_key) = maybe_encryption_key {
-        assert!(cfg!(feature = "sqlcipher"),
-                "This function shouldn't be called with a key unless we have sqlcipher support");
+        assert!(
+            cfg!(feature = "sqlcipher"),
+            "This function shouldn't be called with a key unless we have sqlcipher support"
+        );
         // Important: The `cipher_page_size` cannot be changed without breaking
         // the ability to open databases that were written when using a
         // different `cipher_page_size`. Additionally, it (AFAICT) must be a
         // positive multiple of `page_size`. We use the same value for both here.
-        format!("
+        format!(
+            "
             PRAGMA key='{}';
             PRAGMA cipher_page_size={};
-        ", escape_string_for_pragma(encryption_key), page_size)
+        ",
+            escape_string_for_pragma(encryption_key),
+            page_size
+        )
     } else {
         String::new()
     };
@@ -118,31 +92,48 @@ fn make_connection(uri: &Path, maybe_encryption_key: Option<&str>) -> rusqlite::
     // Some of the platforms we support do not have a tmp partition (e.g. Android)
     // necessary to store temp files on disk. Ideally, consumers should be able to
     // override this behaviour (see issue 505).
-    conn.execute_batch(&format!("
+    conn.execute_batch(&format!(
+        "
         {}
         PRAGMA journal_mode=wal;
         PRAGMA wal_autocheckpoint=32;
         PRAGMA journal_size_limit=3145728;
         PRAGMA foreign_keys=ON;
         PRAGMA temp_store=2;
-    ", initial_pragmas))?;
+    ",
+        initial_pragmas
+    ))?;
 
     Ok(conn)
 }
 
-pub fn new_connection<T>(uri: T) -> rusqlite::Result<rusqlite::Connection> where T: AsRef<Path> {
+pub fn new_connection<T>(uri: T) -> rusqlite::Result<rusqlite::Connection>
+where
+    T: AsRef<Path>,
+{
     make_connection(uri.as_ref(), None)
 }
 
 #[cfg(feature = "sqlcipher")]
-pub fn new_connection_with_key<P, S>(uri: P, encryption_key: S) -> rusqlite::Result<rusqlite::Connection>
-where P: AsRef<Path>, S: AsRef<str> {
+pub fn new_connection_with_key<P, S>(
+    uri: P,
+    encryption_key: S,
+) -> rusqlite::Result<rusqlite::Connection>
+where
+    P: AsRef<Path>,
+    S: AsRef<str>,
+{
     make_connection(uri.as_ref(), Some(encryption_key.as_ref()))
 }
 
 #[cfg(feature = "sqlcipher")]
-pub fn change_encryption_key<S>(conn: &rusqlite::Connection, encryption_key: S) -> rusqlite::Result<()>
-where S: AsRef<str> {
+pub fn change_encryption_key<S>(
+    conn: &rusqlite::Connection,
+    encryption_key: S,
+) -> rusqlite::Result<()>
+where
+    S: AsRef<str>,
+{
     let escaped = escape_string_for_pragma(encryption_key.as_ref());
     // `conn.execute` complains that this returns a result, and using a query
     // for it requires more boilerplate.
@@ -166,7 +157,11 @@ const FALSE: &'static bool = &false;
 /// `rusqlite` is designed around references to values; this lets us use computed bools easily.
 #[inline(always)]
 fn to_bool_ref(x: bool) -> &'static bool {
-    if x { TRUE } else { FALSE }
+    if x {
+        TRUE
+    } else {
+        FALSE
+    }
 }
 
 lazy_static! {
@@ -262,8 +257,11 @@ lazy_static! {
 /// Mentat manages its own SQL schema version using the user version.  See the [SQLite
 /// documentation](https://www.sqlite.org/pragma.html#pragma_user_version).
 fn set_user_version(conn: &rusqlite::Connection, version: i32) -> Result<()> {
-    conn.execute(&format!("PRAGMA user_version = {}", version), &[])
-        .context(DbErrorKind::CouldNotSetVersionPragma)?;
+    conn.execute(
+        &format!("PRAGMA user_version = {}", version),
+        rusqlite::params![],
+    )
+    .context(DbErrorKind::CouldNotSetVersionPragma)?;
     Ok(())
 }
 
@@ -272,18 +270,20 @@ fn set_user_version(conn: &rusqlite::Connection, version: i32) -> Result<()> {
 /// Mentat manages its own SQL schema version using the user version.  See the [SQLite
 /// documentation](https://www.sqlite.org/pragma.html#pragma_user_version).
 fn get_user_version(conn: &rusqlite::Connection) -> Result<i32> {
-    let v = conn.query_row("PRAGMA user_version", &[], |row| {
-        row.get(0)
-    }).context(DbErrorKind::CouldNotGetVersionPragma)?;
+    let v = conn
+        .query_row("PRAGMA user_version", rusqlite::params![], |row| row.get(0))
+        .context(DbErrorKind::CouldNotGetVersionPragma)?;
     Ok(v)
 }
 
 /// Do just enough work that either `create_current_version` or sync can populate the DB.
-pub fn create_empty_current_version(conn: &mut rusqlite::Connection) -> Result<(rusqlite::Transaction, DB)> {
+pub fn create_empty_current_version(
+    conn: &mut rusqlite::Connection,
+) -> Result<(rusqlite::Transaction, DB)> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Exclusive)?;
 
     for statement in (&V1_STATEMENTS).iter() {
-        tx.execute(statement, &[])?;
+        tx.execute(statement, rusqlite::params![])?;
     }
 
     set_user_version(&tx, CURRENT_VERSION)?;
@@ -298,28 +298,27 @@ pub fn create_empty_current_version(conn: &mut rusqlite::Connection) -> Result<(
 /// defined in 'known_parts'.
 fn create_current_partition_view(conn: &rusqlite::Connection) -> Result<()> {
     let mut stmt = conn.prepare("SELECT part, end FROM known_parts ORDER BY end ASC")?;
-    let known_parts: Result<Vec<(String, i64)>> = stmt.query_and_then(&[], |row| {
-        Ok((
-            row.get_checked(0)?,
-            row.get_checked(1)?,
-        ))
-    })?.collect();
+    let known_parts: Result<Vec<(String, i64)>> = stmt
+        .query_and_then(rusqlite::params![], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect();
 
     let mut case = vec![];
     for &(ref part, ref end) in known_parts?.iter() {
         case.push(format!(r#"WHEN e <= {} THEN "{}""#, end, part));
     }
 
-    let view_stmt = format!("CREATE VIEW parts AS
+    let view_stmt = format!(
+        "CREATE VIEW parts AS
         SELECT
             CASE {} END AS part,
             min(e) AS start,
             max(e) + 1 AS idx
         FROM timelined_transactions WHERE timeline = {} GROUP BY part",
-        case.join(" "), ::TIMELINE_MAIN
+        case.join(" "),
+        ::TIMELINE_MAIN
     );
 
-    conn.execute(&view_stmt, &[])?;
+    conn.execute(&view_stmt, rusqlite::params![])?;
     Ok(())
 }
 
@@ -327,13 +326,21 @@ fn create_current_partition_view(conn: &rusqlite::Connection) -> Result<()> {
 pub fn create_current_version(conn: &mut rusqlite::Connection) -> Result<DB> {
     let (tx, mut db) = create_empty_current_version(conn)?;
 
-    // TODO: think more carefully about allocating new parts and bitmasking part ranges.
+    // TODO: think more carefully about allocating new parts and bit-masking part ranges.
     // TODO: install these using bootstrap assertions.  It's tricky because the part ranges are implicit.
     // TODO: one insert, chunk into 999/3 sections, for safety.
     // This is necessary: `transact` will only UPDATE parts, not INSERT them if they're missing.
     for (part, partition) in db.partition_map.iter() {
         // TODO: Convert "keyword" part to SQL using Value conversion.
-        tx.execute("INSERT INTO known_parts (part, start, end, allow_excision) VALUES (?, ?, ?, ?)", &[part, &partition.start, &partition.end, &partition.allow_excision])?;
+        tx.execute(
+            "INSERT INTO known_parts (part, start, end, allow_excision) VALUES (?, ?, ?, ?)",
+            &[
+                part,
+                &partition.start.to_string(),
+                &partition.end.to_string(),
+                &(partition.allow_excision as i8).to_string(),
+            ],
+        )?;
     }
 
     create_current_partition_view(&tx)?;
@@ -341,12 +348,21 @@ pub fn create_current_version(conn: &mut rusqlite::Connection) -> Result<DB> {
     // TODO: return to transact_internal to self-manage the encompassing SQLite transaction.
     let bootstrap_schema_for_mutation = Schema::default(); // The bootstrap transaction will populate this schema.
 
-    let (_report, next_partition_map, next_schema, _watcher) = transact(&tx, db.partition_map, &bootstrap_schema_for_mutation, &db.schema, NullWatcher(), bootstrap::bootstrap_entities())?;
+    let (_report, next_partition_map, next_schema, _watcher) = transact(
+        &tx,
+        db.partition_map,
+        &bootstrap_schema_for_mutation,
+        &db.schema,
+        NullWatcher(),
+        bootstrap::bootstrap_entities(),
+    )?;
 
     // TODO: validate metadata mutations that aren't schema related, like additional partitions.
     if let Some(next_schema) = next_schema {
         if next_schema != db.schema {
-            bail!(DbErrorKind::NotYetImplemented(format!("Initial bootstrap transaction did not produce expected bootstrap schema")));
+            bail!(DbErrorKind::NotYetImplemented(format!(
+                "Initial bootstrap transaction did not produce expected bootstrap schema"
+            )));
         }
     }
 
@@ -364,16 +380,22 @@ pub fn ensure_current_version(conn: &mut rusqlite::Connection) -> Result<DB> {
 
     let user_version = get_user_version(&conn)?;
     match user_version {
-        0               => create_current_version(conn),
+        0 => create_current_version(conn),
         CURRENT_VERSION => read_db(conn),
 
         // TODO: support updating an existing store.
-        v => bail!(DbErrorKind::NotYetImplemented(format!("Opening databases with Mentat version: {}", v))),
+        v => bail!(DbErrorKind::NotYetImplemented(format!(
+            "Opening databases with Mentat version: {}",
+            v
+        ))),
     }
 }
 
 pub trait TypedSQLValue {
-    fn from_sql_value_pair(value: rusqlite::types::Value, value_type_tag: i32) -> Result<TypedValue>;
+    fn from_sql_value_pair(
+        value: rusqlite::types::Value,
+        value_type_tag: i32,
+    ) -> Result<TypedValue>;
     fn to_sql_value_pair<'a>(&'a self) -> (ToSqlOutput<'a>, i32);
     fn from_edn_value(value: &Value) -> Option<TypedValue>;
     fn to_edn_value_pair(&self) -> (Value, ValueType);
@@ -381,13 +403,18 @@ pub trait TypedSQLValue {
 
 impl TypedSQLValue for TypedValue {
     /// Given a SQLite `value` and a `value_type_tag`, return the corresponding `TypedValue`.
-    fn from_sql_value_pair(value: rusqlite::types::Value, value_type_tag: i32) -> Result<TypedValue> {
+    fn from_sql_value_pair(
+        value: rusqlite::types::Value,
+        value_type_tag: i32,
+    ) -> Result<TypedValue> {
         match (value_type_tag, value) {
             (0, rusqlite::types::Value::Integer(x)) => Ok(TypedValue::Ref(x)),
             (1, rusqlite::types::Value::Integer(x)) => Ok(TypedValue::Boolean(0 != x)),
 
             // Negative integers are simply times before 1970.
-            (4, rusqlite::types::Value::Integer(x)) => Ok(TypedValue::Instant(DateTime::<Utc>::from_micros(x))),
+            (4, rusqlite::types::Value::Integer(x)) => {
+                Ok(TypedValue::Instant(DateTime::<Utc>::from_micros(x)))
+            }
 
             // SQLite distinguishes integral from decimal types, allowing long and double to
             // share a tag.
@@ -395,17 +422,17 @@ impl TypedSQLValue for TypedValue {
             (5, rusqlite::types::Value::Real(x)) => Ok(TypedValue::Double(x.into())),
             (10, rusqlite::types::Value::Text(x)) => Ok(x.into()),
             (11, rusqlite::types::Value::Blob(x)) => {
-                let u = Uuid::from_bytes(x.as_slice());
-                if u.is_err() {
+                let u = Uuid::from_bytes(x.as_slice().try_into().unwrap());
+                if u.is_nil() {
                     // Rather than exposing Uuid's ParseError…
-                    bail!(DbErrorKind::BadSQLValuePair(rusqlite::types::Value::Blob(x),
-                                                     value_type_tag));
+                    bail!(DbErrorKind::BadSQLValuePair(
+                        rusqlite::types::Value::Blob(x),
+                        value_type_tag
+                    ));
                 }
-                Ok(TypedValue::Uuid(u.unwrap()))
-            },
-            (13, rusqlite::types::Value::Text(x)) => {
-                to_namespaced_keyword(&x).map(|k| k.into())
-            },
+                Ok(TypedValue::Uuid(u))
+            }
+            (13, rusqlite::types::Value::Text(x)) => to_namespaced_keyword(&x).map(|k| k.into()),
             (_, value) => bail!(DbErrorKind::BadSQLValuePair(value, value_type_tag)),
         }
     }
@@ -426,22 +453,22 @@ impl TypedSQLValue for TypedValue {
             &Value::Float(ref x) => Some(TypedValue::Double(x.clone())),
             &Value::Text(ref x) => Some(x.clone().into()),
             &Value::Keyword(ref x) => Some(x.clone().into()),
-            _ => None
+            _ => None,
         }
     }
 
     /// Return the corresponding SQLite `value` and `value_type_tag` pair.
     fn to_sql_value_pair<'a>(&'a self) -> (ToSqlOutput<'a>, i32) {
         match self {
-            &TypedValue::Ref(x) => (rusqlite::types::Value::Integer(x).into(), 0),
-            &TypedValue::Boolean(x) => (rusqlite::types::Value::Integer(if x { 1 } else { 0 }).into(), 1),
-            &TypedValue::Instant(x) => (rusqlite::types::Value::Integer(x.to_micros()).into(), 4),
+            &TypedValue::Ref(x) => (x.into(), 0),
+            &TypedValue::Boolean(x) => ((if x { 1 } else { 0 }).into(), 1),
+            &TypedValue::Instant(x) => (x.to_micros().into(), 4),
             // SQLite distinguishes integral from decimal types, allowing long and double to share a tag.
-            &TypedValue::Long(x) => (rusqlite::types::Value::Integer(x).into(), 5),
-            &TypedValue::Double(x) => (rusqlite::types::Value::Real(x.into_inner()).into(), 5),
-            &TypedValue::String(ref x) => (rusqlite::types::ValueRef::Text(x.as_str()).into(), 10),
-            &TypedValue::Uuid(ref u) => (rusqlite::types::Value::Blob(u.as_bytes().to_vec()).into(), 11),
-            &TypedValue::Keyword(ref x) => (rusqlite::types::ValueRef::Text(&x.to_string()).into(), 13),
+            &TypedValue::Long(x) => (x.into(), 5),
+            &TypedValue::Double(x) => (x.into_inner().into(), 5),
+            &TypedValue::String(ref x) => (x.as_str().into(), 10),
+            &TypedValue::Uuid(ref u) => (u.as_bytes().to_vec().into(), 11),
+            &TypedValue::Keyword(ref x) => (x.to_string().into(), 13),
         }
     }
 
@@ -462,12 +489,15 @@ impl TypedSQLValue for TypedValue {
 
 /// Read an arbitrary [e a v value_type_tag] materialized view from the given table in the SQL
 /// store.
-pub(crate) fn read_materialized_view(conn: &rusqlite::Connection, table: &str) -> Result<Vec<(Entid, Entid, TypedValue)>> {
-    let mut stmt: rusqlite::Statement = conn.prepare(format!("SELECT e, a, v, value_type_tag FROM {}", table).as_str())?;
-    let m: Result<Vec<_>> = stmt.query_and_then(
-        &[],
-        row_to_datom_assertion
-    )?.collect();
+pub(crate) fn read_materialized_view(
+    conn: &rusqlite::Connection,
+    table: &str,
+) -> Result<Vec<(Entid, Entid, TypedValue)>> {
+    let mut stmt: rusqlite::Statement =
+        conn.prepare(format!("SELECT e, a, v, value_type_tag FROM {}", table).as_str())?;
+    let m: Result<Vec<_>> = stmt
+        .query_and_then(rusqlite::params![], row_to_datom_assertion)?
+        .collect();
     m
 }
 
@@ -480,7 +510,8 @@ pub fn read_partition_map(conn: &rusqlite::Connection) -> Result<PartitionMap> {
     // First part of the union sprinkles 'allow_excision' into the 'parts' view.
     // Second part of the union takes care of partitions which are known
     // but don't have any transactions.
-    let mut stmt: rusqlite::Statement = conn.prepare("
+    let mut stmt: rusqlite::Statement = conn.prepare(
+        "
         SELECT
             known_parts.part,
             known_parts.start,
@@ -504,11 +535,16 @@ pub fn read_partition_map(conn: &rusqlite::Connection) -> Result<PartitionMap> {
         FROM
             known_parts
         WHERE
-            part NOT IN (SELECT part FROM parts)"
+            part NOT IN (SELECT part FROM parts)",
     )?;
-    let m = stmt.query_and_then(&[], |row| -> Result<(String, Partition)> {
-        Ok((row.get_checked(0)?, Partition::new(row.get_checked(1)?, row.get_checked(2)?, row.get_checked(3)?, row.get_checked(4)?)))
-    })?.collect();
+    let m = stmt
+        .query_and_then(rusqlite::params![], |row| -> Result<(String, Partition)> {
+            Ok((
+                row.get(0)?,
+                Partition::new(row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?),
+            ))
+        })?
+        .collect();
     m
 }
 
@@ -548,7 +584,7 @@ pub(crate) fn read_db(conn: &rusqlite::Connection) -> Result<DB> {
 /// Internal representation of an [e a v added] datom, ready to be transacted against the store.
 pub type ReducedEntity<'a> = (Entid, Entid, &'a Attribute, TypedValue, bool);
 
-#[derive(Clone,Debug,Eq,Hash,Ord,PartialOrd,PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub enum SearchType {
     Exact,
     Inexact,
@@ -578,8 +614,16 @@ pub trait MentatStoring {
     fn begin_tx_application(&self) -> Result<()>;
 
     // TODO: this is not a reasonable abstraction, but I don't want to really consider non-SQL storage just yet.
-    fn insert_non_fts_searches<'a>(&self, entities: &'a [ReducedEntity], search_type: SearchType) -> Result<()>;
-    fn insert_fts_searches<'a>(&self, entities: &'a [ReducedEntity], search_type: SearchType) -> Result<()>;
+    fn insert_non_fts_searches<'a>(
+        &self,
+        entities: &'a [ReducedEntity],
+        search_type: SearchType,
+    ) -> Result<()>;
+    fn insert_fts_searches<'a>(
+        &self,
+        entities: &'a [ReducedEntity],
+        search_type: SearchType,
+    ) -> Result<()>;
 
     /// Prepare the underlying storage layer for finalization after a Mentat transaction.
     ///
@@ -622,7 +666,8 @@ fn search(conn: &rusqlite::Connection) -> Result<()> {
          t.a0 = d.a"#;
 
     let mut stmt = conn.prepare_cached(s)?;
-    stmt.execute(&[]).context(DbErrorKind::CouldNotSearch)?;
+    stmt.execute(rusqlite::params![])
+        .context(DbErrorKind::CouldNotSearch)?;
     Ok(())
 }
 
@@ -645,7 +690,8 @@ fn insert_transaction(conn: &rusqlite::Connection, tx: Entid) -> Result<()> {
       WHERE added0 IS 1 AND ((rid IS NULL) OR ((rid IS NOT NULL) AND (v0 IS NOT v)))"#;
 
     let mut stmt = conn.prepare_cached(s)?;
-    stmt.execute(&[&tx]).context(DbErrorKind::TxInsertFailedToAddMissingDatoms)?;
+    stmt.execute(&[&tx])
+        .context(DbErrorKind::TxInsertFailedToAddMissingDatoms)?;
 
     let s = r#"
       INSERT INTO timelined_transactions (e, a, v, tx, added, value_type_tag)
@@ -656,7 +702,8 @@ fn insert_transaction(conn: &rusqlite::Connection, tx: Entid) -> Result<()> {
              (added0 IS 1 AND search_type IS ':db.cardinality/one' AND v0 IS NOT v))"#;
 
     let mut stmt = conn.prepare_cached(s)?;
-    stmt.execute(&[&tx]).context(DbErrorKind::TxInsertFailedToRetractDatoms)?;
+    stmt.execute(&[&tx])
+        .context(DbErrorKind::TxInsertFailedToRetractDatoms)?;
 
     Ok(())
 }
@@ -678,7 +725,8 @@ fn update_datoms(conn: &rusqlite::Connection, tx: Entid) -> Result<()> {
         DELETE FROM datoms WHERE rowid IN ids"#;
 
     let mut stmt = conn.prepare_cached(s)?;
-    stmt.execute(&[]).context(DbErrorKind::DatomsUpdateFailedToRetract)?;
+    stmt.execute(rusqlite::params![])
+        .context(DbErrorKind::DatomsUpdateFailedToRetract)?;
 
     // Insert datoms that were added and not already present. We also must expand our bitfield into
     // flags.  Since Mentat follows Datomic and treats its input as a set, it is okay to transact
@@ -686,7 +734,8 @@ fn update_datoms(conn: &rusqlite::Connection, tx: Entid) -> Result<()> {
     // datom twice in datoms.  The transactor unifies repeated datoms, and in addition we add
     // indices to the search inputs and search results to ensure that we don't see repeated datoms
     // at this point.
-    let s = format!(r#"
+    let s = format!(
+        r#"
       INSERT INTO datoms (e, a, v, tx, value_type_tag, index_avet, index_vaet, index_fulltext, unique_value)
       SELECT e0, a0, v0, ?, value_type_tag0,
              flags0 & {} IS NOT 0,
@@ -695,13 +744,15 @@ fn update_datoms(conn: &rusqlite::Connection, tx: Entid) -> Result<()> {
              flags0 & {} IS NOT 0
       FROM temp.search_results
       WHERE added0 IS 1 AND ((rid IS NULL) OR ((rid IS NOT NULL) AND (v0 IS NOT v)))"#,
-      AttributeBitFlags::IndexAVET as u8,
-      AttributeBitFlags::IndexVAET as u8,
-      AttributeBitFlags::IndexFulltext as u8,
-      AttributeBitFlags::UniqueValue as u8);
+        AttributeBitFlags::IndexAVET as u8,
+        AttributeBitFlags::IndexVAET as u8,
+        AttributeBitFlags::IndexFulltext as u8,
+        AttributeBitFlags::UniqueValue as u8
+    );
 
     let mut stmt = conn.prepare_cached(&s)?;
-    stmt.execute(&[&tx]).context(DbErrorKind::DatomsUpdateFailedToAdd)?;
+    stmt.execute(&[&tx])
+        .context(DbErrorKind::DatomsUpdateFailedToAdd)?;
     Ok(())
 }
 
@@ -733,12 +784,12 @@ impl MentatStoring for rusqlite::Connection {
             }).collect();
 
             // `params` reference computed values in `block`.
-            let params: Vec<&ToSql> = block.iter().flat_map(|&(ref searchid, ref a, ref value, ref value_type_tag)| {
+            let params: Vec<&dyn ToSql> = block.iter().flat_map(|&(ref searchid, ref a, ref value, ref value_type_tag)| {
                 // Avoid inner heap allocation.
-                once(searchid as &ToSql)
-                    .chain(once(a as &ToSql)
-                           .chain(once(value as &ToSql)
-                                  .chain(once(value_type_tag as &ToSql))))
+                once(searchid as &dyn ToSql)
+                    .chain(once(a as &dyn ToSql)
+                           .chain(once(value as &dyn ToSql)
+                                  .chain(once(value_type_tag as &dyn ToSql))))
             }).collect();
 
             // TODO: cache these statements for selected values of `count`.
@@ -756,7 +807,7 @@ impl MentatStoring for rusqlite::Connection {
             let mut stmt: rusqlite::Statement = self.prepare(s.as_str())?;
 
             let m: Result<Vec<(i64, Entid)>> = stmt.query_and_then(&params, |row| -> Result<(i64, Entid)> {
-                Ok((row.get_checked(0)?, row.get_checked(1)?))
+                Ok((row.get(0)?, row.get(1)?))
             })?.collect();
             m
         }).collect::<Result<Vec<Vec<(i64, Entid)>>>>();
@@ -765,10 +816,13 @@ impl MentatStoring for rusqlite::Connection {
         let results: Vec<(i64, Entid)> = results?.as_slice().concat();
 
         // Create map [a v] -> e.
-        let m: HashMap<&'a AVPair, Entid> = results.into_iter().map(|(search_id, entid)| {
-            let index: usize = (search_id - initial_search_id) as usize;
-            (avs[index], entid)
-        }).collect();
+        let m: HashMap<&'a AVPair, Entid> = results
+            .into_iter()
+            .map(|(search_id, entid)| {
+                let index: usize = (search_id - initial_search_id) as usize;
+                (avs[index], entid)
+            })
+            .collect();
         Ok(m)
     }
 
@@ -798,7 +852,6 @@ impl MentatStoring for rusqlite::Connection {
                value_type_tag0 SMALLINT NOT NULL,
                added0 TINYINT NOT NULL,
                flags0 TINYINT NOT NULL)"#,
-
             // It is fine to transact the same [e a v] twice in one transaction, but the transaction
             // processor should unify such repeated datoms.  This index will cause insertion to fail
             // if the transaction processor incorrectly tries to assert the same (cardinality one)
@@ -828,7 +881,8 @@ impl MentatStoring for rusqlite::Connection {
 
         for statement in &statements {
             let mut stmt = self.prepare_cached(statement)?;
-            stmt.execute(&[]).context(DbErrorKind::FailedToCreateTempTables)?;
+            stmt.execute(rusqlite::params![])
+                .context(DbErrorKind::FailedToCreateTempTables)?;
         }
 
         Ok(())
@@ -838,11 +892,17 @@ impl MentatStoring for rusqlite::Connection {
     ///
     /// Eventually, the details of this approach will be captured in
     /// https://github.com/mozilla/mentat/wiki/Transacting:-entity-to-SQL-translation.
-    fn insert_non_fts_searches<'a>(&self, entities: &'a [ReducedEntity<'a>], search_type: SearchType) -> Result<()> {
+    fn insert_non_fts_searches<'a>(
+        &self,
+        entities: &'a [ReducedEntity<'a>],
+        search_type: SearchType,
+    ) -> Result<()> {
         let bindings_per_statement = 6;
 
         let max_vars = self.limit(Limit::SQLITE_LIMIT_VARIABLE_NUMBER) as usize;
-        let chunks: itertools::IntoChunks<_> = entities.into_iter().chunks(max_vars / bindings_per_statement);
+        let chunks: itertools::IntoChunks<_> = entities
+            .into_iter()
+            .chunks(max_vars / bindings_per_statement);
 
         // We'd like to flat_map here, but it's not obvious how to flat_map across Result.
         let results: Result<Vec<()>> = chunks.into_iter().map(|chunk| -> Result<()> {
@@ -867,15 +927,15 @@ impl MentatStoring for rusqlite::Connection {
             let block = block?;
 
             // `params` reference computed values in `block`.
-            let params: Vec<&ToSql> = block.iter().flat_map(|&(ref e, ref a, ref value, ref value_type_tag, added, ref flags)| {
+            let params: Vec<&dyn ToSql> = block.iter().flat_map(|&(ref e, ref a, ref value, ref value_type_tag, added, ref flags)| {
                 // Avoid inner heap allocation.
                 // TODO: extract some finite length iterator to make this less indented!
-                once(e as &ToSql)
-                    .chain(once(a as &ToSql)
-                           .chain(once(value as &ToSql)
-                                  .chain(once(value_type_tag as &ToSql)
-                                         .chain(once(to_bool_ref(added) as &ToSql)
-                                                .chain(once(flags as &ToSql))))))
+                once(e as &dyn ToSql)
+                    .chain(once(a as &dyn ToSql)
+                           .chain(once(value as &dyn ToSql)
+                                  .chain(once(value_type_tag as &dyn ToSql)
+                                         .chain(once(to_bool_ref(added) as &dyn ToSql)
+                                                .chain(once(flags as &dyn ToSql))))))
             }).collect();
 
             // TODO: cache this for selected values of count.
@@ -903,13 +963,19 @@ impl MentatStoring for rusqlite::Connection {
     ///
     /// Eventually, the details of this approach will be captured in
     /// https://github.com/mozilla/mentat/wiki/Transacting:-entity-to-SQL-translation.
-    fn insert_fts_searches<'a>(&self, entities: &'a [ReducedEntity<'a>], search_type: SearchType) -> Result<()> {
+    fn insert_fts_searches<'a>(
+        &self,
+        entities: &'a [ReducedEntity<'a>],
+        search_type: SearchType,
+    ) -> Result<()> {
         let max_vars = self.limit(Limit::SQLITE_LIMIT_VARIABLE_NUMBER) as usize;
         let bindings_per_statement = 6;
 
         let mut outer_searchid = 2000;
 
-        let chunks: itertools::IntoChunks<_> = entities.into_iter().chunks(max_vars / bindings_per_statement);
+        let chunks: itertools::IntoChunks<_> = entities
+            .into_iter()
+            .chunks(max_vars / bindings_per_statement);
 
         // From string to (searchid, value_type_tag).
         let mut seen: HashMap<ValueRc<String>, (i64, i32)> = HashMap::with_capacity(entities.len());
@@ -961,15 +1027,15 @@ impl MentatStoring for rusqlite::Connection {
 
             // First, insert all fulltext string values.
             // `fts_params` reference computed values in `block`.
-            let fts_params: Vec<&ToSql> =
+            let fts_params: Vec<&dyn ToSql> =
                 block.iter()
                      .filter(|&&(ref _e, ref _a, ref value, ref _value_type_tag, _added, ref _flags, ref _searchid)| {
                          value.is_some()
                      })
                      .flat_map(|&(ref _e, ref _a, ref value, ref _value_type_tag, _added, ref _flags, ref searchid)| {
                          // Avoid inner heap allocation.
-                         once(value as &ToSql)
-                             .chain(once(searchid as &ToSql))
+                         once(value as &dyn ToSql)
+                             .chain(once(searchid as &dyn ToSql))
                      }).collect();
 
             // TODO: make this maximally efficient. It's not terribly inefficient right now.
@@ -982,15 +1048,15 @@ impl MentatStoring for rusqlite::Connection {
 
             // Second, insert searches.
             // `params` reference computed values in `block`.
-            let params: Vec<&ToSql> = block.iter().flat_map(|&(ref e, ref a, ref _value, ref value_type_tag, added, ref flags, ref searchid)| {
+            let params: Vec<&dyn ToSql> = block.iter().flat_map(|&(ref e, ref a, ref _value, ref value_type_tag, added, ref flags, ref searchid)| {
                 // Avoid inner heap allocation.
                 // TODO: extract some finite length iterator to make this less indented!
-                once(e as &ToSql)
-                    .chain(once(a as &ToSql)
-                           .chain(once(searchid as &ToSql)
-                                  .chain(once(value_type_tag as &ToSql)
-                                         .chain(once(to_bool_ref(added) as &ToSql)
-                                                .chain(once(flags as &ToSql))))))
+                once(e as &dyn ToSql)
+                    .chain(once(a as &dyn ToSql)
+                           .chain(once(searchid as &dyn ToSql)
+                                  .chain(once(value_type_tag as &dyn ToSql)
+                                         .chain(once(to_bool_ref(added) as &dyn ToSql)
+                                                .chain(once(flags as &dyn ToSql))))))
             }).collect();
 
             // TODO: cache this for selected values of count.
@@ -1012,8 +1078,11 @@ impl MentatStoring for rusqlite::Connection {
         }).collect::<Result<Vec<()>>>();
 
         // Finally, clean up temporary searchids.
-        let mut stmt = self.prepare_cached("UPDATE fulltext_values SET searchid = NULL WHERE searchid IS NOT NULL")?;
-        stmt.execute(&[]).context(DbErrorKind::FtsFailedToDropSearchIds)?;
+        let mut stmt = self.prepare_cached(
+            "UPDATE fulltext_values SET searchid = NULL WHERE searchid IS NOT NULL",
+        )?;
+        stmt.execute(rusqlite::params![])
+            .context(DbErrorKind::FtsFailedToDropSearchIds)?;
         results.map(|_| ())
     }
 
@@ -1028,8 +1097,9 @@ impl MentatStoring for rusqlite::Connection {
         Ok(())
     }
 
-    fn resolved_metadata_assertions(&self) ->  Result<Vec<(Entid, Entid, TypedValue, bool)>> {
-        let sql_stmt = format!(r#"
+    fn resolved_metadata_assertions(&self) -> Result<Vec<(Entid, Entid, TypedValue, bool)>> {
+        let sql_stmt = format!(
+            r#"
             SELECT e, a, v, value_type_tag, added FROM
             (
                 SELECT e0 as e, a0 as a, v0 as v, value_type_tag0 as value_type_tag, 1 as added
@@ -1046,21 +1116,25 @@ impl MentatStoring for rusqlite::Connection {
                     (added0 IS 1 AND search_type IS ':db.cardinality/one' AND v0 IS NOT v))
 
             ) ORDER BY e, a, v, value_type_tag, added"#,
-            entids::METADATA_SQL_LIST.as_str(), entids::METADATA_SQL_LIST.as_str()
+            entids::METADATA_SQL_LIST.as_str(),
+            entids::METADATA_SQL_LIST.as_str()
         );
 
         let mut stmt = self.prepare_cached(&sql_stmt)?;
-        let m: Result<Vec<_>> = stmt.query_and_then(
-            &[],
-            row_to_transaction_assertion
-        )?.collect();
+        let m: Result<Vec<_>> = stmt
+            .query_and_then(rusqlite::params![], row_to_transaction_assertion)?
+            .collect();
         m
     }
 }
 
 /// Extract metadata-related [e a typed_value added] datoms committed in the given transaction.
-pub fn committed_metadata_assertions(conn: &rusqlite::Connection, tx_id: Entid) -> Result<Vec<(Entid, Entid, TypedValue, bool)>> {
-    let sql_stmt = format!(r#"
+pub fn committed_metadata_assertions(
+    conn: &rusqlite::Connection,
+    tx_id: Entid,
+) -> Result<Vec<(Entid, Entid, TypedValue, bool)>> {
+    let sql_stmt = format!(
+        r#"
         SELECT e, a, v, value_type_tag, added
         FROM transactions
         WHERE tx = ? AND a IN {}
@@ -1069,29 +1143,28 @@ pub fn committed_metadata_assertions(conn: &rusqlite::Connection, tx_id: Entid) 
     );
 
     let mut stmt = conn.prepare_cached(&sql_stmt)?;
-    let m: Result<Vec<_>> = stmt.query_and_then(
-        &[&tx_id as &ToSql],
-        row_to_transaction_assertion
-    )?.collect();
+    let m: Result<Vec<_>> = stmt
+        .query_and_then(&[&tx_id as &dyn ToSql], row_to_transaction_assertion)?
+        .collect();
     m
 }
 
 /// Takes a row, produces a transaction quadruple.
 fn row_to_transaction_assertion(row: &rusqlite::Row) -> Result<(Entid, Entid, TypedValue, bool)> {
     Ok((
-        row.get_checked(0)?,
-        row.get_checked(1)?,
-        TypedValue::from_sql_value_pair(row.get_checked(2)?, row.get_checked(3)?)?,
-        row.get_checked(4)?
+        row.get(0)?,
+        row.get(1)?,
+        TypedValue::from_sql_value_pair(row.get(2)?, row.get(3)?)?,
+        row.get(4)?,
     ))
 }
 
 /// Takes a row, produces a datom quadruple.
 fn row_to_datom_assertion(row: &rusqlite::Row) -> Result<(Entid, Entid, TypedValue)> {
     Ok((
-        row.get_checked(0)?,
-        row.get_checked(1)?,
-        TypedValue::from_sql_value_pair(row.get_checked(2)?, row.get_checked(3)?)?
+        row.get(0)?,
+        row.get(1)?,
+        TypedValue::from_sql_value_pair(row.get(2)?, row.get(3)?)?,
     ))
 }
 
@@ -1099,8 +1172,12 @@ fn row_to_datom_assertion(row: &rusqlite::Row) -> Result<(Entid, Entid, TypedVal
 ///
 /// This updates the "entids", "idents", and "schema" materialized views, copying directly from the
 /// "datoms" and "transactions" table as appropriate.
-pub fn update_metadata(conn: &rusqlite::Connection, _old_schema: &Schema, new_schema: &Schema, metadata_report: &metadata::MetadataReport) -> Result<()>
-{
+pub fn update_metadata(
+    conn: &rusqlite::Connection,
+    _old_schema: &Schema,
+    new_schema: &Schema,
+    metadata_report: &metadata::MetadataReport,
+) -> Result<()> {
     use metadata::AttributeAlteration::*;
 
     // Populate the materialized view directly from datoms (and, potentially in the future,
@@ -1109,10 +1186,15 @@ pub fn update_metadata(conn: &rusqlite::Connection, _old_schema: &Schema, new_sc
     // TODO: use concat! to avoid creating String instances.
     if !metadata_report.idents_altered.is_empty() {
         // Idents is the materialized view of the [entid :db/ident ident] slice of datoms.
-        conn.execute(format!("DELETE FROM idents").as_str(),
-                     &[])?;
-        conn.execute(format!("INSERT INTO idents SELECT e, a, v, value_type_tag FROM datoms WHERE a IN {}", entids::IDENTS_SQL_LIST.as_str()).as_str(),
-                     &[])?;
+        conn.execute(format!("DELETE FROM idents").as_str(), rusqlite::params![])?;
+        conn.execute(
+            format!(
+                "INSERT INTO idents SELECT e, a, v, value_type_tag FROM datoms WHERE a IN {}",
+                entids::IDENTS_SQL_LIST.as_str()
+            )
+            .as_str(),
+            rusqlite::params![],
+        )?;
     }
 
     // Populate the materialized view directly from datoms.
@@ -1124,31 +1206,36 @@ pub fn update_metadata(conn: &rusqlite::Connection, _old_schema: &Schema, new_sc
 
     if !metadata_report.attributes_installed.is_empty()
         || !metadata_report.attributes_altered.is_empty()
-        || !metadata_report.idents_altered.is_empty() {
-
-        conn.execute(format!("DELETE FROM schema").as_str(),
-                     &[])?;
+        || !metadata_report.idents_altered.is_empty()
+    {
+        conn.execute(format!("DELETE FROM schema").as_str(), rusqlite::params![])?;
         // NB: we're using :db/valueType as a placeholder for the entire schema-defining set.
-        let s = format!(r#"
+        let s = format!(
+            r#"
             WITH s(e) AS (SELECT e FROM datoms WHERE a = {})
             INSERT INTO schema
             SELECT s.e, a, v, value_type_tag
             FROM datoms, s
             WHERE s.e = datoms.e AND a IN {}
-        "#, entids::DB_VALUE_TYPE, entids::SCHEMA_SQL_LIST.as_str());
-        conn.execute(&s, &[])?;
+        "#,
+            entids::DB_VALUE_TYPE,
+            entids::SCHEMA_SQL_LIST.as_str()
+        );
+        conn.execute(&s, rusqlite::params![])?;
     }
 
     let mut index_stmt = conn.prepare("UPDATE datoms SET index_avet = ? WHERE a = ?")?;
     let mut unique_value_stmt = conn.prepare("UPDATE datoms SET unique_value = ? WHERE a = ?")?;
-    let mut cardinality_stmt = conn.prepare(r#"
+    let mut cardinality_stmt = conn.prepare(
+        r#"
 SELECT EXISTS
     (SELECT 1
         FROM datoms AS left, datoms AS right
         WHERE left.a = ? AND
         left.a = right.a AND
         left.e = right.e AND
-        left.v <> right.v)"#)?;
+        left.v <> right.v)"#,
+    )?;
 
     for (&entid, alterations) in &metadata_report.attributes_altered {
         let attribute = new_schema.require_attribute_for_entid(entid)?;
@@ -1157,19 +1244,35 @@ SELECT EXISTS
             match alteration {
                 &Index => {
                     // This should always succeed.
-                    index_stmt.execute(&[&attribute.index, &entid as &ToSql])?;
-                },
+                    index_stmt.execute(&[&attribute.index, &entid as &dyn ToSql])?;
+                }
                 &Unique => {
                     // TODO: This can fail if there are conflicting values; give a more helpful
                     // error message in this case.
-                    if unique_value_stmt.execute(&[to_bool_ref(attribute.unique.is_some()), &entid as &ToSql]).is_err() {
+                    if unique_value_stmt
+                        .execute(&[
+                            to_bool_ref(attribute.unique.is_some()),
+                            &entid as &dyn ToSql,
+                        ])
+                        .is_err()
+                    {
                         match attribute.unique {
-                            Some(attribute::Unique::Value) => bail!(DbErrorKind::SchemaAlterationFailed(format!("Cannot alter schema attribute {} to be :db.unique/value", entid))),
-                            Some(attribute::Unique::Identity) => bail!(DbErrorKind::SchemaAlterationFailed(format!("Cannot alter schema attribute {} to be :db.unique/identity", entid))),
+                            Some(attribute::Unique::Value) => {
+                                bail!(DbErrorKind::SchemaAlterationFailed(format!(
+                                    "Cannot alter schema attribute {} to be :db.unique/value",
+                                    entid
+                                )))
+                            }
+                            Some(attribute::Unique::Identity) => {
+                                bail!(DbErrorKind::SchemaAlterationFailed(format!(
+                                    "Cannot alter schema attribute {} to be :db.unique/identity",
+                                    entid
+                                )))
+                            }
                             None => unreachable!(), // This shouldn't happen, even after we support removing :db/unique.
                         }
                     }
-                },
+                }
                 &Cardinality => {
                     // We can always go from :db.cardinality/one to :db.cardinality many.  It's
                     // :db.cardinality/many to :db.cardinality/one that can fail.
@@ -1177,15 +1280,18 @@ SELECT EXISTS
                     // TODO: improve the failure message.  Perhaps try to mimic what Datomic says in
                     // this case?
                     if !attribute.multival {
-                        let mut rows = cardinality_stmt.query(&[&entid as &ToSql])?;
-                        if rows.next().is_some() {
-                            bail!(DbErrorKind::SchemaAlterationFailed(format!("Cannot alter schema attribute {} to be :db.cardinality/one", entid)));
+                        let mut rows = cardinality_stmt.query(&[&entid as &dyn ToSql])?;
+                        if rows.next()?.is_some() {
+                            bail!(DbErrorKind::SchemaAlterationFailed(format!(
+                                "Cannot alter schema attribute {} to be :db.cardinality/one",
+                                entid
+                            )));
                         }
                     }
-                },
+                }
                 &NoHistory | &IsComponent => {
                     // There's no on disk change required for either of these.
-                },
+                }
             }
         }
     }
@@ -1203,12 +1309,16 @@ impl PartitionMap {
     pub(crate) fn allocate_entids(&mut self, partition: &str, n: usize) -> Range<i64> {
         match self.get_mut(partition) {
             Some(partition) => partition.allocate_entids(n),
-            None => panic!("Cannot allocate entid from unknown partition: {}", partition)
+            None => panic!(
+                "Cannot allocate entid from unknown partition: {}",
+                partition
+            ),
         }
     }
 
     pub(crate) fn contains_entid(&self, entid: Entid) -> bool {
-        self.values().any(|partition| partition.contains_entid(entid))
+        self.values()
+            .any(|partition| partition.contains_entid(entid))
     }
 }
 
@@ -1216,99 +1326,115 @@ impl PartitionMap {
 mod tests {
     extern crate env_logger;
 
-    use std::borrow::{
-        Borrow,
-    };
+    use std::borrow::Borrow;
 
     use super::*;
-    use debug::{TestConn,tempids};
-    use edn::{
-        self,
-        InternSet,
-    };
-    use edn::entities::{
-        OpType,
-    };
-    use core_traits::{
-        attribute,
-        KnownEntid,
-    };
-    use mentat_core::{
-        HasSchema,
-        Keyword,
-    };
+    use core_traits::{attribute, KnownEntid};
+    use db_traits::errors;
+    use debug::{tempids, TestConn};
+    use edn::entities::OpType;
+    use edn::{self, InternSet};
+    use internal_types::Term;
     use mentat_core::util::Either::*;
-    use std::collections::{
-        BTreeMap,
-    };
-    use db_traits::errors as errors;
-    use internal_types::{
-        Term,
-    };
+    use mentat_core::{HasSchema, Keyword};
+    use std::collections::BTreeMap;
 
     fn run_test_add(mut conn: TestConn) {
         // Test inserting :db.cardinality/one elements.
-        assert_transact!(conn, "[[:db/add 100 :db.schema/version 1]
-                                 [:db/add 101 :db.schema/version 2]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[100 :db.schema/version 1 ?tx true]
+        assert_transact!(
+            conn,
+            "[[:db/add 100 :db.schema/version 1]
+                                 [:db/add 101 :db.schema/version 2]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[100 :db.schema/version 1 ?tx true]
                           [101 :db.schema/version 2 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                       "[[100 :db.schema/version 1]
-                         [101 :db.schema/version 2]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db.schema/version 1]
+                         [101 :db.schema/version 2]]"
+        );
 
         // Test inserting :db.cardinality/many elements.
-        assert_transact!(conn, "[[:db/add 200 :db.schema/attribute 100]
-                                 [:db/add 200 :db.schema/attribute 101]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[200 :db.schema/attribute 100 ?tx true]
+        assert_transact!(
+            conn,
+            "[[:db/add 200 :db.schema/attribute 100]
+                                 [:db/add 200 :db.schema/attribute 101]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[200 :db.schema/attribute 100 ?tx true]
                           [200 :db.schema/attribute 101 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db.schema/version 1]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db.schema/version 1]
                           [101 :db.schema/version 2]
                           [200 :db.schema/attribute 100]
-                          [200 :db.schema/attribute 101]]");
+                          [200 :db.schema/attribute 101]]"
+        );
 
         // Test replacing existing :db.cardinality/one elements.
-        assert_transact!(conn, "[[:db/add 100 :db.schema/version 11]
-                                 [:db/add 101 :db.schema/version 22]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[100 :db.schema/version 1 ?tx false]
+        assert_transact!(
+            conn,
+            "[[:db/add 100 :db.schema/version 11]
+                                 [:db/add 101 :db.schema/version 22]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[100 :db.schema/version 1 ?tx false]
                           [100 :db.schema/version 11 ?tx true]
                           [101 :db.schema/version 2 ?tx false]
                           [101 :db.schema/version 22 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db.schema/version 11]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db.schema/version 11]
                           [101 :db.schema/version 22]
                           [200 :db.schema/attribute 100]
-                          [200 :db.schema/attribute 101]]");
-
+                          [200 :db.schema/attribute 101]]"
+        );
 
         // Test that asserting existing :db.cardinality/one elements doesn't change the store.
-        assert_transact!(conn, "[[:db/add 100 :db.schema/version 11]
-                                 [:db/add 101 :db.schema/version 22]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db.schema/version 11]
+        assert_transact!(
+            conn,
+            "[[:db/add 100 :db.schema/version 11]
+                                 [:db/add 101 :db.schema/version 22]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db.schema/version 11]
                           [101 :db.schema/version 22]
                           [200 :db.schema/attribute 100]
-                          [200 :db.schema/attribute 101]]");
-
+                          [200 :db.schema/attribute 101]]"
+        );
 
         // Test that asserting existing :db.cardinality/many elements doesn't change the store.
-        assert_transact!(conn, "[[:db/add 200 :db.schema/attribute 100]
-                                 [:db/add 200 :db.schema/attribute 101]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db.schema/version 11]
+        assert_transact!(
+            conn,
+            "[[:db/add 200 :db.schema/attribute 100]
+                                 [:db/add 200 :db.schema/attribute 101]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db.schema/version 11]
                           [101 :db.schema/version 22]
                           [200 :db.schema/attribute 100]
-                          [200 :db.schema/attribute 101]]");
+                          [200 :db.schema/attribute 101]]"
+        );
     }
 
     #[test]
@@ -1321,13 +1447,18 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Test that txInstant can be asserted.
-        assert_transact!(conn, "[[:db/add (transaction-tx) :db/txInstant #inst \"2017-06-16T00:56:41.257Z\"]
+        assert_transact!(
+            conn,
+            "[[:db/add (transaction-tx) :db/txInstant #inst \"2017-06-16T00:56:41.257Z\"]
                                  [:db/add 100 :db/ident :name/Ivan]
-                                 [:db/add 101 :db/ident :name/Petr]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[100 :db/ident :name/Ivan ?tx true]
+                                 [:db/add 101 :db/ident :name/Petr]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[100 :db/ident :name/Ivan ?tx true]
                           [101 :db/ident :name/Petr ?tx true]
-                          [?tx :db/txInstant #inst \"2017-06-16T00:56:41.257Z\" ?tx true]]");
+                          [?tx :db/txInstant #inst \"2017-06-16T00:56:41.257Z\" ?tx true]]"
+        );
 
         // Test multiple txInstant with different values should fail.
         assert_transact!(conn, "[[:db/add (transaction-tx) :db/txInstant #inst \"2017-06-16T00:59:11.257Z\"]
@@ -1340,28 +1471,40 @@ mod tests {
                                  [:db/add (transaction-tx) :db/txInstant #inst \"2017-06-16T00:59:11.257Z\"]
                                  [:db/add 103 :db/ident :name/Dimitri]
                                  [:db/add 104 :db/ident :name/Anton]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[103 :db/ident :name/Dimitri ?tx true]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[103 :db/ident :name/Dimitri ?tx true]
                           [104 :db/ident :name/Anton ?tx true]
-                          [?tx :db/txInstant #inst \"2017-06-16T00:59:11.257Z\" ?tx true]]");
+                          [?tx :db/txInstant #inst \"2017-06-16T00:59:11.257Z\" ?tx true]]"
+        );
 
         // We need a few attributes to work with.
-        assert_transact!(conn, "[[:db/add 111 :db/ident :test/str]
+        assert_transact!(
+            conn,
+            "[[:db/add 111 :db/ident :test/str]
                                  [:db/add 111 :db/valueType :db.type/string]
                                  [:db/add 222 :db/ident :test/ref]
-                                 [:db/add 222 :db/valueType :db.type/ref]]");
+                                 [:db/add 222 :db/valueType :db.type/ref]]"
+        );
 
         // Test that we can assert metadata about the current transaction.
-        assert_transact!(conn, "[[:db/add (transaction-tx) :test/str \"We want metadata!\"]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[?tx :db/txInstant ?ms ?tx true]
-                          [?tx :test/str \"We want metadata!\" ?tx true]]");
+        assert_transact!(
+            conn,
+            "[[:db/add (transaction-tx) :test/str \"We want metadata!\"]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?tx :db/txInstant ?ms ?tx true]
+                          [?tx :test/str \"We want metadata!\" ?tx true]]"
+        );
 
         // Test that we can use (transaction-tx) as a value.
         assert_transact!(conn, "[[:db/add 333 :test/ref (transaction-tx)]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[333 :test/ref ?tx ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+        assert_matches!(
+            conn.last_transaction(),
+            "[[333 :test/ref ?tx ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
 
         // Test that we type-check properly.  In the value position, (transaction-tx) yields a ref;
         // :db/ident expects a keyword.
@@ -1369,10 +1512,15 @@ mod tests {
                          Err("not yet implemented: Transaction function transaction-tx produced value of type :db.type/ref but expected type :db.type/keyword"));
 
         // Test that we can assert metadata about the current transaction.
-        assert_transact!(conn, "[[:db/add (transaction-tx) :test/ref (transaction-tx)]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[?tx :db/txInstant ?ms ?tx true]
-                          [?tx :test/ref ?tx ?tx true]]");
+        assert_transact!(
+            conn,
+            "[[:db/add (transaction-tx) :test/ref (transaction-tx)]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?tx :db/txInstant ?ms ?tx true]
+                          [?tx :test/ref ?tx ?tx true]]"
+        );
     }
 
     #[test]
@@ -1380,57 +1528,86 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Insert a few :db.cardinality/one elements.
-        assert_transact!(conn, "[[:db/add 100 :db.schema/version 1]
-                                 [:db/add 101 :db.schema/version 2]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[100 :db.schema/version 1 ?tx true]
+        assert_transact!(
+            conn,
+            "[[:db/add 100 :db.schema/version 1]
+                                 [:db/add 101 :db.schema/version 2]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[100 :db.schema/version 1 ?tx true]
                           [101 :db.schema/version 2 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db.schema/version 1]
-                          [101 :db.schema/version 2]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db.schema/version 1]
+                          [101 :db.schema/version 2]]"
+        );
 
         // And a few :db.cardinality/many elements.
-        assert_transact!(conn, "[[:db/add 200 :db.schema/attribute 100]
-                                 [:db/add 200 :db.schema/attribute 101]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[200 :db.schema/attribute 100 ?tx true]
+        assert_transact!(
+            conn,
+            "[[:db/add 200 :db.schema/attribute 100]
+                                 [:db/add 200 :db.schema/attribute 101]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[200 :db.schema/attribute 100 ?tx true]
                           [200 :db.schema/attribute 101 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db.schema/version 1]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db.schema/version 1]
                           [101 :db.schema/version 2]
                           [200 :db.schema/attribute 100]
-                          [200 :db.schema/attribute 101]]");
+                          [200 :db.schema/attribute 101]]"
+        );
 
         // Test that we can retract :db.cardinality/one elements.
         assert_transact!(conn, "[[:db/retract 100 :db.schema/version 1]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[100 :db.schema/version 1 ?tx false]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[101 :db.schema/version 2]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[100 :db.schema/version 1 ?tx false]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[101 :db.schema/version 2]
                           [200 :db.schema/attribute 100]
-                          [200 :db.schema/attribute 101]]");
+                          [200 :db.schema/attribute 101]]"
+        );
 
         // Test that we can retract :db.cardinality/many elements.
         assert_transact!(conn, "[[:db/retract 200 :db.schema/attribute 100]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[200 :db.schema/attribute 100 ?tx false]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[101 :db.schema/version 2]
-                          [200 :db.schema/attribute 101]]");
+        assert_matches!(
+            conn.last_transaction(),
+            "[[200 :db.schema/attribute 100 ?tx false]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[101 :db.schema/version 2]
+                          [200 :db.schema/attribute 101]]"
+        );
 
         // Verify that retracting :db.cardinality/{one,many} elements that are not present doesn't
         // change the store.
-        assert_transact!(conn, "[[:db/retract 100 :db.schema/version 1]
-                                 [:db/retract 200 :db.schema/attribute 100]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[101 :db.schema/version 2]
-                          [200 :db.schema/attribute 101]]");
+        assert_transact!(
+            conn,
+            "[[:db/retract 100 :db.schema/version 1]
+                                 [:db/retract 200 :db.schema/attribute 100]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[101 :db.schema/version 2]
+                          [200 :db.schema/attribute 101]]"
+        );
     }
 
     #[test]
@@ -1440,13 +1617,19 @@ mod tests {
         // Neither transaction below is defining a new attribute.  That is, it's fine to use :db/doc
         // to describe any entity in the system, not just attributes.  And in particular, including
         // :db/doc shouldn't make the transactor consider the entity a schema attribute.
-        assert_transact!(conn, r#"
+        assert_transact!(
+            conn,
+            r#"
             [{:db/doc "test"}]
-        "#);
+        "#
+        );
 
-        assert_transact!(conn, r#"
+        assert_transact!(
+            conn,
+            r#"
             [{:db/ident :test/id :db/doc "test"}]
-        "#);
+        "#
+        );
     }
 
     // Unique is required!
@@ -1473,58 +1656,84 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Insert some :db.unique/identity elements.
-        assert_transact!(conn, "[[:db/add 100 :db/ident :name/Ivan]
-                                 [:db/add 101 :db/ident :name/Petr]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[100 :db/ident :name/Ivan ?tx true]
+        assert_transact!(
+            conn,
+            "[[:db/add 100 :db/ident :name/Ivan]
+                                 [:db/add 101 :db/ident :name/Petr]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[100 :db/ident :name/Ivan ?tx true]
                           [101 :db/ident :name/Petr ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db/ident :name/Ivan]
-                          [101 :db/ident :name/Petr]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db/ident :name/Ivan]
+                          [101 :db/ident :name/Petr]]"
+        );
 
         // Upserting two tempids to the same entid works.
-        let report = assert_transact!(conn, "[[:db/add \"t1\" :db/ident :name/Ivan]
+        let report = assert_transact!(
+            conn,
+            "[[:db/add \"t1\" :db/ident :name/Ivan]
                                               [:db/add \"t1\" :db.schema/attribute 100]
                                               [:db/add \"t2\" :db/ident :name/Petr]
-                                              [:db/add \"t2\" :db.schema/attribute 101]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[100 :db.schema/attribute :name/Ivan ?tx true]
+                                              [:db/add \"t2\" :db.schema/attribute 101]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[100 :db.schema/attribute :name/Ivan ?tx true]
                           [101 :db.schema/attribute :name/Petr ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db/ident :name/Ivan]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db/ident :name/Ivan]
                           [100 :db.schema/attribute :name/Ivan]
                           [101 :db/ident :name/Petr]
-                          [101 :db.schema/attribute :name/Petr]]");
-        assert_matches!(tempids(&report),
-                        "{\"t1\" 100
-                          \"t2\" 101}");
+                          [101 :db.schema/attribute :name/Petr]]"
+        );
+        assert_matches!(
+            tempids(&report),
+            "{\"t1\" 100
+                          \"t2\" 101}"
+        );
 
         // Upserting a tempid works.  The ref doesn't have to exist (at this time), but we can't
         // reuse an existing ref due to :db/unique :db.unique/value.
-        let report = assert_transact!(conn, "[[:db/add \"t1\" :db/ident :name/Ivan]
-                                              [:db/add \"t1\" :db.schema/attribute 102]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[100 :db.schema/attribute 102 ?tx true]
-                          [?true :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db/ident :name/Ivan]
+        let report = assert_transact!(
+            conn,
+            "[[:db/add \"t1\" :db/ident :name/Ivan]
+                                              [:db/add \"t1\" :db.schema/attribute 102]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[100 :db.schema/attribute 102 ?tx true]
+                          [?true :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db/ident :name/Ivan]
                           [100 :db.schema/attribute :name/Ivan]
                           [100 :db.schema/attribute 102]
                           [101 :db/ident :name/Petr]
-                          [101 :db.schema/attribute :name/Petr]]");
-        assert_matches!(tempids(&report),
-                        "{\"t1\" 100}");
+                          [101 :db.schema/attribute :name/Petr]]"
+        );
+        assert_matches!(tempids(&report), "{\"t1\" 100}");
 
         // A single complex upsert allocates a new entid.
         let report = assert_transact!(conn, "[[:db/add \"t1\" :db.schema/attribute \"t2\"]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[65536 :db.schema/attribute 65537 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{\"t1\" 65536
-                          \"t2\" 65537}");
+        assert_matches!(
+            conn.last_transaction(),
+            "[[65536 :db.schema/attribute 65537 ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            tempids(&report),
+            "{\"t1\" 65536
+                          \"t2\" 65537}"
+        );
 
         // Conflicting upserts fail.
         assert_transact!(conn, "[[:db/add \"t1\" :db/ident :name/Ivan]
@@ -1545,24 +1754,35 @@ mod tests {
 
         // tempids in :db/retract that do upsert are retracted.  The ref given doesn't exist, so the
         // assertion will be ignored.
-        let report = assert_transact!(conn, "[[:db/add \"t1\" :db/ident :name/Ivan]
-                                              [:db/retract \"t1\" :db.schema/attribute 103]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{\"t1\" 100}");
+        let report = assert_transact!(
+            conn,
+            "[[:db/add \"t1\" :db/ident :name/Ivan]
+                                              [:db/retract \"t1\" :db.schema/attribute 103]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{\"t1\" 100}");
 
         // A multistep upsert.  The upsert algorithm will first try to resolve "t1", fail, and then
         // allocate both "t1" and "t2".
-        let report = assert_transact!(conn, "[[:db/add \"t1\" :db/ident :name/Josef]
-                                              [:db/add \"t2\" :db.schema/attribute \"t1\"]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[65538 :db/ident :name/Josef ?tx true]
+        let report = assert_transact!(
+            conn,
+            "[[:db/add \"t1\" :db/ident :name/Josef]
+                                              [:db/add \"t2\" :db.schema/attribute \"t1\"]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[65538 :db/ident :name/Josef ?tx true]
                           [65539 :db.schema/attribute :name/Josef ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{\"t1\" 65538
-                          \"t2\" 65539}");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            tempids(&report),
+            "{\"t1\" 65538
+                          \"t2\" 65539}"
+        );
 
         // A multistep insert.  This time, we can resolve both, but we have to try "t1", succeed,
         // and then resolve "t2".
@@ -1578,7 +1798,9 @@ mod tests {
     #[test]
     fn test_resolved_upserts() {
         let mut conn = TestConn::default();
-        assert_transact!(conn, "[
+        assert_transact!(
+            conn,
+            "[
             {:db/ident :test/id
              :db/valueType :db.type/string
              :db/unique :db.unique/identity
@@ -1589,37 +1811,50 @@ mod tests {
              :db/unique :db.unique/identity
              :db/index true
              :db/cardinality :db.cardinality/one}
-        ]");
+        ]"
+        );
 
         // Partial data for :test/id, links via :test/ref.
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             [:db/add 100 :test/id "0"]
             [:db/add 101 :test/ref 100]
             [:db/add 102 :test/ref 101]
             [:db/add 103 :test/ref 102]
-        ]"#);
+        ]"#
+        );
 
         // Fill in the rest of the data for :test/id, using the links of :test/ref.
-        let report = assert_transact!(conn, r#"[
+        let report = assert_transact!(
+            conn,
+            r#"[
             {:db/id "a" :test/id "0"}
             {:db/id "b" :test/id "1" :test/ref "a"}
             {:db/id "c" :test/id "2" :test/ref "b"}
             {:db/id "d" :test/id "3" :test/ref "c"}
-        ]"#);
+        ]"#
+        );
 
-        assert_matches!(tempids(&report), r#"{
+        assert_matches!(
+            tempids(&report),
+            r#"{
             "a" 100
             "b" 101
             "c" 102
             "d" 103
-        }"#);
+        }"#
+        );
 
-        assert_matches!(conn.last_transaction(), r#"[
+        assert_matches!(
+            conn.last_transaction(),
+            r#"[
             [101 :test/id "1" ?tx true]
             [102 :test/id "2" ?tx true]
             [103 :test/id "3" ?tx true]
             [?tx :db/txInstant ?ms ?tx true]
-        ]"#);
+        ]"#
+        );
     }
 
     #[test]
@@ -1642,26 +1877,43 @@ mod tests {
         // See https://github.com/mozilla/mentat/issues/797
 
         // We can assert a new schema attribute.
-        assert_transact!(conn, "[[:db/add 100 :db/ident :test/ident]
+        assert_transact!(
+            conn,
+            "[[:db/add 100 :db/ident :test/ident]
                                  [:db/add 100 :db/valueType :db.type/long]
-                                 [:db/add 100 :db/cardinality :db.cardinality/many]]");
+                                 [:db/add 100 :db/cardinality :db.cardinality/many]]"
+        );
 
-        assert_eq!(conn.schema.entid_map.get(&100).cloned().unwrap(), to_namespaced_keyword(":test/ident").unwrap());
-        assert_eq!(conn.schema.ident_map.get(&to_namespaced_keyword(":test/ident").unwrap()).cloned().unwrap(), 100);
+        assert_eq!(
+            conn.schema.entid_map.get(&100).cloned().unwrap(),
+            to_namespaced_keyword(":test/ident").unwrap()
+        );
+        assert_eq!(
+            conn.schema
+                .ident_map
+                .get(&to_namespaced_keyword(":test/ident").unwrap())
+                .cloned()
+                .unwrap(),
+            100
+        );
         let attribute = conn.schema.attribute_for_entid(100).unwrap().clone();
         assert_eq!(attribute.value_type, ValueType::Long);
         assert_eq!(attribute.multival, true);
         assert_eq!(attribute.fulltext, false);
 
-        assert_matches!(conn.last_transaction(),
-                        "[[100 :db/ident :test/ident ?tx true]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[100 :db/ident :test/ident ?tx true]
                           [100 :db/valueType :db.type/long ?tx true]
                           [100 :db/cardinality :db.cardinality/many ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db/ident :test/ident]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db/ident :test/ident]
                           [100 :db/valueType :db.type/long]
-                          [100 :db/cardinality :db.cardinality/many]]");
+                          [100 :db/cardinality :db.cardinality/many]]"
+        );
 
         // Let's check we actually have the schema characteristics we expect.
         let attribute = conn.schema.attribute_for_entid(100).unwrap().clone();
@@ -1670,23 +1922,32 @@ mod tests {
         assert_eq!(attribute.fulltext, false);
 
         // Let's check that we can use the freshly installed attribute.
-        assert_transact!(conn, "[[:db/add 101 100 -10]
-                                 [:db/add 101 :test/ident -9]]");
+        assert_transact!(
+            conn,
+            "[[:db/add 101 100 -10]
+                                 [:db/add 101 :test/ident -9]]"
+        );
 
-        assert_matches!(conn.last_transaction(),
-                        "[[101 :test/ident -10 ?tx true]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[101 :test/ident -10 ?tx true]
                           [101 :test/ident -9 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
 
         // Cannot retract a single characteristic of an installed attribute.
-        assert_transact!(conn,
-                         "[[:db/retract 100 :db/cardinality :db.cardinality/many]]",
-                         Err("bad schema assertion: Retracting attribute 8 for entity 100 not permitted."));
+        assert_transact!(
+            conn,
+            "[[:db/retract 100 :db/cardinality :db.cardinality/many]]",
+            Err("bad schema assertion: Retracting attribute 8 for entity 100 not permitted.")
+        );
 
         // Cannot retract a single characteristic of an installed attribute.
-        assert_transact!(conn,
-                         "[[:db/retract 100 :db/valueType :db.type/long]]",
-                         Err("bad schema assertion: Retracting attribute 7 for entity 100 not permitted."));
+        assert_transact!(
+            conn,
+            "[[:db/retract 100 :db/valueType :db.type/long]]",
+            Err("bad schema assertion: Retracting attribute 7 for entity 100 not permitted.")
+        );
 
         // Cannot retract a non-defining set of characteristics of an installed attribute.
         assert_transact!(conn,
@@ -1700,14 +1961,19 @@ mod tests {
         //                 Err("bad schema assertion: Retracting :db/ident of a schema without retracting its defining attributes is not permitted."));
 
         // Can retract all of characterists of an installed attribute in one go.
-        assert_transact!(conn,
-                         "[[:db/retract 100 :db/cardinality :db.cardinality/many]
+        assert_transact!(
+            conn,
+            "[[:db/retract 100 :db/cardinality :db.cardinality/many]
                          [:db/retract 100 :db/valueType :db.type/long]
-                         [:db/retract 100 :db/ident :test/ident]]");
+                         [:db/retract 100 :db/ident :test/ident]]"
+        );
 
         // Trying to install an attribute without a :db/ident is allowed.
-        assert_transact!(conn, "[[:db/add 101 :db/valueType :db.type/long]
-                                 [:db/add 101 :db/cardinality :db.cardinality/many]]");
+        assert_transact!(
+            conn,
+            "[[:db/add 101 :db/valueType :db.type/long]
+                                 [:db/add 101 :db/cardinality :db.cardinality/many]]"
+        );
     }
 
     #[test]
@@ -1715,9 +1981,12 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a :db.cardinality/one attribute.
-        assert_transact!(conn, "[[:db/add 100 :db/ident :test/ident]
+        assert_transact!(
+            conn,
+            "[[:db/add 100 :db/ident :test/ident]
                                  [:db/add 100 :db/valueType :db.type/keyword]
-                                 [:db/add 100 :db/cardinality :db.cardinality/one]]");
+                                 [:db/add 100 :db/cardinality :db.cardinality/one]]"
+        );
 
         // Trying to alter the :db/valueType will fail.
         assert_transact!(conn, "[[:db/add 100 :db/valueType :db.type/long]]",
@@ -1726,14 +1995,18 @@ mod tests {
         // But we can alter the cardinality.
         assert_transact!(conn, "[[:db/add 100 :db/cardinality :db.cardinality/many]]");
 
-        assert_matches!(conn.last_transaction(),
-                        "[[100 :db/cardinality :db.cardinality/one ?tx false]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[100 :db/cardinality :db.cardinality/one ?tx false]
                           [100 :db/cardinality :db.cardinality/many ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db/ident :test/ident]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db/ident :test/ident]
                           [100 :db/valueType :db.type/keyword]
-                          [100 :db/cardinality :db.cardinality/many]]");
+                          [100 :db/cardinality :db.cardinality/many]]"
+        );
 
         // Let's check we actually have the schema characteristics we expect.
         let attribute = conn.schema.attribute_for_entid(100).unwrap().clone();
@@ -1742,13 +2015,18 @@ mod tests {
         assert_eq!(attribute.fulltext, false);
 
         // Let's check that we can use the freshly altered attribute's new characteristic.
-        assert_transact!(conn, "[[:db/add 101 100 :test/value1]
-                                 [:db/add 101 :test/ident :test/value2]]");
+        assert_transact!(
+            conn,
+            "[[:db/add 101 100 :test/value1]
+                                 [:db/add 101 :test/ident :test/value2]]"
+        );
 
-        assert_matches!(conn.last_transaction(),
-                        "[[101 :test/ident :test/value1 ?tx true]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[101 :test/ident :test/value1 ?tx true]
                           [101 :test/ident :test/value2 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
     }
 
     #[test]
@@ -1757,59 +2035,124 @@ mod tests {
 
         // We can assert a new :db/ident.
         assert_transact!(conn, "[[:db/add 100 :db/ident :name/Ivan]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[100 :db/ident :name/Ivan ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db/ident :name/Ivan]]");
-        assert_eq!(conn.schema.entid_map.get(&100).cloned().unwrap(), to_namespaced_keyword(":name/Ivan").unwrap());
-        assert_eq!(conn.schema.ident_map.get(&to_namespaced_keyword(":name/Ivan").unwrap()).cloned().unwrap(), 100);
+        assert_matches!(
+            conn.last_transaction(),
+            "[[100 :db/ident :name/Ivan ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(conn.datoms(), "[[100 :db/ident :name/Ivan]]");
+        assert_eq!(
+            conn.schema.entid_map.get(&100).cloned().unwrap(),
+            to_namespaced_keyword(":name/Ivan").unwrap()
+        );
+        assert_eq!(
+            conn.schema
+                .ident_map
+                .get(&to_namespaced_keyword(":name/Ivan").unwrap())
+                .cloned()
+                .unwrap(),
+            100
+        );
 
         // We can re-assert an existing :db/ident.
         assert_transact!(conn, "[[:db/add 100 :db/ident :name/Ivan]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db/ident :name/Ivan]]");
-        assert_eq!(conn.schema.entid_map.get(&100).cloned().unwrap(), to_namespaced_keyword(":name/Ivan").unwrap());
-        assert_eq!(conn.schema.ident_map.get(&to_namespaced_keyword(":name/Ivan").unwrap()).cloned().unwrap(), 100);
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(conn.datoms(), "[[100 :db/ident :name/Ivan]]");
+        assert_eq!(
+            conn.schema.entid_map.get(&100).cloned().unwrap(),
+            to_namespaced_keyword(":name/Ivan").unwrap()
+        );
+        assert_eq!(
+            conn.schema
+                .ident_map
+                .get(&to_namespaced_keyword(":name/Ivan").unwrap())
+                .cloned()
+                .unwrap(),
+            100
+        );
 
         // We can alter an existing :db/ident to have a new keyword.
         assert_transact!(conn, "[[:db/add :name/Ivan :db/ident :name/Petr]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[100 :db/ident :name/Ivan ?tx false]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[100 :db/ident :name/Ivan ?tx false]
                           [100 :db/ident :name/Petr ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db/ident :name/Petr]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(conn.datoms(), "[[100 :db/ident :name/Petr]]");
         // Entid map is updated.
-        assert_eq!(conn.schema.entid_map.get(&100).cloned().unwrap(), to_namespaced_keyword(":name/Petr").unwrap());
+        assert_eq!(
+            conn.schema.entid_map.get(&100).cloned().unwrap(),
+            to_namespaced_keyword(":name/Petr").unwrap()
+        );
         // Ident map contains the new ident.
-        assert_eq!(conn.schema.ident_map.get(&to_namespaced_keyword(":name/Petr").unwrap()).cloned().unwrap(), 100);
+        assert_eq!(
+            conn.schema
+                .ident_map
+                .get(&to_namespaced_keyword(":name/Petr").unwrap())
+                .cloned()
+                .unwrap(),
+            100
+        );
         // Ident map no longer contains the old ident.
-        assert!(conn.schema.ident_map.get(&to_namespaced_keyword(":name/Ivan").unwrap()).is_none());
+        assert!(conn
+            .schema
+            .ident_map
+            .get(&to_namespaced_keyword(":name/Ivan").unwrap())
+            .is_none());
 
         // We can re-purpose an old ident.
         assert_transact!(conn, "[[:db/add 101 :db/ident :name/Ivan]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[101 :db/ident :name/Ivan ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[100 :db/ident :name/Petr]
-                          [101 :db/ident :name/Ivan]]");
+        assert_matches!(
+            conn.last_transaction(),
+            "[[101 :db/ident :name/Ivan ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db/ident :name/Petr]
+                          [101 :db/ident :name/Ivan]]"
+        );
         // Entid map contains both entids.
-        assert_eq!(conn.schema.entid_map.get(&100).cloned().unwrap(), to_namespaced_keyword(":name/Petr").unwrap());
-        assert_eq!(conn.schema.entid_map.get(&101).cloned().unwrap(), to_namespaced_keyword(":name/Ivan").unwrap());
+        assert_eq!(
+            conn.schema.entid_map.get(&100).cloned().unwrap(),
+            to_namespaced_keyword(":name/Petr").unwrap()
+        );
+        assert_eq!(
+            conn.schema.entid_map.get(&101).cloned().unwrap(),
+            to_namespaced_keyword(":name/Ivan").unwrap()
+        );
         // Ident map contains the new ident.
-        assert_eq!(conn.schema.ident_map.get(&to_namespaced_keyword(":name/Petr").unwrap()).cloned().unwrap(), 100);
+        assert_eq!(
+            conn.schema
+                .ident_map
+                .get(&to_namespaced_keyword(":name/Petr").unwrap())
+                .cloned()
+                .unwrap(),
+            100
+        );
         // Ident map contains the old ident, but re-purposed to the new entid.
-        assert_eq!(conn.schema.ident_map.get(&to_namespaced_keyword(":name/Ivan").unwrap()).cloned().unwrap(), 101);
+        assert_eq!(
+            conn.schema
+                .ident_map
+                .get(&to_namespaced_keyword(":name/Ivan").unwrap())
+                .cloned()
+                .unwrap(),
+            101
+        );
 
         // We can retract an existing :db/ident.
         assert_transact!(conn, "[[:db/retract :name/Petr :db/ident :name/Petr]]");
         // It's really gone.
         assert!(conn.schema.entid_map.get(&100).is_none());
-        assert!(conn.schema.ident_map.get(&to_namespaced_keyword(":name/Petr").unwrap()).is_none());
+        assert!(conn
+            .schema
+            .ident_map
+            .get(&to_namespaced_keyword(":name/Petr").unwrap())
+            .is_none());
     }
 
     #[test]
@@ -1817,9 +2160,12 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a :db.cardinality/one attribute.
-        assert_transact!(conn, "[[:db/add 100 :db/ident :test/ident]
+        assert_transact!(
+            conn,
+            "[[:db/add 100 :db/ident :test/ident]
                                  [:db/add 100 :db/valueType :db.type/long]
-                                 [:db/add 100 :db/cardinality :db.cardinality/one]]");
+                                 [:db/add 100 :db/cardinality :db.cardinality/one]]"
+        );
 
         assert_transact!(conn, "[[:db/add 200 :test/ident 1]]");
 
@@ -1828,12 +2174,14 @@ mod tests {
 
         assert_transact!(conn, "[[:db/add 200 :test/ident 2]]");
 
-        assert_matches!(conn.datoms(),
-                        "[[100 :db/ident :test/ident]
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db/ident :test/ident]
                           [100 :db/valueType :db.type/long]
                           [100 :db/cardinality :db.cardinality/many]
                           [200 :test/ident 1]
-                          [200 :test/ident 2]]");
+                          [200 :test/ident 2]]"
+        );
 
         // We can't always go from :db.cardinality/many to :db.cardinality/one.
         assert_transact!(conn, "[[:db/add 100 :db/cardinality :db.cardinality/one]]",
@@ -1846,12 +2194,18 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a :db.cardinality/one attribute.
-        assert_transact!(conn, "[[:db/add 100 :db/ident :test/ident]
+        assert_transact!(
+            conn,
+            "[[:db/add 100 :db/ident :test/ident]
                                  [:db/add 100 :db/valueType :db.type/long]
-                                 [:db/add 100 :db/cardinality :db.cardinality/one]]");
+                                 [:db/add 100 :db/cardinality :db.cardinality/one]]"
+        );
 
-        assert_transact!(conn, "[[:db/add 200 :test/ident 1]
-                                 [:db/add 201 :test/ident 1]]");
+        assert_transact!(
+            conn,
+            "[[:db/add 200 :test/ident 1]
+                                 [:db/add 201 :test/ident 1]]"
+        );
 
         // We can't always migrate to be :db.unique/value.
         assert_transact!(conn, "[[:db/add :test/ident :db/unique :db.unique/value]]",
@@ -1866,22 +2220,35 @@ mod tests {
         // But we can if we make sure there's no repeated [a v] pair.
         assert_transact!(conn, "[[:db/add 201 :test/ident 2]]");
 
-        assert_transact!(conn, "[[:db/add :test/ident :db/index true]
+        assert_transact!(
+            conn,
+            "[[:db/add :test/ident :db/index true]
                                  [:db/add :test/ident :db/unique :db.unique/value]
-                                 [:db/add :db.part/db :db.alter/attribute 100]]");
+                                 [:db/add :db.part/db :db.alter/attribute 100]]"
+        );
 
         // We can also retract the uniqueness constraint altogether.
-        assert_transact!(conn, "[[:db/retract :test/ident :db/unique :db.unique/value]]");
+        assert_transact!(
+            conn,
+            "[[:db/retract :test/ident :db/unique :db.unique/value]]"
+        );
 
         // Once we've done so, the schema shows it's not unique…
         {
-            let attr = conn.schema.attribute_for_ident(&Keyword::namespaced("test", "ident")).unwrap().0;
+            let attr = conn
+                .schema
+                .attribute_for_ident(&Keyword::namespaced("test", "ident"))
+                .unwrap()
+                .0;
             assert_eq!(None, attr.unique);
         }
 
         // … and we can add more assertions with duplicate values.
-        assert_transact!(conn, "[[:db/add 121 :test/ident 1]
-                                 [:db/add 221 :test/ident 2]]");
+        assert_transact!(
+            conn,
+            "[[:db/add 121 :test/ident 1]
+                                 [:db/add 221 :test/ident 2]]"
+        );
     }
 
     #[test]
@@ -1889,29 +2256,39 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a :db.cardinality/one attribute.
-        assert_transact!(conn, "[[:db/add 100 :db/ident :test/ident]
+        assert_transact!(
+            conn,
+            "[[:db/add 100 :db/ident :test/ident]
                                  [:db/add 100 :db/valueType :db.type/string]
                                  [:db/add 100 :db/cardinality :db.cardinality/one]
                                  [:db/add 100 :db/unique :db.unique/identity]
-                                 [:db/add 100 :db/index true]]");
+                                 [:db/add 100 :db/index true]]"
+        );
 
         assert_transact!(conn, "[[:db/add 200 :test/ident \"Oi\"]]");
 
-        assert_transact!(conn, "[[:db/add 200 :test/ident \"Ai!\"]
-                                 [:db/retract 200 :test/ident \"Oi\"]]");
+        assert_transact!(
+            conn,
+            "[[:db/add 200 :test/ident \"Ai!\"]
+                                 [:db/retract 200 :test/ident \"Oi\"]]"
+        );
 
-        assert_matches!(conn.last_transaction(),
-                        "[[200 :test/ident \"Ai!\" ?tx true]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[200 :test/ident \"Ai!\" ?tx true]
                           [200 :test/ident \"Oi\" ?tx false]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
 
-        assert_matches!(conn.datoms(),
-                        "[[100 :db/ident :test/ident]
+        assert_matches!(
+            conn.datoms(),
+            "[[100 :db/ident :test/ident]
                           [100 :db/valueType :db.type/string]
                           [100 :db/cardinality :db.cardinality/one]
                           [100 :db/unique :db.unique/identity]
                           [100 :db/index true]
-                          [200 :test/ident \"Ai!\"]]");
+                          [200 :test/ident \"Ai!\"]]"
+        );
     }
 
     /// Verify that we can't alter :db/fulltext schema characteristics at all.
@@ -1920,7 +2297,9 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a :db/fulltext true and a :db/fulltext unset attribute.
-        assert_transact!(conn, "[[:db/add 111 :db/ident :test/fulltext]
+        assert_transact!(
+            conn,
+            "[[:db/add 111 :db/ident :test/fulltext]
                                  [:db/add 111 :db/valueType :db.type/string]
                                  [:db/add 111 :db/unique :db.unique/identity]
                                  [:db/add 111 :db/index true]
@@ -1928,11 +2307,14 @@ mod tests {
                                  [:db/add 222 :db/ident :test/string]
                                  [:db/add 222 :db/cardinality :db.cardinality/one]
                                  [:db/add 222 :db/valueType :db.type/string]
-                                 [:db/add 222 :db/index true]]");
+                                 [:db/add 222 :db/index true]]"
+        );
 
-        assert_transact!(conn,
-                         "[[:db/retract 111 :db/fulltext true]]",
-                         Err("bad schema assertion: Retracting attribute 12 for entity 111 not permitted."));
+        assert_transact!(
+            conn,
+            "[[:db/retract 111 :db/fulltext true]]",
+            Err("bad schema assertion: Retracting attribute 12 for entity 111 not permitted.")
+        );
 
         assert_transact!(conn,
                          "[[:db/add 222 :db/fulltext true]]",
@@ -1944,7 +2326,9 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a few :db/fulltext true attributes.
-        assert_transact!(conn, "[[:db/add 111 :db/ident :test/fulltext]
+        assert_transact!(
+            conn,
+            "[[:db/add 111 :db/ident :test/fulltext]
                                  [:db/add 111 :db/valueType :db.type/string]
                                  [:db/add 111 :db/unique :db.unique/identity]
                                  [:db/add 111 :db/index true]
@@ -1953,16 +2337,25 @@ mod tests {
                                  [:db/add 222 :db/cardinality :db.cardinality/one]
                                  [:db/add 222 :db/valueType :db.type/string]
                                  [:db/add 222 :db/index true]
-                                 [:db/add 222 :db/fulltext true]]");
+                                 [:db/add 222 :db/fulltext true]]"
+        );
 
         // Let's check we actually have the schema characteristics we expect.
-        let fulltext = conn.schema.attribute_for_entid(111).cloned().expect(":test/fulltext");
+        let fulltext = conn
+            .schema
+            .attribute_for_entid(111)
+            .cloned()
+            .expect(":test/fulltext");
         assert_eq!(fulltext.value_type, ValueType::String);
         assert_eq!(fulltext.fulltext, true);
         assert_eq!(fulltext.multival, false);
         assert_eq!(fulltext.unique, Some(attribute::Unique::Identity));
 
-        let other = conn.schema.attribute_for_entid(222).cloned().expect(":test/other");
+        let other = conn
+            .schema
+            .attribute_for_entid(222)
+            .cloned()
+            .expect(":test/other");
         assert_eq!(other.value_type, ValueType::String);
         assert_eq!(other.fulltext, true);
         assert_eq!(other.multival, false);
@@ -1971,13 +2364,15 @@ mod tests {
         // We can add fulltext indexed datoms.
         assert_transact!(conn, "[[:db/add 301 :test/fulltext \"test this\"]]");
         // value column is rowid into fulltext table.
-        assert_matches!(conn.fulltext_values(),
-                        "[[1 \"test this\"]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[301 :test/fulltext 1 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[111 :db/ident :test/fulltext]
+        assert_matches!(conn.fulltext_values(), "[[1 \"test this\"]]");
+        assert_matches!(
+            conn.last_transaction(),
+            "[[301 :test/fulltext 1 ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[111 :db/ident :test/fulltext]
                           [111 :db/valueType :db.type/string]
                           [111 :db/unique :db.unique/identity]
                           [111 :db/index true]
@@ -1987,20 +2382,26 @@ mod tests {
                           [222 :db/cardinality :db.cardinality/one]
                           [222 :db/index true]
                           [222 :db/fulltext true]
-                          [301 :test/fulltext 1]]");
+                          [301 :test/fulltext 1]]"
+        );
 
         // We can replace existing fulltext indexed datoms.
         assert_transact!(conn, "[[:db/add 301 :test/fulltext \"alternate thing\"]]");
         // value column is rowid into fulltext table.
-        assert_matches!(conn.fulltext_values(),
-                        "[[1 \"test this\"]
-                          [2 \"alternate thing\"]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[301 :test/fulltext 1 ?tx false]
+        assert_matches!(
+            conn.fulltext_values(),
+            "[[1 \"test this\"]
+                          [2 \"alternate thing\"]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[301 :test/fulltext 1 ?tx false]
                           [301 :test/fulltext 2 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[111 :db/ident :test/fulltext]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[111 :db/ident :test/fulltext]
                           [111 :db/valueType :db.type/string]
                           [111 :db/unique :db.unique/identity]
                           [111 :db/index true]
@@ -2010,21 +2411,30 @@ mod tests {
                           [222 :db/cardinality :db.cardinality/one]
                           [222 :db/index true]
                           [222 :db/fulltext true]
-                          [301 :test/fulltext 2]]");
+                          [301 :test/fulltext 2]]"
+        );
 
         // We can upsert keyed by fulltext indexed datoms.
-        assert_transact!(conn, "[[:db/add \"t\" :test/fulltext \"alternate thing\"]
-                                 [:db/add \"t\" :test/other \"other\"]]");
+        assert_transact!(
+            conn,
+            "[[:db/add \"t\" :test/fulltext \"alternate thing\"]
+                                 [:db/add \"t\" :test/other \"other\"]]"
+        );
         // value column is rowid into fulltext table.
-        assert_matches!(conn.fulltext_values(),
-                        "[[1 \"test this\"]
+        assert_matches!(
+            conn.fulltext_values(),
+            "[[1 \"test this\"]
                           [2 \"alternate thing\"]
-                          [3 \"other\"]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[301 :test/other 3 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[111 :db/ident :test/fulltext]
+                          [3 \"other\"]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[301 :test/other 3 ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[111 :db/ident :test/fulltext]
                           [111 :db/valueType :db.type/string]
                           [111 :db/unique :db.unique/identity]
                           [111 :db/index true]
@@ -2035,20 +2445,26 @@ mod tests {
                           [222 :db/index true]
                           [222 :db/fulltext true]
                           [301 :test/fulltext 2]
-                          [301 :test/other 3]]");
+                          [301 :test/other 3]]"
+        );
 
         // We can re-use fulltext values; they won't be added to the fulltext values table twice.
         assert_transact!(conn, "[[:db/add 302 :test/other \"alternate thing\"]]");
         // value column is rowid into fulltext table.
-        assert_matches!(conn.fulltext_values(),
-                        "[[1 \"test this\"]
+        assert_matches!(
+            conn.fulltext_values(),
+            "[[1 \"test this\"]
                           [2 \"alternate thing\"]
-                          [3 \"other\"]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[302 :test/other 2 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[111 :db/ident :test/fulltext]
+                          [3 \"other\"]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[302 :test/other 2 ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[111 :db/ident :test/fulltext]
                           [111 :db/valueType :db.type/string]
                           [111 :db/unique :db.unique/identity]
                           [111 :db/index true]
@@ -2060,21 +2476,27 @@ mod tests {
                           [222 :db/fulltext true]
                           [301 :test/fulltext 2]
                           [301 :test/other 3]
-                          [302 :test/other 2]]");
+                          [302 :test/other 2]]"
+        );
 
         // We can retract fulltext indexed datoms.  The underlying fulltext value remains -- indeed,
         // it might still be in use.
         assert_transact!(conn, "[[:db/retract 302 :test/other \"alternate thing\"]]");
         // value column is rowid into fulltext table.
-        assert_matches!(conn.fulltext_values(),
-                        "[[1 \"test this\"]
+        assert_matches!(
+            conn.fulltext_values(),
+            "[[1 \"test this\"]
                           [2 \"alternate thing\"]
-                          [3 \"other\"]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[302 :test/other 2 ?tx false]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(conn.datoms(),
-                        "[[111 :db/ident :test/fulltext]
+                          [3 \"other\"]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[302 :test/other 2 ?tx false]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(
+            conn.datoms(),
+            "[[111 :db/ident :test/fulltext]
                           [111 :db/valueType :db.type/string]
                           [111 :db/unique :db.unique/identity]
                           [111 :db/index true]
@@ -2085,7 +2507,8 @@ mod tests {
                           [222 :db/index true]
                           [222 :db/fulltext true]
                           [301 :test/fulltext 2]
-                          [301 :test/other 3]]");
+                          [301 :test/other 3]]"
+        );
     }
 
     #[test]
@@ -2093,7 +2516,9 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a few attributes.
-        assert_transact!(conn, "[[:db/add 111 :db/ident :test/unique_value]
+        assert_transact!(
+            conn,
+            "[[:db/add 111 :db/ident :test/unique_value]
                                  [:db/add 111 :db/valueType :db.type/string]
                                  [:db/add 111 :db/unique :db.unique/value]
                                  [:db/add 111 :db/index true]
@@ -2104,27 +2529,33 @@ mod tests {
                                  [:db/add 333 :db/ident :test/not_unique]
                                  [:db/add 333 :db/cardinality :db.cardinality/one]
                                  [:db/add 333 :db/valueType :db.type/keyword]
-                                 [:db/add 333 :db/index true]]");
+                                 [:db/add 333 :db/index true]]"
+        );
 
         // And a few datoms to match against.
-        assert_transact!(conn, "[[:db/add 501 :test/unique_value \"test this\"]
+        assert_transact!(
+            conn,
+            "[[:db/add 501 :test/unique_value \"test this\"]
                                  [:db/add 502 :test/unique_value \"other\"]
                                  [:db/add 503 :test/unique_identity -10]
                                  [:db/add 504 :test/unique_identity -20]
                                  [:db/add 505 :test/not_unique :test/keyword]
-                                 [:db/add 506 :test/not_unique :test/keyword]]");
+                                 [:db/add 506 :test/not_unique :test/keyword]]"
+        );
 
         // We can resolve lookup refs in the entity column, referring to the attribute as an entid or an ident.
         assert_transact!(conn, "[[:db/add (lookup-ref :test/unique_value \"test this\") :test/not_unique :test/keyword]
                                  [:db/add (lookup-ref 111 \"other\") :test/not_unique :test/keyword]
                                  [:db/add (lookup-ref :test/unique_identity -10) :test/not_unique :test/keyword]
                                  [:db/add (lookup-ref 222 -20) :test/not_unique :test/keyword]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[501 :test/not_unique :test/keyword ?tx true]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[501 :test/not_unique :test/keyword ?tx true]
                           [502 :test/not_unique :test/keyword ?tx true]
                           [503 :test/not_unique :test/keyword ?tx true]
                           [504 :test/not_unique :test/keyword ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
 
         // We cannot resolve lookup refs that aren't :db/unique.
         assert_transact!(conn,
@@ -2147,7 +2578,9 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a few attributes.
-        assert_transact!(conn, "[[:db/add 111 :db/ident :test/unique_value]
+        assert_transact!(
+            conn,
+            "[[:db/add 111 :db/ident :test/unique_value]
                                  [:db/add 111 :db/valueType :db.type/string]
                                  [:db/add 111 :db/unique :db.unique/value]
                                  [:db/add 111 :db/index true]
@@ -2162,27 +2595,36 @@ mod tests {
                                  [:db/add 444 :db/ident :test/ref]
                                  [:db/add 444 :db/valueType :db.type/ref]
                                  [:db/add 444 :db/unique :db.unique/identity]
-                                 [:db/add 444 :db/index true]]");
+                                 [:db/add 444 :db/index true]]"
+        );
 
         // And a few datoms to match against.
-        assert_transact!(conn, "[[:db/add 501 :test/unique_value \"test this\"]
+        assert_transact!(
+            conn,
+            "[[:db/add 501 :test/unique_value \"test this\"]
                                  [:db/add 502 :test/unique_value \"other\"]
                                  [:db/add 503 :test/unique_identity -10]
                                  [:db/add 504 :test/unique_identity -20]
                                  [:db/add 505 :test/not_unique :test/keyword]
-                                 [:db/add 506 :test/not_unique :test/keyword]]");
+                                 [:db/add 506 :test/not_unique :test/keyword]]"
+        );
 
         // We can resolve lookup refs in the entity column, referring to the attribute as an entid or an ident.
-        assert_transact!(conn, "[[:db/add 601 :test/ref (lookup-ref :test/unique_value \"test this\")]
+        assert_transact!(
+            conn,
+            "[[:db/add 601 :test/ref (lookup-ref :test/unique_value \"test this\")]
                                  [:db/add 602 :test/ref (lookup-ref 111 \"other\")]
                                  [:db/add 603 :test/ref (lookup-ref :test/unique_identity -10)]
-                                 [:db/add 604 :test/ref (lookup-ref 222 -20)]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[601 :test/ref 501 ?tx true]
+                                 [:db/add 604 :test/ref (lookup-ref 222 -20)]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[601 :test/ref 501 ?tx true]
                           [602 :test/ref 502 ?tx true]
                           [603 :test/ref 503 ?tx true]
                           [604 :test/ref 504 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
 
         // We cannot resolve lookup refs for attributes that aren't :db/ref.
         assert_transact!(conn,
@@ -2191,11 +2633,16 @@ mod tests {
 
         // If a value column lookup ref resolves, we can upsert against it.  Here, the lookup ref
         // resolves to 501, which upserts "t" to 601.
-        assert_transact!(conn, "[[:db/add \"t\" :test/ref (lookup-ref :test/unique_value \"test this\")]
-                                 [:db/add \"t\" :test/not_unique :test/keyword]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[601 :test/not_unique :test/keyword ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+        assert_transact!(
+            conn,
+            "[[:db/add \"t\" :test/ref (lookup-ref :test/unique_value \"test this\")]
+                                 [:db/add \"t\" :test/not_unique :test/keyword]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[601 :test/not_unique :test/keyword ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
 
         // Each lookup ref in the value column must resolve
         assert_transact!(conn,
@@ -2208,34 +2655,44 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a few attributes.
-        assert_transact!(conn, "[[:db/add 111 :db/ident :test/many]
+        assert_transact!(
+            conn,
+            "[[:db/add 111 :db/ident :test/many]
                                  [:db/add 111 :db/valueType :db.type/long]
                                  [:db/add 111 :db/cardinality :db.cardinality/many]
                                  [:db/add 222 :db/ident :test/one]
                                  [:db/add 222 :db/valueType :db.type/long]
-                                 [:db/add 222 :db/cardinality :db.cardinality/one]]");
+                                 [:db/add 222 :db/cardinality :db.cardinality/one]]"
+        );
 
         // Check that we can explode vectors for :db.cardinality/many attributes.
-        assert_transact!(conn, "[[:db/add 501 :test/many [1]]
+        assert_transact!(
+            conn,
+            "[[:db/add 501 :test/many [1]]
                                  [:db/add 502 :test/many [2 3]]
-                                 [:db/add 503 :test/many [4 5 6]]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[501 :test/many 1 ?tx true]
+                                 [:db/add 503 :test/many [4 5 6]]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[501 :test/many 1 ?tx true]
                           [502 :test/many 2 ?tx true]
                           [502 :test/many 3 ?tx true]
                           [503 :test/many 4 ?tx true]
                           [503 :test/many 5 ?tx true]
                           [503 :test/many 6 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
 
         // Check that we can explode nested vectors for :db.cardinality/many attributes.
         assert_transact!(conn, "[[:db/add 600 :test/many [1 [2] [[3] [4]] []]]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[600 :test/many 1 ?tx true]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[600 :test/many 1 ?tx true]
                           [600 :test/many 2 ?tx true]
                           [600 :test/many 3 ?tx true]
                           [600 :test/many 4 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
 
         // Check that we cannot explode vectors for :db.cardinality/one attributes.
         assert_transact!(conn,
@@ -2251,7 +2708,9 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a few attributes.
-        assert_transact!(conn, "[[:db/add 111 :db/ident :test/many]
+        assert_transact!(
+            conn,
+            "[[:db/add 111 :db/ident :test/many]
                                  [:db/add 111 :db/valueType :db.type/long]
                                  [:db/add 111 :db/cardinality :db.cardinality/many]
                                  [:db/add 222 :db/ident :test/component]
@@ -2262,66 +2721,79 @@ mod tests {
                                  [:db/add 333 :db/index true]
                                  [:db/add 333 :db/valueType :db.type/long]
                                  [:db/add 444 :db/ident :test/dangling]
-                                 [:db/add 444 :db/valueType :db.type/ref]]");
+                                 [:db/add 444 :db/valueType :db.type/ref]]"
+        );
 
         // Check that we can explode map notation without :db/id.
         let report = assert_transact!(conn, "[{:test/many 1}]");
-        assert_matches!(conn.last_transaction(),
-                        "[[?e :test/many 1 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{}");
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?e :test/many 1 ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{}");
 
         // Check that we can explode map notation with :db/id, as an entid, ident, and tempid.
-        let report = assert_transact!(conn, "[{:db/id :db/ident :test/many 1}
+        let report = assert_transact!(
+            conn,
+            "[{:db/id :db/ident :test/many 1}
                                               {:db/id 500 :test/many 2}
-                                              {:db/id \"t\" :test/many 3}]");
-        assert_matches!(conn.last_transaction(),
-                        "[[1 :test/many 1 ?tx true]
+                                              {:db/id \"t\" :test/many 3}]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[1 :test/many 1 ?tx true]
                           [500 :test/many 2 ?tx true]
                           [?e :test/many 3 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{\"t\" 65537}");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{\"t\" 65537}");
 
         // Check that we can explode map notation with :db/id as a lookup-ref or tx-function.
-        let report = assert_transact!(conn, "[{:db/id (lookup-ref :db/ident :db/ident) :test/many 4}
-                                              {:db/id (transaction-tx) :test/many 5}]");
-        assert_matches!(conn.last_transaction(),
-                        "[[1 :test/many 4 ?tx true]
+        let report = assert_transact!(
+            conn,
+            "[{:db/id (lookup-ref :db/ident :db/ident) :test/many 4}
+                                              {:db/id (transaction-tx) :test/many 5}]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[1 :test/many 4 ?tx true]
                           [?tx :db/txInstant ?ms ?tx true]
-                          [?tx :test/many 5 ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{}");
+                          [?tx :test/many 5 ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{}");
 
         // Check that we can explode map notation with nested vector values.
         let report = assert_transact!(conn, "[{:test/many [1 2]}]");
-        assert_matches!(conn.last_transaction(),
-                        "[[?e :test/many 1 ?tx true]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?e :test/many 1 ?tx true]
                           [?e :test/many 2 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{}");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{}");
 
         // Check that we can explode map notation with nested maps if the attribute is
         // :db/isComponent true.
         let report = assert_transact!(conn, "[{:test/component {:test/many 1}}]");
-        assert_matches!(conn.last_transaction(),
-                        "[[?e :test/component ?f ?tx true]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?e :test/component ?f ?tx true]
                           [?f :test/many 1 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{}");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{}");
 
         // Check that we can explode map notation with nested maps if the inner map contains a
         // :db/unique :db.unique/identity attribute.
         let report = assert_transact!(conn, "[{:test/dangling {:test/unique 10}}]");
-        assert_matches!(conn.last_transaction(),
-                        "[[?e :test/dangling ?f ?tx true]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?e :test/dangling ?f ?tx true]
                           [?f :test/unique 10 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{}");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{}");
 
         // Verify that we can't explode map notation with nested maps if the inner map would be
         // dangling.
@@ -2339,7 +2811,9 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a few attributes.
-        assert_transact!(conn, "[[:db/add 111 :db/ident :test/many]
+        assert_transact!(
+            conn,
+            "[[:db/add 111 :db/ident :test/many]
                                  [:db/add 111 :db/valueType :db.type/long]
                                  [:db/add 111 :db/cardinality :db.cardinality/many]
                                  [:db/add 222 :db/ident :test/component]
@@ -2350,93 +2824,120 @@ mod tests {
                                  [:db/add 333 :db/index true]
                                  [:db/add 333 :db/valueType :db.type/long]
                                  [:db/add 444 :db/ident :test/dangling]
-                                 [:db/add 444 :db/valueType :db.type/ref]]");
+                                 [:db/add 444 :db/valueType :db.type/ref]]"
+        );
 
         // Check that we can explode direct reversed notation, entids.
         let report = assert_transact!(conn, "[[:db/add 100 :test/_dangling 200]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[200 :test/dangling 100 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{}");
+        assert_matches!(
+            conn.last_transaction(),
+            "[[200 :test/dangling 100 ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{}");
 
         // Check that we can explode direct reversed notation, idents.
         let report = assert_transact!(conn, "[[:db/add :test/many :test/_dangling :test/unique]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[333 :test/dangling :test/many ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{}");
+        assert_matches!(
+            conn.last_transaction(),
+            "[[333 :test/dangling :test/many ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{}");
 
         // Check that we can explode direct reversed notation, tempids.
         let report = assert_transact!(conn, "[[:db/add \"s\" :test/_dangling \"t\"]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[65537 :test/dangling 65536 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+        assert_matches!(
+            conn.last_transaction(),
+            "[[65537 :test/dangling 65536 ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
         // This is implementation specific, but it should be deterministic.
-        assert_matches!(tempids(&report),
-                        "{\"s\" 65536
-                          \"t\" 65537}");
+        assert_matches!(
+            tempids(&report),
+            "{\"s\" 65536
+                          \"t\" 65537}"
+        );
 
         // Check that we can explode reversed notation in map notation without :db/id.
-        let report = assert_transact!(conn, "[{:test/_dangling 501}
+        let report = assert_transact!(
+            conn,
+            "[{:test/_dangling 501}
                                               {:test/_dangling :test/many}
-                                              {:test/_dangling \"t\"}]");
-        assert_matches!(conn.last_transaction(),
-                        "[[111 :test/dangling ?e1 ?tx true]
+                                              {:test/_dangling \"t\"}]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[111 :test/dangling ?e1 ?tx true]
                           [501 :test/dangling ?e2 ?tx true]
                           [65538 :test/dangling ?e3 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{\"t\" 65538}");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{\"t\" 65538}");
 
         // Check that we can explode reversed notation in map notation with :db/id, entid.
         let report = assert_transact!(conn, "[{:db/id 600 :test/_dangling 601}]");
-        assert_matches!(conn.last_transaction(),
-                        "[[601 :test/dangling 600 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{}");
+        assert_matches!(
+            conn.last_transaction(),
+            "[[601 :test/dangling 600 ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{}");
 
         // Check that we can explode reversed notation in map notation with :db/id, ident.
-        let report = assert_transact!(conn, "[{:db/id :test/component :test/_dangling :test/component}]");
-        assert_matches!(conn.last_transaction(),
-                        "[[222 :test/dangling :test/component ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{}");
+        let report = assert_transact!(
+            conn,
+            "[{:db/id :test/component :test/_dangling :test/component}]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[222 :test/dangling :test/component ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{}");
 
         // Check that we can explode reversed notation in map notation with :db/id, tempid.
         let report = assert_transact!(conn, "[{:db/id \"s\" :test/_dangling \"t\"}]");
-        assert_matches!(conn.last_transaction(),
-                        "[[65543 :test/dangling 65542 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+        assert_matches!(
+            conn.last_transaction(),
+            "[[65543 :test/dangling 65542 ?tx true]
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
         // This is implementation specific, but it should be deterministic.
-        assert_matches!(tempids(&report),
-                        "{\"s\" 65542
-                          \"t\" 65543}");
+        assert_matches!(
+            tempids(&report),
+            "{\"s\" 65542
+                          \"t\" 65543}"
+        );
 
         // Check that we can use the same attribute in both forward and backward form in the same
         // transaction.
-        let report = assert_transact!(conn, "[[:db/add 888 :test/dangling 889]
-                                              [:db/add 888 :test/_dangling 889]]");
-        assert_matches!(conn.last_transaction(),
-                        "[[888 :test/dangling 889 ?tx true]
+        let report = assert_transact!(
+            conn,
+            "[[:db/add 888 :test/dangling 889]
+                                              [:db/add 888 :test/_dangling 889]]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[888 :test/dangling 889 ?tx true]
                           [889 :test/dangling 888 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{}");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{}");
 
         // Check that we can use the same attribute in both forward and backward form in the same
         // transaction in map notation.
-        let report = assert_transact!(conn, "[{:db/id 998 :test/dangling 999 :test/_dangling 999}]");
-        assert_matches!(conn.last_transaction(),
-                        "[[998 :test/dangling 999 ?tx true]
+        let report = assert_transact!(
+            conn,
+            "[{:db/id 998 :test/dangling 999 :test/_dangling 999}]"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[998 :test/dangling 999 ?tx true]
                           [999 :test/dangling 998 ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
-        assert_matches!(tempids(&report),
-                        "{}");
-
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
+        assert_matches!(tempids(&report), "{}");
     }
 
     #[test]
@@ -2444,7 +2945,9 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a few attributes.
-        assert_transact!(conn, "[[:db/add 111 :db/ident :test/many]
+        assert_transact!(
+            conn,
+            "[[:db/add 111 :db/ident :test/many]
                                  [:db/add 111 :db/valueType :db.type/long]
                                  [:db/add 111 :db/cardinality :db.cardinality/many]
                                  [:db/add 222 :db/ident :test/component]
@@ -2455,7 +2958,8 @@ mod tests {
                                  [:db/add 333 :db/index true]
                                  [:db/add 333 :db/valueType :db.type/long]
                                  [:db/add 444 :db/ident :test/dangling]
-                                 [:db/add 444 :db/valueType :db.type/ref]]");
+                                 [:db/add 444 :db/valueType :db.type/ref]]"
+        );
 
         // `tx-parser` should fail to parse direct reverse notation with nested value maps and
         // nested value vectors, so we only test things that "get through" to the map notation
@@ -2477,19 +2981,25 @@ mod tests {
                          Err("not yet implemented: Cannot use :attr/_reversed notation for attribute 333 that is not :db/valueType :db.type/ref"));
 
         // Verify that we can't use reverse notation with unrecognized attributes.
-        assert_transact!(conn,
-                         "[{:test/_unknown 500}]",
-                         Err("no entid found for ident: :test/unknown")); // TODO: make this error reference the original :test/_unknown.
+        assert_transact!(
+            conn,
+            "[{:test/_unknown 500}]",
+            Err("no entid found for ident: :test/unknown")
+        ); // TODO: make this error reference the original :test/_unknown.
 
         // Verify that we can't use reverse notation with bad value types: here, an unknown keyword
         // that can't be coerced to a ref.
-        assert_transact!(conn,
-                         "[{:test/_dangling :test/unknown}]",
-                         Err("no entid found for ident: :test/unknown"));
+        assert_transact!(
+            conn,
+            "[{:test/_dangling :test/unknown}]",
+            Err("no entid found for ident: :test/unknown")
+        );
         // And here, a float.
-        assert_transact!(conn,
-                         "[{:test/_dangling 1.23}]",
-                         Err("value \'1.23\' is not the expected Mentat value type Ref"));
+        assert_transact!(
+            conn,
+            "[{:test/_dangling 1.23}]",
+            Err("value \'1.23\' is not the expected Mentat value type Ref")
+        );
     }
 
     #[test]
@@ -2497,7 +3007,9 @@ mod tests {
         let mut conn = TestConn::default();
 
         // Start by installing a few attributes.
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             [:db/add 111 :db/ident :test/one]
             [:db/add 111 :db/valueType :db.type/long]
             [:db/add 111 :db/cardinality :db.cardinality/one]
@@ -2506,11 +3018,15 @@ mod tests {
             [:db/add 112 :db/valueType :db.type/string]
             [:db/add 112 :db/cardinality :db.cardinality/one]
             [:db/add 112 :db/unique :db.unique/identity]
-        ]"#);
+        ]"#
+        );
 
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             [:db/add "foo" :test/unique "x"]
-        ]"#);
+        ]"#
+        );
 
         // You can try to assert two values for the same entity and attribute,
         // but you'll get an error.
@@ -2536,30 +3052,41 @@ mod tests {
     fn test_conflicting_upserts() {
         let mut conn = TestConn::default();
 
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             {:db/ident :page/id :db/valueType :db.type/string :db/index true :db/unique :db.unique/identity}
             {:db/ident :page/ref :db/valueType :db.type/ref :db/index true :db/unique :db.unique/identity}
             {:db/ident :page/title :db/valueType :db.type/string :db/cardinality :db.cardinality/many}
-        ]"#);
+        ]"#
+        );
 
         // Let's test some conflicting upserts.  First, valid data to work with -- note self references.
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             [:db/add 111 :page/id "1"]
             [:db/add 111 :page/ref 111]
             [:db/add 222 :page/id "2"]
             [:db/add 222 :page/ref 222]
-        ]"#);
+        ]"#
+        );
 
         // Now valid upserts.  Note the references are valid.
-        let report = assert_transact!(conn, r#"[
+        let report = assert_transact!(
+            conn,
+            r#"[
             [:db/add "a" :page/id "1"]
             [:db/add "a" :page/ref "a"]
             [:db/add "b" :page/id "2"]
             [:db/add "b" :page/ref "b"]
-        ]"#);
-        assert_matches!(tempids(&report),
-                        "{\"a\" 111
-                          \"b\" 222}");
+        ]"#
+        );
+        assert_matches!(
+            tempids(&report),
+            "{\"a\" 111
+                          \"b\" 222}"
+        );
 
         // Now conflicting upserts.  Note the references are reversed.  This example is interesting
         // because the first round `UpsertE` instances upsert, and this resolves all of the tempids
@@ -2588,80 +3115,111 @@ mod tests {
     fn test_upsert_issue_532() {
         let mut conn = TestConn::default();
 
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             {:db/ident :page/id :db/valueType :db.type/string :db/index true :db/unique :db.unique/identity}
             {:db/ident :page/ref :db/valueType :db.type/ref :db/index true :db/unique :db.unique/identity}
             {:db/ident :page/title :db/valueType :db.type/string :db/cardinality :db.cardinality/many}
-        ]"#);
+        ]"#
+        );
 
         // Observe that "foo" and "zot" upsert to the same entid, and that doesn't cause a
         // cardinality conflict, because we treat the input with set semantics and accept
         // duplicate datoms.
-        let report = assert_transact!(conn, r#"[
+        let report = assert_transact!(
+            conn,
+            r#"[
             [:db/add "bar" :page/id "z"]
             [:db/add "foo" :page/ref "bar"]
             [:db/add "foo" :page/title "x"]
             [:db/add "zot" :page/ref "bar"]
             [:db/add "zot" :db/ident :other/ident]
-        ]"#);
-        assert_matches!(tempids(&report),
-                        "{\"bar\" ?b
+        ]"#
+        );
+        assert_matches!(
+            tempids(&report),
+            "{\"bar\" ?b
                           \"foo\" ?f
-                          \"zot\" ?f}");
-        assert_matches!(conn.last_transaction(),
-                        "[[?b :page/id \"z\" ?tx true]
+                          \"zot\" ?f}"
+        );
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?b :page/id \"z\" ?tx true]
                           [?f :db/ident :other/ident ?tx true]
                           [?f :page/ref ?b ?tx true]
                           [?f :page/title \"x\" ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
 
-        let report = assert_transact!(conn, r#"[
+        let report = assert_transact!(
+            conn,
+            r#"[
             [:db/add "foo" :page/id "x"]
             [:db/add "foo" :page/title "x"]
             [:db/add "bar" :page/id "x"]
             [:db/add "bar" :page/title "y"]
-        ]"#);
-        assert_matches!(tempids(&report),
-                        "{\"foo\" ?e
-                          \"bar\" ?e}");
+        ]"#
+        );
+        assert_matches!(
+            tempids(&report),
+            "{\"foo\" ?e
+                          \"bar\" ?e}"
+        );
 
         // One entity, two page titles.
-        assert_matches!(conn.last_transaction(),
-                        "[[?e :page/id \"x\" ?tx true]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?e :page/id \"x\" ?tx true]
                           [?e :page/title \"x\" ?tx true]
                           [?e :page/title \"y\" ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
 
         // Here, "foo", "bar", and "baz", all refer to the same reference, but none of them actually
         // upsert to existing entities.
-        let report = assert_transact!(conn, r#"[
+        let report = assert_transact!(
+            conn,
+            r#"[
             [:db/add "foo" :page/id "id"]
             [:db/add "bar" :db/ident :bar/bar]
             {:db/id "baz" :page/id "id" :db/ident :bar/bar}
-        ]"#);
-        assert_matches!(tempids(&report),
-                        "{\"foo\" ?e
+        ]"#
+        );
+        assert_matches!(
+            tempids(&report),
+            "{\"foo\" ?e
                           \"bar\" ?e
-                          \"baz\" ?e}");
+                          \"baz\" ?e}"
+        );
 
-        assert_matches!(conn.last_transaction(),
-                        "[[?e :db/ident :bar/bar ?tx true]
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?e :db/ident :bar/bar ?tx true]
                           [?e :page/id \"id\" ?tx true]
-                          [?tx :db/txInstant ?ms ?tx true]]");
+                          [?tx :db/txInstant ?ms ?tx true]]"
+        );
 
         // If we do it again, everything resolves to the same IDs.
-        let report = assert_transact!(conn, r#"[
+        let report = assert_transact!(
+            conn,
+            r#"[
             [:db/add "foo" :page/id "id"]
             [:db/add "bar" :db/ident :bar/bar]
             {:db/id "baz" :page/id "id" :db/ident :bar/bar}
-        ]"#);
-        assert_matches!(tempids(&report),
-                        "{\"foo\" ?e
+        ]"#
+        );
+        assert_matches!(
+            tempids(&report),
+            "{\"foo\" ?e
                           \"bar\" ?e
-                          \"baz\" ?e}");
+                          \"baz\" ?e}"
+        );
 
-        assert_matches!(conn.last_transaction(),
-                        "[[?tx :db/txInstant ?ms ?tx true]]");
+        assert_matches!(
+            conn.last_transaction(),
+            "[[?tx :db/txInstant ?ms ?tx true]]"
+        );
     }
 
     #[test]
@@ -2675,19 +3233,39 @@ mod tests {
 
         let mut terms = vec![];
 
-        terms.push(Term::AddOrRetract(OpType::Add, Left(KnownEntid(200)), entids::DB_IDENT, Left(TypedValue::typed_string("test"))));
-        terms.push(Term::AddOrRetract(OpType::Retract, Left(KnownEntid(100)), entids::DB_TX_INSTANT, Left(TypedValue::Long(-1))));
+        terms.push(Term::AddOrRetract(
+            OpType::Add,
+            Left(KnownEntid(200)),
+            entids::DB_IDENT,
+            Left(TypedValue::typed_string("test")),
+        ));
+        terms.push(Term::AddOrRetract(
+            OpType::Retract,
+            Left(KnownEntid(100)),
+            entids::DB_TX_INSTANT,
+            Left(TypedValue::Long(-1)),
+        ));
 
         let report = conn.transact_simple_terms(terms, InternSet::new());
 
         match report.err().map(|e| e.kind()) {
-            Some(DbErrorKind::SchemaConstraintViolation(errors::SchemaConstraintViolation::TypeDisagreements { ref conflicting_datoms })) => {
+            Some(DbErrorKind::SchemaConstraintViolation(
+                errors::SchemaConstraintViolation::TypeDisagreements {
+                    ref conflicting_datoms,
+                },
+            )) => {
                 let mut map = BTreeMap::default();
-                map.insert((100, entids::DB_TX_INSTANT, TypedValue::Long(-1)), ValueType::Instant);
-                map.insert((200, entids::DB_IDENT, TypedValue::typed_string("test")), ValueType::Keyword);
+                map.insert(
+                    (100, entids::DB_TX_INSTANT, TypedValue::Long(-1)),
+                    ValueType::Instant,
+                );
+                map.insert(
+                    (200, entids::DB_IDENT, TypedValue::typed_string("test")),
+                    ValueType::Keyword,
+                );
 
                 assert_eq!(conflicting_datoms, &map);
-            },
+            }
             x => panic!("expected schema constraint violation, got {:?}", x),
         }
     }
@@ -2696,26 +3274,35 @@ mod tests {
     fn test_cardinality_constraints() {
         let mut conn = TestConn::default();
 
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             {:db/id 200 :db/ident :test/one :db/valueType :db.type/long :db/cardinality :db.cardinality/one}
             {:db/id 201 :db/ident :test/many :db/valueType :db.type/long :db/cardinality :db.cardinality/many}
-        ]"#);
+        ]"#
+        );
 
         // Can add the same datom multiple times for an attribute, regardless of cardinality.
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             [:db/add 100 :test/one 1]
             [:db/add 100 :test/one 1]
             [:db/add 100 :test/many 2]
             [:db/add 100 :test/many 2]
-        ]"#);
+        ]"#
+        );
 
         // Can retract the same datom multiple times for an attribute, regardless of cardinality.
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             [:db/retract 100 :test/one 1]
             [:db/retract 100 :test/one 1]
             [:db/retract 100 :test/many 2]
             [:db/retract 100 :test/many 2]
-        ]"#);
+        ]"#
+        );
 
         // Can't transact multiple datoms for a cardinality one attribute.
         assert_transact!(conn, r#"[
@@ -2725,10 +3312,13 @@ mod tests {
         Err("schema constraint violation: cardinality conflicts:\n  CardinalityOneAddConflict { e: 100, a: 200, vs: {Long(3), Long(4)} }\n"));
 
         // Can transact multiple datoms for a cardinality many attribute.
-        assert_transact!(conn, r#"[
+        assert_transact!(
+            conn,
+            r#"[
             [:db/add 100 :test/many 5]
             [:db/add 100 :test/many 6]
-        ]"#);
+        ]"#
+        );
 
         // Can't add and retract the same datom for an attribute, regardless of cardinality.
         assert_transact!(conn, r#"[
@@ -2744,18 +3334,30 @@ mod tests {
     #[cfg(feature = "sqlcipher")]
     fn test_sqlcipher_openable() {
         let secret_key = "key";
-        let sqlite = new_connection_with_key("../fixtures/v1encrypted.db", secret_key).expect("Failed to find test DB");
-        sqlite.query_row("SELECT COUNT(*) FROM sqlite_master", &[], |row| row.get::<_, i64>(0))
+        let sqlite = new_connection_with_key("../fixtures/v1encrypted.db", secret_key)
+            .expect("Failed to find test DB");
+        sqlite
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master",
+                rusqlite::params![],
+                |row| row.get::<_, i64>(0),
+            )
             .expect("Failed to execute sql query on encrypted DB");
     }
 
     #[cfg(feature = "sqlcipher")]
-    fn test_open_fail<F>(opener: F) where F: FnOnce() -> rusqlite::Result<rusqlite::Connection> {
+    fn test_open_fail<F>(opener: F)
+    where
+        F: FnOnce() -> rusqlite::Result<rusqlite::Connection>,
+    {
         let err = opener().expect_err("Should fail to open encrypted DB");
         match err {
             rusqlite::Error::SqliteFailure(err, ..) => {
-                assert_eq!(err.extended_code, 26, "Should get error code 26 (not a database).");
-            },
+                assert_eq!(
+                    err.extended_code, 26,
+                    "Should get error code 26 (not a database)."
+                );
+            }
             err => {
                 panic!("Wrong error type! {}", err);
             }
@@ -2779,7 +3381,8 @@ mod tests {
     #[test]
     #[cfg(feature = "sqlcipher")]
     fn test_sqlcipher_some_transactions() {
-        let sqlite = new_connection_with_key("", "hunter2").expect("Failed to create encrypted connection");
+        let sqlite =
+            new_connection_with_key("", "hunter2").expect("Failed to create encrypted connection");
         // Run a basic test as a sanity check.
         run_test_add(TestConn::with_sqlite(sqlite));
     }

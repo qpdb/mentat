@@ -45,93 +45,37 @@
 //! names -- `TermWithTempIdsAndLookupRefs`, anyone? -- and strongly typed stage functions will help
 //! keep everything straight.
 
-use std::borrow::{
-    Cow,
-};
-use std::collections::{
-    BTreeMap,
-    BTreeSet,
-    VecDeque,
-};
-use std::iter::{
-    once,
-};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::iter::once;
 
 use db;
-use db::{
-    MentatStoring,
-};
-use edn::{
-    InternSet,
-    Keyword,
-};
+use db::MentatStoring;
+use db_traits::errors;
+use db_traits::errors::{DbErrorKind, Result};
+use edn::{InternSet, Keyword};
 use entids;
-use db_traits::errors as errors;
-use db_traits::errors::{
-    DbErrorKind,
-    Result,
-};
 use internal_types::{
-    AddAndRetract,
-    AEVTrie,
-    KnownEntidOr,
-    LookupRef,
-    LookupRefOrTempId,
-    TempIdHandle,
-    TempIdMap,
-    Term,
-    TermWithTempIds,
-    TermWithTempIdsAndLookupRefs,
-    TermWithoutTempIds,
-    TypedValueOr,
-    replace_lookup_ref,
+    replace_lookup_ref, AEVTrie, AddAndRetract, KnownEntidOr, LookupRef, LookupRefOrTempId,
+    TempIdHandle, TempIdMap, Term, TermWithTempIds, TermWithTempIdsAndLookupRefs,
+    TermWithoutTempIds, TypedValueOr,
 };
 
 use mentat_core::util::Either;
 
-use core_traits::{
-    attribute,
-    Attribute,
-    Entid,
-    KnownEntid,
-    TypedValue,
-    ValueType,
-    now,
-};
+use core_traits::{attribute, now, Attribute, Entid, KnownEntid, TypedValue, ValueType};
 
-use mentat_core::{
-    DateTime,
-    Schema,
-    TxReport,
-    Utc,
-};
+use mentat_core::{DateTime, Schema, TxReport, Utc};
 
 use edn::entities as entmod;
-use edn::entities::{
-    AttributePlace,
-    Entity,
-    OpType,
-    TempId,
-};
+use edn::entities::{AttributePlace, Entity, OpType, TempId};
 use metadata;
 use rusqlite;
-use schema::{
-    SchemaBuilding,
-};
+use schema::SchemaBuilding;
 use tx_checking;
-use types::{
-    AVMap,
-    AVPair,
-    PartitionMap,
-    TransactableValue,
-};
-use upsert_resolution::{
-    FinalPopulations,
-    Generation,
-};
-use watcher::{
-    TransactWatcher,
-};
+use types::{AVMap, AVPair, PartitionMap, TransactableValue};
+use upsert_resolution::{FinalPopulations, Generation};
+use watcher::TransactWatcher;
 
 /// Defines transactor's high level behaviour.
 pub(crate) enum TransactorAction {
@@ -150,7 +94,10 @@ pub(crate) enum TransactorAction {
 
 /// A transaction on its way to being applied.
 #[derive(Debug)]
-pub struct Tx<'conn, 'a, W> where W: TransactWatcher {
+pub struct Tx<'conn, 'a, W>
+where
+    W: TransactWatcher,
+{
     /// The storage to apply against.  In the future, this will be a Mentat connection.
     store: &'conn rusqlite::Connection, // TODO: db::MentatStoring,
 
@@ -179,7 +126,9 @@ pub struct Tx<'conn, 'a, W> where W: TransactWatcher {
 
 /// Remove any :db/id value from the given map notation, converting the returned value into
 /// something suitable for the entity position rather than something suitable for a value position.
-pub fn remove_db_id<V: TransactableValue>(map: &mut entmod::MapNotation<V>) -> Result<Option<entmod::EntityPlace<V>>> {
+pub fn remove_db_id<V: TransactableValue>(
+    map: &mut entmod::MapNotation<V>,
+) -> Result<Option<entmod::EntityPlace<V>>> {
     // TODO: extract lazy defined constant.
     let db_id_key = entmod::EntidOrIdent::Ident(Keyword::namespaced("db", "id"));
 
@@ -190,10 +139,9 @@ pub fn remove_db_id<V: TransactableValue>(map: &mut entmod::MapNotation<V>) -> R
             entmod::ValuePlace::TempId(e) => Some(entmod::EntityPlace::TempId(e)),
             entmod::ValuePlace::TxFunction(e) => Some(entmod::EntityPlace::TxFunction(e)),
             entmod::ValuePlace::Atom(v) => Some(v.into_entity_place()?),
-            entmod::ValuePlace::Vector(_) |
-            entmod::ValuePlace::MapNotation(_) => {
+            entmod::ValuePlace::Vector(_) | entmod::ValuePlace::MapNotation(_) => {
                 bail!(DbErrorKind::InputError(errors::InputError::BadDbId))
-            },
+            }
         }
     } else {
         None
@@ -202,14 +150,18 @@ pub fn remove_db_id<V: TransactableValue>(map: &mut entmod::MapNotation<V>) -> R
     Ok(db_id)
 }
 
-impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
+impl<'conn, 'a, W> Tx<'conn, 'a, W>
+where
+    W: TransactWatcher,
+{
     pub fn new(
         store: &'conn rusqlite::Connection,
         partition_map: PartitionMap,
         schema_for_mutation: &'a Schema,
         schema: &'a Schema,
         watcher: W,
-        tx_id: Entid) -> Tx<'conn, 'a, W> {
+        tx_id: Entid,
+    ) -> Tx<'conn, 'a, W> {
         Tx {
             store: store,
             partition_map: partition_map,
@@ -223,7 +175,10 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
     /// Given a collection of tempids and the [a v] pairs that they might upsert to, resolve exactly
     /// which [a v] pairs do upsert to entids, and map each tempid that upserts to the upserted
     /// entid.  The keys of the resulting map are exactly those tempids that upserted.
-    pub(crate) fn resolve_temp_id_avs<'b>(&self, temp_id_avs: &'b [(TempIdHandle, AVPair)]) -> Result<TempIdMap> {
+    pub(crate) fn resolve_temp_id_avs<'b>(
+        &self,
+        temp_id_avs: &'b [(TempIdHandle, AVPair)],
+    ) -> Result<TempIdMap> {
         if temp_id_avs.is_empty() {
             return Ok(TempIdMap::default());
         }
@@ -246,18 +201,30 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
         let mut conflicting_upserts: BTreeMap<TempId, BTreeSet<KnownEntid>> = BTreeMap::default();
 
         for &(ref tempid, ref av_pair) in temp_id_avs {
-            trace!("tempid {:?} av_pair {:?} -> {:?}", tempid, av_pair, av_map.get(&av_pair));
+            trace!(
+                "tempid {:?} av_pair {:?} -> {:?}",
+                tempid,
+                av_pair,
+                av_map.get(&av_pair)
+            );
             if let Some(entid) = av_map.get(&av_pair).cloned().map(KnownEntid) {
                 tempids.insert(tempid.clone(), entid).map(|previous| {
                     if entid != previous {
-                        conflicting_upserts.entry((**tempid).clone()).or_insert_with(|| once(previous).collect::<BTreeSet<_>>()).insert(entid);
+                        conflicting_upserts
+                            .entry((**tempid).clone())
+                            .or_insert_with(|| once(previous).collect::<BTreeSet<_>>())
+                            .insert(entid);
                     }
                 });
             }
         }
 
         if !conflicting_upserts.is_empty() {
-            bail!(DbErrorKind::SchemaConstraintViolation(errors::SchemaConstraintViolation::ConflictingUpserts { conflicting_upserts }));
+            bail!(DbErrorKind::SchemaConstraintViolation(
+                errors::SchemaConstraintViolation::ConflictingUpserts {
+                    conflicting_upserts
+                }
+            ));
         }
 
         Ok(tempids)
@@ -268,7 +235,17 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
     ///
     /// The `Term` instances produce share interned TempId and LookupRef handles, and we return the
     /// interned handle sets so that consumers can ensure all handles are used appropriately.
-    fn entities_into_terms_with_temp_ids_and_lookup_refs<I, V: TransactableValue>(&self, entities: I) -> Result<(Vec<TermWithTempIdsAndLookupRefs>, InternSet<TempId>, InternSet<AVPair>)> where I: IntoIterator<Item=Entity<V>> {
+    fn entities_into_terms_with_temp_ids_and_lookup_refs<I, V: TransactableValue>(
+        &self,
+        entities: I,
+    ) -> Result<(
+        Vec<TermWithTempIdsAndLookupRefs>,
+        InternSet<TempId>,
+        InternSet<AVPair>,
+    )>
+    where
+        I: IntoIterator<Item = Entity<V>>,
+    {
         struct InProcess<'a> {
             partition_map: &'a PartitionMap,
             schema: &'a Schema,
@@ -279,7 +256,11 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
         }
 
         impl<'a> InProcess<'a> {
-            fn with_schema_and_partition_map(schema: &'a Schema, partition_map: &'a PartitionMap, tx_id: KnownEntid) -> InProcess<'a> {
+            fn with_schema_and_partition_map(
+                schema: &'a Schema,
+                partition_map: &'a PartitionMap,
+                tx_id: KnownEntid,
+            ) -> InProcess<'a> {
                 InProcess {
                     partition_map,
                     schema,
@@ -302,16 +283,27 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                 self.schema.require_entid(e)
             }
 
-            fn intern_lookup_ref<W: TransactableValue>(&mut self, lookup_ref: &entmod::LookupRef<W>) -> Result<LookupRef> {
+            fn intern_lookup_ref<W: TransactableValue>(
+                &mut self,
+                lookup_ref: &entmod::LookupRef<W>,
+            ) -> Result<LookupRef> {
                 let lr_a: i64 = match lookup_ref.a {
                     AttributePlace::Entid(entmod::EntidOrIdent::Entid(ref a)) => *a,
-                    AttributePlace::Entid(entmod::EntidOrIdent::Ident(ref a)) => self.schema.require_entid(&a)?.into(),
+                    AttributePlace::Entid(entmod::EntidOrIdent::Ident(ref a)) => {
+                        self.schema.require_entid(&a)?.into()
+                    }
                 };
                 let lr_attribute: &Attribute = self.schema.require_attribute_for_entid(lr_a)?;
 
-                let lr_typed_value: TypedValue = lookup_ref.v.clone().into_typed_value(&self.schema, lr_attribute.value_type)?;
+                let lr_typed_value: TypedValue = lookup_ref
+                    .v
+                    .clone()
+                    .into_typed_value(&self.schema, lr_attribute.value_type)?;
                 if lr_attribute.unique.is_none() {
-                    bail!(DbErrorKind::NotYetImplemented(format!("Cannot resolve (lookup-ref {} {:?}) with attribute that is not :db/unique", lr_a, lr_typed_value)))
+                    bail!(DbErrorKind::NotYetImplemented(format!(
+                        "Cannot resolve (lookup-ref {} {:?}) with attribute that is not :db/unique",
+                        lr_a, lr_typed_value
+                    )))
                 }
 
                 Ok(self.lookup_refs.intern((lr_a, lr_typed_value)))
@@ -324,7 +316,10 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                 entmod::EntityPlace::TempId(TempId::Internal(self.mentat_id_count).into())
             }
 
-            fn entity_e_into_term_e<W: TransactableValue>(&mut self, x: entmod::EntityPlace<W>) -> Result<KnownEntidOr<LookupRefOrTempId>> {
+            fn entity_e_into_term_e<W: TransactableValue>(
+                &mut self,
+                x: entmod::EntityPlace<W>,
+            ) -> Result<KnownEntidOr<LookupRefOrTempId>> {
                 match x {
                     entmod::EntityPlace::Entid(e) => {
                         let e = match e {
@@ -332,22 +327,25 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                             entmod::EntidOrIdent::Ident(ref e) => self.ensure_ident_exists(&e)?,
                         };
                         Ok(Either::Left(e))
-                    },
+                    }
 
-                    entmod::EntityPlace::TempId(e) => {
-                        Ok(Either::Right(LookupRefOrTempId::TempId(self.temp_ids.intern(e))))
-                    },
+                    entmod::EntityPlace::TempId(e) => Ok(Either::Right(LookupRefOrTempId::TempId(
+                        self.temp_ids.intern(e),
+                    ))),
 
-                    entmod::EntityPlace::LookupRef(ref lookup_ref) => {
-                        Ok(Either::Right(LookupRefOrTempId::LookupRef(self.intern_lookup_ref(lookup_ref)?)))
-                    },
+                    entmod::EntityPlace::LookupRef(ref lookup_ref) => Ok(Either::Right(
+                        LookupRefOrTempId::LookupRef(self.intern_lookup_ref(lookup_ref)?),
+                    )),
 
                     entmod::EntityPlace::TxFunction(ref tx_function) => {
                         match tx_function.op.0.as_str() {
                             "transaction-tx" => Ok(Either::Left(self.tx_id)),
-                            unknown @ _ => bail!(DbErrorKind::NotYetImplemented(format!("Unknown transaction function {}", unknown))),
+                            unknown @ _ => bail!(DbErrorKind::NotYetImplemented(format!(
+                                "Unknown transaction function {}",
+                                unknown
+                            ))),
                         }
-                    },
+                    }
                 }
             }
 
@@ -359,18 +357,27 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                 Ok(a)
             }
 
-            fn entity_e_into_term_v<W: TransactableValue>(&mut self, x: entmod::EntityPlace<W>) -> Result<TypedValueOr<LookupRefOrTempId>> {
-                self.entity_e_into_term_e(x).map(|r| r.map_left(|ke| TypedValue::Ref(ke.0)))
+            fn entity_e_into_term_v<W: TransactableValue>(
+                &mut self,
+                x: entmod::EntityPlace<W>,
+            ) -> Result<TypedValueOr<LookupRefOrTempId>> {
+                self.entity_e_into_term_e(x)
+                    .map(|r| r.map_left(|ke| TypedValue::Ref(ke.0)))
             }
 
-            fn entity_v_into_term_e<W: TransactableValue>(&mut self, x: entmod::ValuePlace<W>, backward_a: &entmod::EntidOrIdent) -> Result<KnownEntidOr<LookupRefOrTempId>> {
+            fn entity_v_into_term_e<W: TransactableValue>(
+                &mut self,
+                x: entmod::ValuePlace<W>,
+                backward_a: &entmod::EntidOrIdent,
+            ) -> Result<KnownEntidOr<LookupRefOrTempId>> {
                 match backward_a.unreversed() {
                     None => {
                         bail!(DbErrorKind::NotYetImplemented(format!("Cannot explode map notation value in :attr/_reversed notation for forward attribute")));
-                    },
+                    }
                     Some(forward_a) => {
                         let forward_a = self.entity_a_into_term_a(forward_a)?;
-                        let forward_attribute = self.schema.require_attribute_for_entid(forward_a)?;
+                        let forward_attribute =
+                            self.schema.require_attribute_for_entid(forward_a)?;
                         if forward_attribute.value_type != ValueType::Ref {
                             bail!(DbErrorKind::NotYetImplemented(format!("Cannot use :attr/_reversed notation for attribute {} that is not :db/valueType :db.type/ref", forward_a)))
                         }
@@ -415,12 +422,16 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                             entmod::ValuePlace::MapNotation(_) =>
                                 bail!(DbErrorKind::NotYetImplemented(format!("Cannot explode map notation value in :attr/_reversed notation for attribute {}", forward_a))),
                         }
-                    },
+                    }
                 }
             }
         }
 
-        let mut in_process = InProcess::with_schema_and_partition_map(&self.schema, &self.partition_map, KnownEntid(self.tx_id));
+        let mut in_process = InProcess::with_schema_and_partition_map(
+            &self.schema,
+            &self.partition_map,
+            KnownEntid(self.tx_id),
+        );
 
         // We want to handle entities in the order they're given to us, while also "exploding" some
         // entities into many.  We therefore push the initial entities onto the back of the deque,
@@ -435,7 +446,8 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                 Entity::MapNotation(mut map_notation) => {
                     // :db/id is optional; if it's not given, we generate a special internal tempid
                     // to use for upserting.  This tempid will not be reported in the TxReport.
-                    let db_id: entmod::EntityPlace<V> = remove_db_id(&mut map_notation)?.unwrap_or_else(|| in_process.allocate_mentat_id());
+                    let db_id: entmod::EntityPlace<V> = remove_db_id(&mut map_notation)?
+                        .unwrap_or_else(|| in_process.allocate_mentat_id());
 
                     // We're not nested, so :db/isComponent is not relevant.  We just explode the
                     // map notation.
@@ -447,7 +459,7 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                             v: v,
                         });
                     }
-                },
+                }
 
                 Entity::AddOrRetract { op, e, a, v } => {
                     let AttributePlace::Entid(a) = a;
@@ -456,7 +468,12 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                         let reversed_e = in_process.entity_v_into_term_e(v, &a)?;
                         let reversed_a = in_process.entity_a_into_term_a(reversed_a)?;
                         let reversed_v = in_process.entity_e_into_term_v(e)?;
-                        terms.push(Term::AddOrRetract(OpType::Add, reversed_e, reversed_a, reversed_v));
+                        terms.push(Term::AddOrRetract(
+                            OpType::Add,
+                            reversed_e,
+                            reversed_a,
+                            reversed_v,
+                        ));
                     } else {
                         let a = in_process.entity_a_into_term_a(a)?;
                         let attribute = self.schema.require_attribute_for_entid(a)?;
@@ -468,32 +485,44 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                                 // limited cases) coerce the value into the attribute's value set.
                                 if attribute.value_type == ValueType::Ref {
                                     match v.as_tempid() {
-                                        Some(tempid) => Either::Right(LookupRefOrTempId::TempId(in_process.temp_ids.intern(tempid))),
-                                        None => v.into_typed_value(&self.schema, attribute.value_type).map(Either::Left)?,
+                                        Some(tempid) => Either::Right(LookupRefOrTempId::TempId(
+                                            in_process.temp_ids.intern(tempid),
+                                        )),
+                                        None => v
+                                            .into_typed_value(&self.schema, attribute.value_type)
+                                            .map(Either::Left)?,
                                     }
                                 } else {
-                                    v.into_typed_value(&self.schema, attribute.value_type).map(Either::Left)?
+                                    v.into_typed_value(&self.schema, attribute.value_type)
+                                        .map(Either::Left)?
                                 }
-                            },
+                            }
 
-                            entmod::ValuePlace::Entid(entid) =>
-                                Either::Left(TypedValue::Ref(in_process.entity_a_into_term_a(entid)?)),
+                            entmod::ValuePlace::Entid(entid) => Either::Left(TypedValue::Ref(
+                                in_process.entity_a_into_term_a(entid)?,
+                            )),
 
-                            entmod::ValuePlace::TempId(tempid) =>
-                                Either::Right(LookupRefOrTempId::TempId(in_process.temp_ids.intern(tempid))),
+                            entmod::ValuePlace::TempId(tempid) => Either::Right(
+                                LookupRefOrTempId::TempId(in_process.temp_ids.intern(tempid)),
+                            ),
 
                             entmod::ValuePlace::LookupRef(ref lookup_ref) => {
                                 if attribute.value_type != ValueType::Ref {
                                     bail!(DbErrorKind::NotYetImplemented(format!("Cannot resolve value lookup ref for attribute {} that is not :db/valueType :db.type/ref", a)))
                                 }
 
-                                Either::Right(LookupRefOrTempId::LookupRef(in_process.intern_lookup_ref(lookup_ref)?))
-                            },
+                                Either::Right(LookupRefOrTempId::LookupRef(
+                                    in_process.intern_lookup_ref(lookup_ref)?,
+                                ))
+                            }
 
                             entmod::ValuePlace::TxFunction(ref tx_function) => {
                                 let typed_value = match tx_function.op.0.as_str() {
                                     "transaction-tx" => TypedValue::Ref(self.tx_id),
-                                    unknown @ _ => bail!(DbErrorKind::NotYetImplemented(format!("Unknown transaction function {}", unknown))),
+                                    unknown @ _ => bail!(DbErrorKind::NotYetImplemented(format!(
+                                        "Unknown transaction function {}",
+                                        unknown
+                                    ))),
                                 };
 
                                 // Here we do schema-aware typechecking: we assert that the computed
@@ -508,7 +537,7 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                                 }
 
                                 Either::Left(typed_value)
-                            },
+                            }
 
                             entmod::ValuePlace::Vector(vs) => {
                                 if !attribute.multival {
@@ -523,8 +552,8 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                                         v: vv,
                                     });
                                 }
-                                continue
-                            },
+                                continue;
+                            }
 
                             entmod::ValuePlace::MapNotation(mut map_notation) => {
                                 // TODO: consider handling this at the tx-parser level.  That would be
@@ -541,9 +570,11 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
 
                                 // :db/id is optional; if it's not given, we generate a special internal tempid
                                 // to use for upserting.  This tempid will not be reported in the TxReport.
-                                let db_id: Option<entmod::EntityPlace<V>> = remove_db_id(&mut map_notation)?;
+                                let db_id: Option<entmod::EntityPlace<V>> =
+                                    remove_db_id(&mut map_notation)?;
                                 let mut dangling = db_id.is_none();
-                                let db_id: entmod::EntityPlace<V> = db_id.unwrap_or_else(|| in_process.allocate_mentat_id());
+                                let db_id: entmod::EntityPlace<V> =
+                                    db_id.unwrap_or_else(|| in_process.allocate_mentat_id());
 
                                 // We're nested, so we want to ensure we're not creating "dangling"
                                 // entities that can't be reached.  If we're :db/isComponent, then this
@@ -568,21 +599,34 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                                         // dangling.
                                         dangling = false;
 
-                                        let reversed_e = in_process.entity_v_into_term_e(inner_v, &inner_a)?;
-                                        let reversed_a = in_process.entity_a_into_term_a(reversed_a)?;
-                                        let reversed_v = in_process.entity_e_into_term_v(db_id.clone())?;
-                                        terms.push(Term::AddOrRetract(OpType::Add, reversed_e, reversed_a, reversed_v));
+                                        let reversed_e =
+                                            in_process.entity_v_into_term_e(inner_v, &inner_a)?;
+                                        let reversed_a =
+                                            in_process.entity_a_into_term_a(reversed_a)?;
+                                        let reversed_v =
+                                            in_process.entity_e_into_term_v(db_id.clone())?;
+                                        terms.push(Term::AddOrRetract(
+                                            OpType::Add,
+                                            reversed_e,
+                                            reversed_a,
+                                            reversed_v,
+                                        ));
                                     } else {
                                         let inner_a = in_process.entity_a_into_term_a(inner_a)?;
-                                        let inner_attribute = self.schema.require_attribute_for_entid(inner_a)?;
-                                        if inner_attribute.unique == Some(attribute::Unique::Identity) {
+                                        let inner_attribute =
+                                            self.schema.require_attribute_for_entid(inner_a)?;
+                                        if inner_attribute.unique
+                                            == Some(attribute::Unique::Identity)
+                                        {
                                             dangling = false;
                                         }
 
                                         deque.push_front(Entity::AddOrRetract {
                                             op: OpType::Add,
                                             e: db_id.clone(),
-                                            a: AttributePlace::Entid(entmod::EntidOrIdent::Entid(inner_a)),
+                                            a: AttributePlace::Entid(entmod::EntidOrIdent::Entid(
+                                                inner_a,
+                                            )),
                                             v: inner_v,
                                         });
                                     }
@@ -593,15 +637,15 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                                 }
 
                                 in_process.entity_e_into_term_v(db_id)?
-                            },
+                            }
                         };
 
                         let e = in_process.entity_e_into_term_e(e)?;
                         terms.push(Term::AddOrRetract(op, e, a, v));
                     }
-                },
+                }
             }
-        };
+        }
         Ok((terms, in_process.temp_ids, in_process.lookup_refs))
     }
 
@@ -609,16 +653,28 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
     /// lookup refs.
     ///
     /// The `Term` instances produced share interned TempId handles and have no LookupRef references.
-    fn resolve_lookup_refs<I>(&self, lookup_ref_map: &AVMap, terms: I) -> Result<Vec<TermWithTempIds>> where I: IntoIterator<Item=TermWithTempIdsAndLookupRefs> {
-        terms.into_iter().map(|term: TermWithTempIdsAndLookupRefs| -> Result<TermWithTempIds> {
-            match term {
-                Term::AddOrRetract(op, e, a, v) => {
-                    let e = replace_lookup_ref(&lookup_ref_map, e, |x| KnownEntid(x))?;
-                    let v = replace_lookup_ref(&lookup_ref_map, v, |x| TypedValue::Ref(x))?;
-                    Ok(Term::AddOrRetract(op, e, a, v))
+    fn resolve_lookup_refs<I>(
+        &self,
+        lookup_ref_map: &AVMap,
+        terms: I,
+    ) -> Result<Vec<TermWithTempIds>>
+    where
+        I: IntoIterator<Item = TermWithTempIdsAndLookupRefs>,
+    {
+        terms
+            .into_iter()
+            .map(
+                |term: TermWithTempIdsAndLookupRefs| -> Result<TermWithTempIds> {
+                    match term {
+                        Term::AddOrRetract(op, e, a, v) => {
+                            let e = replace_lookup_ref(&lookup_ref_map, e, |x| KnownEntid(x))?;
+                            let v = replace_lookup_ref(&lookup_ref_map, v, |x| TypedValue::Ref(x))?;
+                            Ok(Term::AddOrRetract(op, e, a, v))
+                        }
+                    }
                 },
-            }
-        }).collect::<Result<Vec<_>>>()
+            )
+            .collect::<Result<Vec<_>>>()
     }
 
     /// Transact the given `entities` against the store.
@@ -626,26 +682,52 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
     /// This approach is explained in https://github.com/mozilla/mentat/wiki/Transacting.
     // TODO: move this to the transactor layer.
     pub fn transact_entities<I, V: TransactableValue>(&mut self, entities: I) -> Result<TxReport>
-    where I: IntoIterator<Item=Entity<V>> {
+    where
+        I: IntoIterator<Item = Entity<V>>,
+    {
         // Pipeline stage 1: entities -> terms with tempids and lookup refs.
-        let (terms_with_temp_ids_and_lookup_refs, tempid_set, lookup_ref_set) = self.entities_into_terms_with_temp_ids_and_lookup_refs(entities)?;
+        let (terms_with_temp_ids_and_lookup_refs, tempid_set, lookup_ref_set) =
+            self.entities_into_terms_with_temp_ids_and_lookup_refs(entities)?;
 
         // Pipeline stage 2: resolve lookup refs -> terms with tempids.
-        let lookup_ref_avs: Vec<&(i64, TypedValue)> = lookup_ref_set.iter().map(|rc| &**rc).collect();
+        let lookup_ref_avs: Vec<&(i64, TypedValue)> =
+            lookup_ref_set.iter().map(|rc| &**rc).collect();
         let lookup_ref_map: AVMap = self.store.resolve_avs(&lookup_ref_avs[..])?;
 
-        let terms_with_temp_ids = self.resolve_lookup_refs(&lookup_ref_map, terms_with_temp_ids_and_lookup_refs)?;
+        let terms_with_temp_ids =
+            self.resolve_lookup_refs(&lookup_ref_map, terms_with_temp_ids_and_lookup_refs)?;
 
-        self.transact_simple_terms_with_action(terms_with_temp_ids, tempid_set, TransactorAction::MaterializeAndCommit)
+        self.transact_simple_terms_with_action(
+            terms_with_temp_ids,
+            tempid_set,
+            TransactorAction::MaterializeAndCommit,
+        )
     }
 
-    pub fn transact_simple_terms<I>(&mut self, terms: I, tempid_set: InternSet<TempId>) -> Result<TxReport>
-    where I: IntoIterator<Item=TermWithTempIds> {
-        self.transact_simple_terms_with_action(terms, tempid_set, TransactorAction::MaterializeAndCommit)
+    pub fn transact_simple_terms<I>(
+        &mut self,
+        terms: I,
+        tempid_set: InternSet<TempId>,
+    ) -> Result<TxReport>
+    where
+        I: IntoIterator<Item = TermWithTempIds>,
+    {
+        self.transact_simple_terms_with_action(
+            terms,
+            tempid_set,
+            TransactorAction::MaterializeAndCommit,
+        )
     }
 
-    fn transact_simple_terms_with_action<I>(&mut self, terms: I, tempid_set: InternSet<TempId>, action: TransactorAction) -> Result<TxReport>
-    where I: IntoIterator<Item=TermWithTempIds> {
+    fn transact_simple_terms_with_action<I>(
+        &mut self,
+        terms: I,
+        tempid_set: InternSet<TempId>,
+        action: TransactorAction,
+    ) -> Result<TxReport>
+    where
+        I: IntoIterator<Item = TermWithTempIds>,
+    {
         // TODO: push these into an internal transaction report?
         let mut tempids: BTreeMap<TempId, KnownEntid> = BTreeMap::default();
 
@@ -668,7 +750,8 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
             generation = generation.evolve_one_step(&temp_id_map);
 
             // Errors.  BTree* since we want deterministic results.
-            let mut conflicting_upserts: BTreeMap<TempId, BTreeSet<KnownEntid>> = BTreeMap::default();
+            let mut conflicting_upserts: BTreeMap<TempId, BTreeSet<KnownEntid>> =
+                BTreeMap::default();
 
             // Report each tempid that resolves via upsert.
             for (tempid, entid) in temp_id_map {
@@ -676,13 +759,20 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
                 // that a tempid resolves in two generations, and those resolutions might conflict.
                 tempids.insert((*tempid).clone(), entid).map(|previous| {
                     if entid != previous {
-                        conflicting_upserts.entry((*tempid).clone()).or_insert_with(|| once(previous).collect::<BTreeSet<_>>()).insert(entid);
+                        conflicting_upserts
+                            .entry((*tempid).clone())
+                            .or_insert_with(|| once(previous).collect::<BTreeSet<_>>())
+                            .insert(entid);
                     }
                 });
             }
 
             if !conflicting_upserts.is_empty() {
-                bail!(DbErrorKind::SchemaConstraintViolation(errors::SchemaConstraintViolation::ConflictingUpserts { conflicting_upserts }));
+                bail!(DbErrorKind::SchemaConstraintViolation(
+                    errors::SchemaConstraintViolation::ConflictingUpserts {
+                        conflicting_upserts
+                    }
+                ));
             }
 
             debug!("tempids {:?}", tempids);
@@ -693,12 +783,15 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
         debug!("final generation {:?}", generation);
 
         // Allocate entids for tempids that didn't upsert.  BTreeMap so this is deterministic.
-        let unresolved_temp_ids: BTreeMap<TempIdHandle, usize> = generation.temp_ids_in_allocations(&self.schema)?;
+        let unresolved_temp_ids: BTreeMap<TempIdHandle, usize> =
+            generation.temp_ids_in_allocations(&self.schema)?;
 
         debug!("unresolved tempids {:?}", unresolved_temp_ids);
 
         // TODO: track partitions for temporary IDs.
-        let entids = self.partition_map.allocate_entids(":db.part/user", unresolved_temp_ids.len());
+        let entids = self
+            .partition_map
+            .allocate_entids(":db.part/user", unresolved_temp_ids.len());
 
         let temp_id_allocations = unresolved_temp_ids
             .into_iter()
@@ -724,7 +817,10 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
 
         // Any internal tempid has been allocated by the system and is a private implementation
         // detail; it shouldn't be exposed in the final transaction report.
-        let tempids = tempids.into_iter().filter_map(|(tempid, e)| tempid.into_external().map(|s| (s, e.0))).collect();
+        let tempids = tempids
+            .into_iter()
+            .filter_map(|(tempid, e)| tempid.into_external().map(|s| (s, e.0)))
+            .collect();
 
         // A transaction might try to add or retract :db/ident assertions or other metadata mutating
         // assertions , but those assertions might not make it to the store.  If we see a possible
@@ -737,88 +833,103 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
         let mut aev_trie = into_aev_trie(&self.schema, final_populations, inert_terms)?;
 
         let tx_instant;
-        { // TODO: Don't use this block to scope borrowing the schema; instead, extract a helper function.
+        {
+            // TODO: Don't use this block to scope borrowing the schema; instead, extract a helper function.
 
-        // Assertions that are :db.cardinality/one and not :db.fulltext.
-        let mut non_fts_one: Vec<db::ReducedEntity> = vec![];
+            // Assertions that are :db.cardinality/one and not :db.fulltext.
+            let mut non_fts_one: Vec<db::ReducedEntity> = vec![];
 
-        // Assertions that are :db.cardinality/many and not :db.fulltext.
-        let mut non_fts_many: Vec<db::ReducedEntity> = vec![];
+            // Assertions that are :db.cardinality/many and not :db.fulltext.
+            let mut non_fts_many: Vec<db::ReducedEntity> = vec![];
 
-        // Assertions that are :db.cardinality/one and :db.fulltext.
-        let mut fts_one: Vec<db::ReducedEntity> = vec![];
+            // Assertions that are :db.cardinality/one and :db.fulltext.
+            let mut fts_one: Vec<db::ReducedEntity> = vec![];
 
-        // Assertions that are :db.cardinality/many and :db.fulltext.
-        let mut fts_many: Vec<db::ReducedEntity> = vec![];
+            // Assertions that are :db.cardinality/many and :db.fulltext.
+            let mut fts_many: Vec<db::ReducedEntity> = vec![];
 
-        // We need to ensure that callers can't blindly transact entities that haven't been
-        // allocated by this store.
+            // We need to ensure that callers can't blindly transact entities that haven't been
+            // allocated by this store.
 
-        let errors = tx_checking::type_disagreements(&aev_trie);
-        if !errors.is_empty() {
-            bail!(DbErrorKind::SchemaConstraintViolation(errors::SchemaConstraintViolation::TypeDisagreements { conflicting_datoms: errors }));
-        }
-
-        let errors = tx_checking::cardinality_conflicts(&aev_trie);
-        if !errors.is_empty() {
-            bail!(DbErrorKind::SchemaConstraintViolation(errors::SchemaConstraintViolation::CardinalityConflicts { conflicts: errors }));
-        }
-
-        // Pipeline stage 4: final terms (after rewriting) -> DB insertions.
-        // Collect into non_fts_*.
-
-        tx_instant = get_or_insert_tx_instant(&mut aev_trie, &self.schema, self.tx_id)?;
-
-        for ((a, attribute), evs) in aev_trie {
-            if entids::might_update_metadata(a) {
-                tx_might_update_metadata = true;
+            let errors = tx_checking::type_disagreements(&aev_trie);
+            if !errors.is_empty() {
+                bail!(DbErrorKind::SchemaConstraintViolation(
+                    errors::SchemaConstraintViolation::TypeDisagreements {
+                        conflicting_datoms: errors
+                    }
+                ));
             }
 
-            let mut queue = match (attribute.fulltext, attribute.multival) {
-                (false, true) => &mut non_fts_many,
-                (false, false) => &mut non_fts_one,
-                (true, false) => &mut fts_one,
-                (true, true) => &mut fts_many,
-            };
+            let errors = tx_checking::cardinality_conflicts(&aev_trie);
+            if !errors.is_empty() {
+                bail!(DbErrorKind::SchemaConstraintViolation(
+                    errors::SchemaConstraintViolation::CardinalityConflicts { conflicts: errors }
+                ));
+            }
 
-            for (e, ars) in evs {
-                for (added, v) in ars.add.into_iter().map(|v| (true, v)).chain(ars.retract.into_iter().map(|v| (false, v))) {
-                    let op = match added {
-                        true => OpType::Add,
-                        false => OpType::Retract,
-                    };
-                    self.watcher.datom(op, e, a, &v);
-                    queue.push((e, a, attribute, v, added));
+            // Pipeline stage 4: final terms (after rewriting) -> DB insertions.
+            // Collect into non_fts_*.
+
+            tx_instant = get_or_insert_tx_instant(&mut aev_trie, &self.schema, self.tx_id)?;
+
+            for ((a, attribute), evs) in aev_trie {
+                if entids::might_update_metadata(a) {
+                    tx_might_update_metadata = true;
+                }
+
+                let queue = match (attribute.fulltext, attribute.multival) {
+                    (false, true) => &mut non_fts_many,
+                    (false, false) => &mut non_fts_one,
+                    (true, false) => &mut fts_one,
+                    (true, true) => &mut fts_many,
+                };
+
+                for (e, ars) in evs {
+                    for (added, v) in ars
+                        .add
+                        .into_iter()
+                        .map(|v| (true, v))
+                        .chain(ars.retract.into_iter().map(|v| (false, v)))
+                    {
+                        let op = match added {
+                            true => OpType::Add,
+                            false => OpType::Retract,
+                        };
+                        self.watcher.datom(op, e, a, &v);
+                        queue.push((e, a, attribute, v, added));
+                    }
                 }
             }
-        }
 
-        if !non_fts_one.is_empty() {
-            self.store.insert_non_fts_searches(&non_fts_one[..], db::SearchType::Inexact)?;
-        }
-
-        if !non_fts_many.is_empty() {
-            self.store.insert_non_fts_searches(&non_fts_many[..], db::SearchType::Exact)?;
-        }
-
-        if !fts_one.is_empty() {
-            self.store.insert_fts_searches(&fts_one[..], db::SearchType::Inexact)?;
-        }
-
-        if !fts_many.is_empty() {
-            self.store.insert_fts_searches(&fts_many[..], db::SearchType::Exact)?;
-        }
-
-        match action {
-            TransactorAction::Materialize => {
-                self.store.materialize_mentat_transaction(self.tx_id)?;
-            },
-            TransactorAction::MaterializeAndCommit => {
-                self.store.materialize_mentat_transaction(self.tx_id)?;
-                self.store.commit_mentat_transaction(self.tx_id)?;
+            if !non_fts_one.is_empty() {
+                self.store
+                    .insert_non_fts_searches(&non_fts_one[..], db::SearchType::Inexact)?;
             }
-        }
 
+            if !non_fts_many.is_empty() {
+                self.store
+                    .insert_non_fts_searches(&non_fts_many[..], db::SearchType::Exact)?;
+            }
+
+            if !fts_one.is_empty() {
+                self.store
+                    .insert_fts_searches(&fts_one[..], db::SearchType::Inexact)?;
+            }
+
+            if !fts_many.is_empty() {
+                self.store
+                    .insert_fts_searches(&fts_many[..], db::SearchType::Exact)?;
+            }
+
+            match action {
+                TransactorAction::Materialize => {
+                    self.store.materialize_mentat_transaction(self.tx_id)?;
+                }
+                TransactorAction::MaterializeAndCommit => {
+                    self.store.materialize_mentat_transaction(self.tx_id)?;
+                    self.store.commit_mentat_transaction(self.tx_id)?;
+                }
+            }
         }
 
         self.watcher.done(&self.tx_id, self.schema)?;
@@ -827,10 +938,15 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
             // Extract changes to metadata from the store.
             let metadata_assertions = match action {
                 TransactorAction::Materialize => self.store.resolved_metadata_assertions()?,
-                TransactorAction::MaterializeAndCommit => db::committed_metadata_assertions(self.store, self.tx_id)?
+                TransactorAction::MaterializeAndCommit => {
+                    db::committed_metadata_assertions(self.store, self.tx_id)?
+                }
             };
             let mut new_schema = (*self.schema_for_mutation).clone(); // Clone the underlying Schema for modification.
-            let metadata_report = metadata::update_schema_from_entid_quadruples(&mut new_schema, metadata_assertions)?;
+            let metadata_report = metadata::update_schema_from_entid_quadruples(
+                &mut new_schema,
+                metadata_assertions,
+            )?;
             // We might not have made any changes to the schema, even though it looked like we
             // would.  This should not happen, even during bootstrapping: we mutate an empty
             // `Schema` in this case specifically to run the bootstrapped assertions through the
@@ -839,7 +955,12 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
             if new_schema != *self.schema_for_mutation {
                 let old_schema = (*self.schema_for_mutation).clone(); // Clone the original Schema for comparison.
                 *self.schema_for_mutation.to_mut() = new_schema; // Store the new Schema.
-                db::update_metadata(self.store, &old_schema, &*self.schema_for_mutation, &metadata_report)?;
+                db::update_metadata(
+                    self.store,
+                    &old_schema,
+                    &*self.schema_for_mutation,
+                    &metadata_report,
+                )?;
             }
         }
 
@@ -852,20 +973,36 @@ impl<'conn, 'a, W> Tx<'conn, 'a, W> where W: TransactWatcher {
 }
 
 /// Initialize a new Tx object with a new tx id and a tx instant. Kick off the SQLite conn, too.
-fn start_tx<'conn, 'a, W>(conn: &'conn rusqlite::Connection,
-                       mut partition_map: PartitionMap,
-                       schema_for_mutation: &'a Schema,
-                       schema: &'a Schema,
-                       watcher: W) -> Result<Tx<'conn, 'a, W>>
-    where W: TransactWatcher {
+fn start_tx<'conn, 'a, W>(
+    conn: &'conn rusqlite::Connection,
+    mut partition_map: PartitionMap,
+    schema_for_mutation: &'a Schema,
+    schema: &'a Schema,
+    watcher: W,
+) -> Result<Tx<'conn, 'a, W>>
+where
+    W: TransactWatcher,
+{
     let tx_id = partition_map.allocate_entid(":db.part/tx");
     conn.begin_tx_application()?;
 
-    Ok(Tx::new(conn, partition_map, schema_for_mutation, schema, watcher, tx_id))
+    Ok(Tx::new(
+        conn,
+        partition_map,
+        schema_for_mutation,
+        schema,
+        watcher,
+        tx_id,
+    ))
 }
 
-fn conclude_tx<W>(tx: Tx<W>, report: TxReport) -> Result<(TxReport, PartitionMap, Option<Schema>, W)>
-where W: TransactWatcher {
+fn conclude_tx<W>(
+    tx: Tx<W>,
+    report: TxReport,
+) -> Result<(TxReport, PartitionMap, Option<Schema>, W)>
+where
+    W: TransactWatcher,
+{
     // If the schema has moved on, return it.
     let next_schema = match tx.schema_for_mutation {
         Cow::Borrowed(_) => None,
@@ -880,63 +1017,85 @@ where W: TransactWatcher {
 ///
 /// This approach is explained in https://github.com/mozilla/mentat/wiki/Transacting.
 // TODO: move this to the transactor layer.
-pub fn transact<'conn, 'a, I, V, W>(conn: &'conn rusqlite::Connection,
-                                 partition_map: PartitionMap,
-                                 schema_for_mutation: &'a Schema,
-                                 schema: &'a Schema,
-                                 watcher: W,
-                                 entities: I) -> Result<(TxReport, PartitionMap, Option<Schema>, W)>
-    where I: IntoIterator<Item=Entity<V>>,
-          V: TransactableValue,
-          W: TransactWatcher {
-
+pub fn transact<'conn, 'a, I, V, W>(
+    conn: &'conn rusqlite::Connection,
+    partition_map: PartitionMap,
+    schema_for_mutation: &'a Schema,
+    schema: &'a Schema,
+    watcher: W,
+    entities: I,
+) -> Result<(TxReport, PartitionMap, Option<Schema>, W)>
+where
+    I: IntoIterator<Item = Entity<V>>,
+    V: TransactableValue,
+    W: TransactWatcher,
+{
     let mut tx = start_tx(conn, partition_map, schema_for_mutation, schema, watcher)?;
     let report = tx.transact_entities(entities)?;
     conclude_tx(tx, report)
 }
 
 /// Just like `transact`, but accepts lower-level inputs to allow bypassing the parser interface.
-pub fn transact_terms<'conn, 'a, I, W>(conn: &'conn rusqlite::Connection,
-                                       partition_map: PartitionMap,
-                                       schema_for_mutation: &'a Schema,
-                                       schema: &'a Schema,
-                                       watcher: W,
-                                       terms: I,
-                                       tempid_set: InternSet<TempId>) -> Result<(TxReport, PartitionMap, Option<Schema>, W)>
-    where I: IntoIterator<Item=TermWithTempIds>,
-          W: TransactWatcher {
-
+pub fn transact_terms<'conn, 'a, I, W>(
+    conn: &'conn rusqlite::Connection,
+    partition_map: PartitionMap,
+    schema_for_mutation: &'a Schema,
+    schema: &'a Schema,
+    watcher: W,
+    terms: I,
+    tempid_set: InternSet<TempId>,
+) -> Result<(TxReport, PartitionMap, Option<Schema>, W)>
+where
+    I: IntoIterator<Item = TermWithTempIds>,
+    W: TransactWatcher,
+{
     transact_terms_with_action(
-        conn, partition_map, schema_for_mutation, schema, watcher, terms, tempid_set,
-        TransactorAction::MaterializeAndCommit
+        conn,
+        partition_map,
+        schema_for_mutation,
+        schema,
+        watcher,
+        terms,
+        tempid_set,
+        TransactorAction::MaterializeAndCommit,
     )
 }
 
-pub(crate) fn transact_terms_with_action<'conn, 'a, I, W>(conn: &'conn rusqlite::Connection,
-                                       partition_map: PartitionMap,
-                                       schema_for_mutation: &'a Schema,
-                                       schema: &'a Schema,
-                                       watcher: W,
-                                       terms: I,
-                                       tempid_set: InternSet<TempId>,
-                                       action: TransactorAction) -> Result<(TxReport, PartitionMap, Option<Schema>, W)>
-    where I: IntoIterator<Item=TermWithTempIds>,
-          W: TransactWatcher {
-
+pub(crate) fn transact_terms_with_action<'conn, 'a, I, W>(
+    conn: &'conn rusqlite::Connection,
+    partition_map: PartitionMap,
+    schema_for_mutation: &'a Schema,
+    schema: &'a Schema,
+    watcher: W,
+    terms: I,
+    tempid_set: InternSet<TempId>,
+    action: TransactorAction,
+) -> Result<(TxReport, PartitionMap, Option<Schema>, W)>
+where
+    I: IntoIterator<Item = TermWithTempIds>,
+    W: TransactWatcher,
+{
     let mut tx = start_tx(conn, partition_map, schema_for_mutation, schema, watcher)?;
     let report = tx.transact_simple_terms_with_action(terms, tempid_set, action)?;
     conclude_tx(tx, report)
 }
 
-fn extend_aev_trie<'schema, I>(schema: &'schema Schema, terms: I, trie: &mut AEVTrie<'schema>) -> Result<()>
-where I: IntoIterator<Item=TermWithoutTempIds>
+fn extend_aev_trie<'schema, I>(
+    schema: &'schema Schema,
+    terms: I,
+    trie: &mut AEVTrie<'schema>,
+) -> Result<()>
+where
+    I: IntoIterator<Item = TermWithoutTempIds>,
 {
     for Term::AddOrRetract(op, KnownEntid(e), a, v) in terms.into_iter() {
         let attribute: &Attribute = schema.require_attribute_for_entid(a)?;
 
         let a_and_r = trie
-            .entry((a, attribute)).or_insert(BTreeMap::default())
-            .entry(e).or_insert(AddAndRetract::default());
+            .entry((a, attribute))
+            .or_insert(BTreeMap::default())
+            .entry(e)
+            .or_insert(AddAndRetract::default());
 
         match op {
             OpType::Add => a_and_r.add.insert(v),
@@ -947,21 +1106,36 @@ where I: IntoIterator<Item=TermWithoutTempIds>
     Ok(())
 }
 
-pub(crate) fn into_aev_trie<'schema>(schema: &'schema Schema, final_populations: FinalPopulations, inert_terms: Vec<TermWithTempIds>) -> Result<AEVTrie<'schema>> {
+pub(crate) fn into_aev_trie<'schema>(
+    schema: &'schema Schema,
+    final_populations: FinalPopulations,
+    inert_terms: Vec<TermWithTempIds>,
+) -> Result<AEVTrie<'schema>> {
     let mut trie = AEVTrie::default();
     extend_aev_trie(schema, final_populations.resolved, &mut trie)?;
     extend_aev_trie(schema, final_populations.allocated, &mut trie)?;
     // Inert terms need to be unwrapped.  It is a coding error if a term can't be unwrapped.
-    extend_aev_trie(schema, inert_terms.into_iter().map(|term| term.unwrap()), &mut trie)?;
+    extend_aev_trie(
+        schema,
+        inert_terms.into_iter().map(|term| term.unwrap()),
+        &mut trie,
+    )?;
 
     Ok(trie)
 }
 
 /// Transact [:db/add :db/txInstant tx_instant (transaction-tx)] if the trie doesn't contain it
 /// already.  Return the instant from the input or the instant inserted.
-fn get_or_insert_tx_instant<'schema>(aev_trie: &mut AEVTrie<'schema>, schema: &'schema Schema, tx_id: Entid) -> Result<DateTime<Utc>> {
+fn get_or_insert_tx_instant<'schema>(
+    aev_trie: &mut AEVTrie<'schema>,
+    schema: &'schema Schema,
+    tx_id: Entid,
+) -> Result<DateTime<Utc>> {
     let ars = aev_trie
-        .entry((entids::DB_TX_INSTANT, schema.require_attribute_for_entid(entids::DB_TX_INSTANT)?))
+        .entry((
+            entids::DB_TX_INSTANT,
+            schema.require_attribute_for_entid(entids::DB_TX_INSTANT)?,
+        ))
         .or_insert(BTreeMap::default())
         .entry(tx_id)
         .or_insert(AddAndRetract::default());
@@ -980,6 +1154,6 @@ fn get_or_insert_tx_instant<'schema>(aev_trie: &mut AEVTrie<'schema>, schema: &'
             let instant = now();
             ars.add.insert(instant.into());
             Ok(instant)
-        },
+        }
     }
 }

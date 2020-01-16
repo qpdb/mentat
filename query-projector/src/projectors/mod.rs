@@ -8,39 +8,29 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use super::{
-    Element,
-    Schema,
-    QueryOutput,
-    Rows,
-    rusqlite,
-};
+use super::{rusqlite, Element, QueryOutput, Rows, Schema};
 
-use query_projector_traits::errors::{
-    Result,
-};
+use query_projector_traits::errors::Result;
 
 pub trait Projector {
-    fn project<'stmt, 's>(&self, schema: &Schema, sqlite: &'s rusqlite::Connection, rows: Rows<'stmt>) -> Result<QueryOutput>;
-    fn columns<'s>(&'s self) -> Box<Iterator<Item=&Element> + 's>;
+    fn project<'stmt, 's>(
+        &self,
+        schema: &Schema,
+        sqlite: &'s rusqlite::Connection,
+        rows: Rows<'stmt>,
+    ) -> Result<QueryOutput>;
+    fn columns<'s>(&'s self) -> Box<dyn Iterator<Item = &Element> + 's>;
 }
 
 mod constant;
-mod simple;
 mod pull_two_stage;
+mod simple;
 
 pub use self::constant::ConstantProjector;
 
-pub(crate) use self::simple::{
-    CollProjector,
-    RelProjector,
-    ScalarProjector,
-    TupleProjector,
-};
+pub(crate) use self::simple::{CollProjector, RelProjector, ScalarProjector, TupleProjector};
 
 pub(crate) use self::pull_two_stage::{
-    CollTwoStagePullProjector,
-    RelTwoStagePullProjector,
-    ScalarTwoStagePullProjector,
+    CollTwoStagePullProjector, RelTwoStagePullProjector, ScalarTwoStagePullProjector,
     TupleTwoStagePullProjector,
 };
