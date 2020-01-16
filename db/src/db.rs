@@ -326,7 +326,7 @@ fn create_current_partition_view(conn: &rusqlite::Connection) -> Result<()> {
 pub fn create_current_version(conn: &mut rusqlite::Connection) -> Result<DB> {
     let (tx, mut db) = create_empty_current_version(conn)?;
 
-    // TODO: think more carefully about allocating new parts and bitmasking part ranges.
+    // TODO: think more carefully about allocating new parts and bit-masking part ranges.
     // TODO: install these using bootstrap assertions.  It's tricky because the part ranges are implicit.
     // TODO: one insert, chunk into 999/3 sections, for safety.
     // This is necessary: `transact` will only UPDATE parts, not INSERT them if they're missing.
@@ -338,7 +338,7 @@ pub fn create_current_version(conn: &mut rusqlite::Connection) -> Result<DB> {
                 part,
                 &partition.start.to_string(),
                 &partition.end.to_string(),
-                &partition.allow_excision.to_string(),
+                &(partition.allow_excision as i8).to_string(),
             ],
         )?;
     }
