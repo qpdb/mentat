@@ -19,19 +19,19 @@ doc = false
 test = false
 
 [dependencies]
-combine = "4.0.0-beta.2"
-dirs = "2.0.2"
-env_logger = "0.7.1"
-failure = "0.1.6"
-failure_derive = "0.1.6"
+combine = "4.0"
+dirs = "2.0"
+env_logger = "0.7"
+failure = "0.1"
+failure_derive = "0.1"
 getopts = "0.2"
-lazy_static = "1.4.0"
-linefeed = "0.6.0"
+lazy_static = "1.4"
+linefeed = "0.6"
 log = "0.4"
 tabwriter = "1"
-tempfile = "3.1.0"
-termion = "1"
-time = "0.2.2"
+tempfile = "3.1"
+termion = "1.5"
+time = "0.2"
 
 [dependencies.rusqlite]
 version = "0.21"
