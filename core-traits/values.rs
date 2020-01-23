@@ -19,11 +19,11 @@ use edn::types::Value;
 /// Declare a lazy static `ident` of type `Value::Keyword` with the given `namespace` and
 /// `name`.
 ///
-/// It may look surprising that we declare a new `lazy_static!` block rather than including
+/// It may look surprising to declare a new `lazy_static!` block rather than including
 /// invocations inside an existing `lazy_static!` block.  The latter cannot be done, since macros
-/// are expanded outside-in.  Looking at the `lazy_static!` source suggests that there is no harm in
-/// repeating that macro, since internally a multi-`static` block is expanded into many
-/// single-`static` blocks.
+/// will be expanded outside-in.  Looking at the `lazy_static!` source suggests that there is no
+/// harm in repeating that macro, since internally a multi-`static` block will be expanded into
+/// many single-`static` blocks.
 ///
 /// TODO: take just ":db.part/db" and define DB_PART_DB using "db.part" and "db".
 macro_rules! lazy_static_namespaced_keyword_value (

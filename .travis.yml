@@ -1,27 +1,38 @@
 language: rust
+cache: cargo # cache cargo-audit once installed
+before_script:
+  - cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy
+  - cargo install --force cargo-audit
+  - cargo generate-lockfile
+script:
+  - cargo audit
 # We use OSX so that we can get a reasonably up to date version of SQLCipher.
 # (The version in Travis's default Ubuntu Trusty is much too old).
 os: osx
 before_install:
-  - brew install sqlcipher --with-fts
+  - brew install sqlcipher
 rust:
-  - 1.25.0
+  - 1.41.0
   - stable
   - beta
   - nightly
 matrix:
   allow_failures:
+    - rust: stable
+    - rust: beta
     - rust: nightly
   fast_finish: true
 jobs:
   include:
     - stage: "Test iOS"
-      rust: 1.25.0
+      rust: 1.41.0
       script: ./scripts/test-ios.sh
     - stage: "Docs"
-      rust: 1.25.0
+      rust: 1.41.0
       script: ./scripts/cargo-doc.sh
 script:
+  - cargo build --verbose --all
+  - cargo clippy --all-targets --all-features -- -D warnings # Check tests and non-default crate features.
   - cargo test --verbose --all
   - cargo test --features edn/serde_support --verbose --all
   # We can't pick individual features out with `cargo test --all` (At the time of this writing, this

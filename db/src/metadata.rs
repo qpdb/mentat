@@ -111,7 +111,7 @@ fn update_attribute_map_from_schema_retractions(
     let mut eas = BTreeMap::new();
     for (e, a, v) in retractions.into_iter() {
         if entids::is_a_schema_attribute(a) {
-            eas.entry(e).or_insert(vec![]).push(a);
+            eas.entry(e).or_insert_with(|| vec![]).push(a);
             suspect_retractions.push((e, a, v));
         } else {
             filtered_retractions.push((e, a, v));
@@ -145,7 +145,7 @@ fn update_attribute_map_from_schema_retractions(
                 // Remove attributes corresponding to retracted attribute.
                 attribute_map.remove(&e);
             } else {
-                bail!(DbErrorKind::BadSchemaAssertion(format!("Retracting defining attributes of a schema without retracting its :db/ident is not permitted.")));
+                bail!(DbErrorKind::BadSchemaAssertion("Retracting defining attributes of a schema without retracting its :db/ident is not permitted.".to_string()));
             }
         } else {
             filtered_retractions.push((e, a, v));
@@ -172,7 +172,7 @@ pub fn update_attribute_map_from_entid_triples(
     ) -> AttributeBuilder {
         existing
             .get(&attribute_id)
-            .map(AttributeBuilder::to_modify_attribute)
+            .map(AttributeBuilder::modify_attribute)
             .unwrap_or_else(AttributeBuilder::default)
     }
 
@@ -337,8 +337,8 @@ pub fn update_attribute_map_from_entid_triples(
     }
 
     Ok(MetadataReport {
-        attributes_installed: attributes_installed,
-        attributes_altered: attributes_altered,
+        attributes_installed,
+        attributes_altered,
         idents_altered: BTreeMap::default(),
     })
 }
@@ -439,12 +439,12 @@ where
     // component_attributes up-to-date: most of the time we'll rebuild it
     // even though it's not necessary (e.g. a schema attribute that's _not_
     // a component was removed, or a non-component related attribute changed).
-    if report.attributes_did_change() || ident_set.retracted.len() > 0 {
+    if report.attributes_did_change() || !ident_set.retracted.is_empty() {
         schema.update_component_attributes();
     }
 
     Ok(MetadataReport {
-        idents_altered: idents_altered,
+        idents_altered,
         ..report
     })
 }

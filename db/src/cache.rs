@@ -54,8 +54,6 @@ use std::collections::btree_map::Entry::{Occupied, Vacant};
 
 use std::iter::once;
 
-use std::mem;
-
 use std::sync::Arc;
 
 use std::iter::Peekable;
@@ -190,7 +188,7 @@ impl AevFactory {
                     return existing;
                 }
                 self.strings.insert(rc.clone());
-                return TypedValue::String(rc);
+                TypedValue::String(rc)
             }
             t => t,
         }
@@ -377,7 +375,7 @@ impl RemoveFromCache for MultiValAttributeCache {
 
 impl CardinalityManyCache for MultiValAttributeCache {
     fn acc(&mut self, e: Entid, v: TypedValue) {
-        self.e_vs.entry(e).or_insert(vec![]).push(v)
+        self.e_vs.entry(e).or_insert_with(|| vec![]).push(v)
     }
 
     fn set(&mut self, e: Entid, vs: Vec<TypedValue>) {
@@ -439,7 +437,7 @@ impl UniqueReverseAttributeCache {
     }
 
     fn get_e(&self, v: &TypedValue) -> Option<Entid> {
-        self.v_e.get(v).and_then(|o| o.clone())
+        self.v_e.get(v).and_then(|o| *o)
     }
 
     fn lookup(&self, v: &TypedValue) -> Option<Option<Entid>> {
@@ -494,7 +492,7 @@ impl RemoveFromCache for NonUniqueReverseAttributeCache {
 
 impl NonUniqueReverseAttributeCache {
     fn acc(&mut self, e: Entid, v: TypedValue) {
-        self.v_es.entry(v).or_insert(BTreeSet::new()).insert(e);
+        self.v_es.entry(v).or_insert_with(BTreeSet::new).insert(e);
     }
 
     fn get_es(&self, v: &TypedValue) -> Option<&BTreeSet<Entid>> {
@@ -643,9 +641,9 @@ enum AccumulationBehavior {
 }
 
 impl AccumulationBehavior {
-    fn is_replacing(&self) -> bool {
+    fn is_replacing(self) -> bool {
         match self {
-            &AccumulationBehavior::Add { replacing } => replacing,
+            AccumulationBehavior::Add { replacing } => replacing,
             _ => false,
         }
     }
@@ -662,7 +660,7 @@ pub struct AttributeCaches {
     non_unique_reverse: BTreeMap<Entid, NonUniqueReverseAttributeCache>,
 }
 
-// TODO: if an entity or attribute is ever renumbered, the cache will need to be rebuilt.
+// TODO: if an entity or attribute is ever re-numbered, the cache will need to be rebuilt.
 impl AttributeCaches {
     //
     // These function names are brief and local.
@@ -1006,7 +1004,7 @@ impl AttributeCaches {
     }
 }
 
-// We need this block for fallback.
+// We need this block for fall-back.
 impl AttributeCaches {
     fn get_entid_for_value_if_present(
         &self,
@@ -1076,7 +1074,7 @@ impl AttributeCaches {
     ) -> Result<()> {
         let mut aev_factory = AevFactory::new();
         let rows = statement.query_map(&args, |row| Ok(aev_factory.row_to_aev(row)))?;
-        let aevs = AevRows { rows: rows };
+        let aevs = AevRows { rows };
         self.accumulate_into_cache(
             None,
             schema,
@@ -1132,7 +1130,7 @@ impl AttributeCaches {
         schema: &'s Schema,
         sqlite: &'c rusqlite::Connection,
         attrs: AttributeSpec,
-        entities: &Vec<Entid>,
+        entities: &[Entid],
     ) -> Result<()> {
         // Mark the attributes as cached as we go. We do this because we're going in through the
         // back door here, and the usual caching API won't have taken care of this for us.
@@ -1229,17 +1227,17 @@ impl AttributeCaches {
         schema: &'s Schema,
         sqlite: &'c rusqlite::Connection,
         mut attrs: AttributeSpec,
-        entities: &Vec<Entid>,
+        entities: &[Entid],
     ) -> Result<()> {
         // TODO: Exclude any entities for which every attribute is known.
         // TODO: initialize from an existing (complete) AttributeCache.
 
         // Exclude any attributes for which every entity's value is already known.
         match &mut attrs {
-            &mut AttributeSpec::All => {
+            AttributeSpec::All => {
                 // If we're caching all attributes, there's nothing we can exclude.
             }
-            &mut AttributeSpec::Specified {
+            AttributeSpec::Specified {
                 ref mut non_fts,
                 ref mut fts,
             } => {
@@ -1285,7 +1283,7 @@ impl AttributeCaches {
         schema: &'s Schema,
         sqlite: &'c rusqlite::Connection,
         attrs: AttributeSpec,
-        entities: &Vec<Entid>,
+        entities: &[Entid],
     ) -> Result<AttributeCaches> {
         let mut cache = AttributeCaches::default();
         cache.populate_cache_for_entities_and_attributes(schema, sqlite, attrs, entities)?;
@@ -1450,7 +1448,7 @@ pub struct SQLiteAttributeCache {
 }
 
 impl SQLiteAttributeCache {
-    fn make_mut<'s>(&'s mut self) -> &'s mut AttributeCaches {
+    fn make_mut(&mut self) -> &mut AttributeCaches {
         Arc::make_mut(&mut self.inner)
     }
 
@@ -1628,7 +1626,7 @@ impl InProgressSQLiteAttributeCache {
         let overlay = inner.make_override();
         InProgressSQLiteAttributeCache {
             inner: inner.inner,
-            overlay: overlay,
+            overlay,
             unregistered_forward: Default::default(),
             unregistered_reverse: Default::default(),
         }
@@ -1818,9 +1816,7 @@ impl CachedAttributes for InProgressSQLiteAttributeCache {
             .inner
             .forward_cached_attributes
             .iter()
-            .filter(|a| !self.unregistered_forward.contains(a))
-            .next()
-            .is_some()
+            .any(|a| !self.unregistered_forward.contains(a))
         {
             return true;
         }
@@ -1828,9 +1824,7 @@ impl CachedAttributes for InProgressSQLiteAttributeCache {
         self.inner
             .reverse_cached_attributes
             .iter()
-            .filter(|a| !self.unregistered_reverse.contains(a))
-            .next()
-            .is_some()
+            .any(|a| !self.unregistered_reverse.contains(a))
     }
 
     fn get_entids_for_value(
@@ -1944,7 +1938,7 @@ impl<'a> InProgressCacheTransactWatcher<'a> {
         let mut w = InProgressCacheTransactWatcher {
             collected_assertions: Default::default(),
             collected_retractions: Default::default(),
-            cache: cache,
+            cache,
             active: true,
         };
 
@@ -1977,10 +1971,10 @@ impl<'a> TransactWatcher for InProgressCacheTransactWatcher<'a> {
             }
             Entry::Occupied(mut entry) => {
                 match entry.get_mut() {
-                    &mut Either::Left(_) => {
+                    Either::Left(_) => {
                         // Nothing to do.
                     }
-                    &mut Either::Right(ref mut vec) => {
+                    Either::Right(ref mut vec) => {
                         vec.push((e, v.clone()));
                     }
                 }
@@ -1989,14 +1983,12 @@ impl<'a> TransactWatcher for InProgressCacheTransactWatcher<'a> {
     }
 
     fn done(&mut self, _t: &Entid, schema: &Schema) -> Result<()> {
-        // Oh, I wish we had impl trait. Without it we have a six-line type signature if we
+        // Oh, how I wish we had `impl trait`. Without it we have a six-line type signature if we
         // try to break this out as a helper function.
-        let collected_retractions =
-            mem::replace(&mut self.collected_retractions, Default::default());
-        let collected_assertions = mem::replace(&mut self.collected_assertions, Default::default());
+        let collected_retractions = std::mem::take(&mut self.collected_retractions);
+        let collected_assertions = std::mem::take(&mut self.collected_assertions);
         let mut intermediate_expansion = once(collected_retractions)
             .chain(once(collected_assertions))
-            .into_iter()
             .map(move |tree| {
                 tree.into_iter()
                     .filter_map(move |(a, evs)| {
@@ -2018,7 +2010,7 @@ impl<'a> TransactWatcher for InProgressCacheTransactWatcher<'a> {
 }
 
 impl InProgressSQLiteAttributeCache {
-    pub fn transact_watcher<'a>(&'a mut self) -> InProgressCacheTransactWatcher<'a> {
+    pub fn transact_watcher(&mut self) -> InProgressCacheTransactWatcher {
         InProgressCacheTransactWatcher::new(self)
     }
 }

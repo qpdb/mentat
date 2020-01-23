@@ -90,7 +90,7 @@ impl ConjoiningClauses {
 
         let mut args = where_fn.args.into_iter();
 
-        // TODO: process source variables.
+        // TODO(gburd): process source variables.
         match args.next().unwrap() {
             FnArg::SrcVar(SrcVar::DefaultSrc) => {}
             _ => bail!(AlgebrizerError::InvalidArgument(
@@ -104,7 +104,7 @@ impl ConjoiningClauses {
 
         // TODO: accept placeholder and set of attributes.  Alternately, consider putting the search
         // term before the attribute arguments and collect the (variadic) attributes into a set.
-        // let a: Entid  = self.resolve_attribute_argument(&where_fn.operator, 1, args.next().unwrap())?;
+        // let a: Entid = self.resolve_attribute_argument(&where_fn.operator, 1, args.next().unwrap())?;
         //
         // TODO: improve the expression of this matching, possibly by using attribute_for_* uniformly.
         let a = match args.next().unwrap() {
@@ -117,7 +117,7 @@ impl ConjoiningClauses {
                 match self.bound_value(&v) {
                     Some(TypedValue::Ref(entid)) => Some(entid),
                     Some(tv) => bail!(AlgebrizerError::InputTypeDisagreement(
-                        v.name().clone(),
+                        v.name(),
                         ValueType::Ref,
                         tv.value_type()
                     )),
@@ -130,20 +130,13 @@ impl ConjoiningClauses {
         // An unknown ident, or an entity that isn't present in the store, or isn't a fulltext
         // attribute, is likely enough to be a coding error that we choose to bail instead of
         // marking the pattern as known-empty.
-        let a = a.ok_or(AlgebrizerError::InvalidArgument(
-            where_fn.operator.clone(),
-            "attribute",
-            1,
-        ))?;
-        let attribute =
-            schema
-                .attribute_for_entid(a)
-                .cloned()
-                .ok_or(AlgebrizerError::InvalidArgument(
-                    where_fn.operator.clone(),
-                    "attribute",
-                    1,
-                ))?;
+        let op = where_fn.operator.clone(); //TODO(gburd): remove me...
+        let a = a.ok_or_else(move || AlgebrizerError::InvalidArgument(op, "attribute", 1))?;
+        let op = where_fn.operator.clone(); //TODO(gburd): remove me...
+        let attribute = schema
+            .attribute_for_entid(a)
+            .cloned()
+            .ok_or_else(move || AlgebrizerError::InvalidArgument(op, "attribute", 1))?;
 
         if !attribute.fulltext {
             // We can never get results from a non-fulltext attribute!
@@ -271,7 +264,7 @@ impl ConjoiningClauses {
 
             self.bind_column_to_var(
                 schema,
-                fulltext_values_alias.clone(),
+                fulltext_values_alias,
                 Column::Fulltext(FulltextColumn::Text),
                 var.clone(),
             );
@@ -284,12 +277,7 @@ impl ConjoiningClauses {
                 return Ok(());
             }
 
-            self.bind_column_to_var(
-                schema,
-                datoms_table_alias.clone(),
-                DatomsColumn::Tx,
-                var.clone(),
-            );
+            self.bind_column_to_var(schema, datoms_table_alias, DatomsColumn::Tx, var.clone());
         }
 
         if let VariableOrPlaceholder::Variable(ref var) = b_score {

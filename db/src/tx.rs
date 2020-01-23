@@ -163,12 +163,12 @@ where
         tx_id: Entid,
     ) -> Tx<'conn, 'a, W> {
         Tx {
-            store: store,
-            partition_map: partition_map,
+            store,
+            partition_map,
             schema_for_mutation: Cow::Borrowed(schema_for_mutation),
-            schema: schema,
-            watcher: watcher,
-            tx_id: tx_id,
+            schema,
+            watcher,
+            tx_id,
         }
     }
 
@@ -185,8 +185,8 @@ where
 
         // Map [a v]->entid.
         let mut av_pairs: Vec<&AVPair> = vec![];
-        for i in 0..temp_id_avs.len() {
-            av_pairs.push(&temp_id_avs[i].1);
+        for temp_id_av in temp_id_avs {
+            av_pairs.push(&temp_id_av.1);
         }
 
         // Lookup in the store.
@@ -208,14 +208,14 @@ where
                 av_map.get(&av_pair)
             );
             if let Some(entid) = av_map.get(&av_pair).cloned().map(KnownEntid) {
-                tempids.insert(tempid.clone(), entid).map(|previous| {
+                if let Some(previous) = tempids.insert(tempid.clone(), entid) {
                     if entid != previous {
                         conflicting_upserts
                             .entry((**tempid).clone())
                             .or_insert_with(|| once(previous).collect::<BTreeSet<_>>())
                             .insert(entid);
                     }
-                });
+                }
             }
         }
 
@@ -340,7 +340,7 @@ where
                     entmod::EntityPlace::TxFunction(ref tx_function) => {
                         match tx_function.op.0.as_str() {
                             "transaction-tx" => Ok(Either::Left(self.tx_id)),
-                            unknown @ _ => bail!(DbErrorKind::NotYetImplemented(format!(
+                            unknown => bail!(DbErrorKind::NotYetImplemented(format!(
                                 "Unknown transaction function {}",
                                 unknown
                             ))),
@@ -372,7 +372,7 @@ where
             ) -> Result<KnownEntidOr<LookupRefOrTempId>> {
                 match backward_a.unreversed() {
                     None => {
-                        bail!(DbErrorKind::NotYetImplemented(format!("Cannot explode map notation value in :attr/_reversed notation for forward attribute")));
+                        bail!(DbErrorKind::NotYetImplemented("Cannot explode map notation value in :attr/_reversed notation for forward attribute".to_string()));
                     }
                     Some(forward_a) => {
                         let forward_a = self.entity_a_into_term_a(forward_a)?;
@@ -412,7 +412,7 @@ where
                             entmod::ValuePlace::TxFunction(ref tx_function) => {
                                 match tx_function.op.0.as_str() {
                                     "transaction-tx" => Ok(Either::Left(KnownEntid(self.tx_id.0))),
-                                    unknown @ _ => bail!(DbErrorKind::NotYetImplemented(format!("Unknown transaction function {}", unknown))),
+                                    unknown=> bail!(DbErrorKind::NotYetImplemented(format!("Unknown transaction function {}", unknown))),
                                 }
                             },
 
@@ -456,7 +456,7 @@ where
                             op: OpType::Add,
                             e: db_id.clone(),
                             a: AttributePlace::Entid(a),
-                            v: v,
+                            v,
                         });
                     }
                 }
@@ -519,7 +519,7 @@ where
                             entmod::ValuePlace::TxFunction(ref tx_function) => {
                                 let typed_value = match tx_function.op.0.as_str() {
                                     "transaction-tx" => TypedValue::Ref(self.tx_id),
-                                    unknown @ _ => bail!(DbErrorKind::NotYetImplemented(format!(
+                                    unknown => bail!(DbErrorKind::NotYetImplemented(format!(
                                         "Unknown transaction function {}",
                                         unknown
                                     ))),
@@ -546,7 +546,7 @@ where
 
                                 for vv in vs {
                                     deque.push_front(Entity::AddOrRetract {
-                                        op: op.clone(),
+                                        op,
                                         e: e.clone(),
                                         a: AttributePlace::Entid(entmod::EntidOrIdent::Entid(a)),
                                         v: vv,
@@ -667,8 +667,8 @@ where
                 |term: TermWithTempIdsAndLookupRefs| -> Result<TermWithTempIds> {
                     match term {
                         Term::AddOrRetract(op, e, a, v) => {
-                            let e = replace_lookup_ref(&lookup_ref_map, e, |x| KnownEntid(x))?;
-                            let v = replace_lookup_ref(&lookup_ref_map, v, |x| TypedValue::Ref(x))?;
+                            let e = replace_lookup_ref(&lookup_ref_map, e, KnownEntid)?;
+                            let v = replace_lookup_ref(&lookup_ref_map, v, TypedValue::Ref)?;
                             Ok(Term::AddOrRetract(op, e, a, v))
                         }
                     }
@@ -757,14 +757,14 @@ where
             for (tempid, entid) in temp_id_map {
                 // Since `UpsertEV` instances always transition to `UpsertE` instances, it might be
                 // that a tempid resolves in two generations, and those resolutions might conflict.
-                tempids.insert((*tempid).clone(), entid).map(|previous| {
+                if let Some(previous) = tempids.insert((*tempid).clone(), entid) {
                     if entid != previous {
                         conflicting_upserts
                             .entry((*tempid).clone())
                             .or_insert_with(|| once(previous).collect::<BTreeSet<_>>())
                             .insert(entid);
                     }
-                });
+                }
             }
 
             if !conflicting_upserts.is_empty() {
@@ -891,10 +891,7 @@ where
                         .map(|v| (true, v))
                         .chain(ars.retract.into_iter().map(|v| (false, v)))
                     {
-                        let op = match added {
-                            true => OpType::Add,
-                            false => OpType::Retract,
-                        };
+                        let op = if added { OpType::Add } else { OpType::Retract };
                         self.watcher.datom(op, e, a, &v);
                         queue.push((e, a, attribute, v, added));
                     }
@@ -967,7 +964,7 @@ where
         Ok(TxReport {
             tx_id: self.tx_id,
             tx_instant,
-            tempids: tempids,
+            tempids,
         })
     }
 }
@@ -1093,9 +1090,9 @@ where
 
         let a_and_r = trie
             .entry((a, attribute))
-            .or_insert(BTreeMap::default())
+            .or_insert_with(BTreeMap::default)
             .entry(e)
-            .or_insert(AddAndRetract::default());
+            .or_insert_with(AddAndRetract::default);
 
         match op {
             OpType::Add => a_and_r.add.insert(v),
@@ -1136,9 +1133,9 @@ fn get_or_insert_tx_instant<'schema>(
             entids::DB_TX_INSTANT,
             schema.require_attribute_for_entid(entids::DB_TX_INSTANT)?,
         ))
-        .or_insert(BTreeMap::default())
+        .or_insert_with(BTreeMap::default)
         .entry(tx_id)
-        .or_insert(AddAndRetract::default());
+        .or_insert_with(AddAndRetract::default);
     if !ars.retract.is_empty() {
         // Cannot retract :db/txInstant!
     }

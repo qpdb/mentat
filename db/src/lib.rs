@@ -95,7 +95,7 @@ pub fn to_namespaced_keyword(s: &str) -> Result<symbols::Keyword> {
         _ => None,
     };
 
-    nsk.ok_or(DbErrorKind::NotYetImplemented(format!("InvalidKeyword: {}", s)).into())
+    nsk.ok_or_else(|| DbErrorKind::NotYetImplemented(format!("InvalidKeyword: {}", s)).into())
 }
 
 /// Prepare an SQL `VALUES` block, like (?, ?, ?), (?, ?, ?).

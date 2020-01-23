@@ -22,7 +22,7 @@ where
     T: Sized + Clone,
 {
     fn from_rc(val: Rc<T>) -> Self {
-        val.clone()
+        val
     }
 
     fn from_arc(val: Arc<T>) -> Self {
@@ -45,7 +45,7 @@ where
     }
 
     fn from_arc(val: Arc<T>) -> Self {
-        val.clone()
+        val
     }
 }
 

@@ -642,7 +642,7 @@ impl ConjoiningClauses {
         // For any variable which has an imprecise type anywhere in the UNION, add it to the
         // set that needs type extraction. All UNION arms must project the same columns.
         for var in projection.iter() {
-            if acc.iter().any(|cc| !cc.known_type(var).is_some()) {
+            if acc.iter().any(|cc| cc.known_type(var).is_none()) {
                 type_needed.insert(var.clone());
             }
         }
@@ -672,7 +672,7 @@ impl ConjoiningClauses {
         }
 
         let union = ComputedTable::Union {
-            projection: projection,
+            projection,
             type_extraction: type_needed,
             arms: acc,
         };
@@ -730,7 +730,7 @@ fn union_types(
                 e.insert(new_types.clone());
             }
             Entry::Occupied(mut e) => {
-                let new = e.get().union(&new_types);
+                let new = e.get().union(*new_types);
                 e.insert(new);
             }
         }

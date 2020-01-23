@@ -116,7 +116,7 @@ impl ConjoiningClauses {
 
         let constrained_types;
         if let Some(required) = self.required_types.get(var) {
-            constrained_types = known_types.intersection(required);
+            constrained_types = known_types.intersection(*required);
         } else {
             constrained_types = known_types;
         }

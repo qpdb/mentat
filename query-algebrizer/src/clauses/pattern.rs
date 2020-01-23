@@ -8,6 +8,8 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
+#![allow(clippy::single_match)]
+
 use core_traits::{Entid, TypedValue, ValueType, ValueTypeSet};
 
 use mentat_core::{Cloned, HasSchema};
@@ -27,7 +29,7 @@ use Known;
 
 pub fn into_typed_value(nic: NonIntegerConstant) -> TypedValue {
     match nic {
-        NonIntegerConstant::BigInteger(_) => unimplemented!(), // TODO: #280.
+        NonIntegerConstant::BigInteger(_) => unimplemented!(), // TODO(gburd): #280.
         NonIntegerConstant::Boolean(v) => TypedValue::Boolean(v),
         NonIntegerConstant::Float(v) => TypedValue::Double(v),
         NonIntegerConstant::Text(v) => v.into(),
@@ -93,17 +95,15 @@ impl ConjoiningClauses {
         self.constrain_to_ref(&pattern.entity);
         self.constrain_to_ref(&pattern.attribute);
 
-        let ref col = alias.1;
+        let col = &alias.1;
 
         let schema = known.schema;
         match pattern.entity {
             EvolvedNonValuePlace::Placeholder =>
-            // Placeholders don't contribute any column bindings, nor do
+                // Placeholders don't contribute any column bindings, nor do
             // they constrain the query -- there's no need to produce
             // IS NOT NULL, because we don't store nulls in our schema.
-            {
-                ()
-            }
+                {}
             EvolvedNonValuePlace::Variable(ref v) => {
                 self.bind_column_to_var(schema, col.clone(), DatomsColumn::Entity, v.clone())
             }
@@ -287,7 +287,7 @@ impl ConjoiningClauses {
                     None => {
                         self.mark_known_empty(EmptyBecause::CachedAttributeHasNoEntity {
                             value: val.clone(),
-                            attr: attr,
+                            attr,
                         });
                         true
                     }
@@ -301,7 +301,7 @@ impl ConjoiningClauses {
                     None => {
                         self.mark_known_empty(EmptyBecause::CachedAttributeHasNoEntity {
                             value: val.clone(),
-                            attr: attr,
+                            attr,
                         });
                         true
                     }
@@ -403,8 +403,8 @@ impl ConjoiningClauses {
                                             None => {
                                                 self.mark_known_empty(
                                                     EmptyBecause::CachedAttributeHasNoValues {
-                                                        entity: entity,
-                                                        attr: attr,
+                                                        entity,
+                                                        attr,
                                                     },
                                                 );
                                                 return true;
@@ -416,7 +416,7 @@ impl ConjoiningClauses {
                                         }
                                     }
                                 }
-                                _ => {} // TODO: check constant values against cache.
+                                _ => {} // TODO: check constant values against the cache.
                             }
                         }
                         _ => {}
@@ -591,7 +591,7 @@ impl ConjoiningClauses {
                             entity: e,
                             attribute: a,
                             value: v,
-                            tx: tx,
+                            tx,
                         }),
                     },
                 },
@@ -612,7 +612,7 @@ impl ConjoiningClauses {
         let mut new_value: Option<EvolvedValuePlace> = None;
 
         match &pattern.entity {
-            &EvolvedNonValuePlace::Variable(ref var) => {
+            EvolvedNonValuePlace::Variable(ref var) => {
                 // See if we have it yet!
                 match self.bound_value(&var) {
                     None => (),
@@ -631,12 +631,12 @@ impl ConjoiningClauses {
             _ => (),
         }
         match &pattern.value {
-            &EvolvedValuePlace::Variable(ref var) => {
+            EvolvedValuePlace::Variable(ref var) => {
                 // See if we have it yet!
                 match self.bound_value(&var) {
                     None => (),
                     Some(tv) => {
-                        new_value = Some(EvolvedValuePlace::Value(tv.clone()));
+                        new_value = Some(EvolvedValuePlace::Value(tv));
                     }
                 };
             }
@@ -679,7 +679,6 @@ impl ConjoiningClauses {
             // between an attribute and a value.
             // We know we cannot return a result, so we short-circuit here.
             self.mark_known_empty(EmptyBecause::AttributeLookupFailed);
-            return;
         }
     }
 }

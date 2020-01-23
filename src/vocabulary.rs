@@ -234,7 +234,7 @@ impl Definition {
     {
         Definition {
             name: name.into(),
-            version: version,
+            version,
             attributes: attributes.into(),
             pre: Definition::no_op,
             post: Definition::no_op,
@@ -730,8 +730,8 @@ impl<'a, 'c> VersionedStore for InProgress<'a, 'c> {
                 }
 
                 c @ VocabularyCheck::NotPresent
-                | c @ VocabularyCheck::PresentButNeedsUpdate { older_version: _ }
-                | c @ VocabularyCheck::PresentButMissingAttributes { attributes: _ } => {
+                | c @ VocabularyCheck::PresentButNeedsUpdate { .. }
+                | c @ VocabularyCheck::PresentButMissingAttributes { .. } => {
                     work.add(definition, c);
                 }
             }
@@ -758,8 +758,7 @@ impl<'a, 'c> VersionedStore for InProgress<'a, 'c> {
                     // Save this: we'll do it later.
                     missing.push((definition, attributes));
                 }
-                VocabularyCheck::Present
-                | VocabularyCheck::PresentButTooNew { newer_version: _ } => {
+                VocabularyCheck::Present | VocabularyCheck::PresentButTooNew { .. } => {
                     unreachable!();
                 }
             }
@@ -815,9 +814,9 @@ impl SimpleVocabularySource {
         post: Option<fn(&mut InProgress<'_, '_>) -> Result<()>>,
     ) -> SimpleVocabularySource {
         SimpleVocabularySource {
-            pre: pre,
-            post: post,
-            definitions: definitions,
+            pre,
+            post,
+            definitions,
         }
     }
 
@@ -910,8 +909,8 @@ where
                         .collect();
                     Ok(Some(Vocabulary {
                         entity: entid.into(),
-                        version: version,
-                        attributes: attributes,
+                        version,
+                        attributes,
                     }))
                 }
                 Some(_) => bail!(MentatError::InvalidVocabularyVersion),
@@ -982,7 +981,7 @@ where
                             name.clone(),
                             Vocabulary {
                                 entity: vocab,
-                                version: version,
+                                version,
                                 attributes: attrs,
                             },
                         )

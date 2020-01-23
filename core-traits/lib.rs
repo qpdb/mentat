@@ -102,7 +102,7 @@ impl<V: TransactableValueMarker> Into<ValuePlace<V>> for KnownEntid {
 /// When moving to a more concrete table, such as `datoms`, they are expanded out
 /// via these flags and put into their own column rather than a bit field.
 pub enum AttributeBitFlags {
-    IndexAVET = 1 << 0,
+    IndexAVET = 1,
     IndexVAET = 1 << 1,
     IndexFulltext = 1 << 2,
     UniqueValue = 1 << 3,
@@ -327,20 +327,20 @@ impl ValueType {
 
     pub fn from_keyword(keyword: &Keyword) -> Option<Self> {
         if keyword.namespace() != Some("db.type") {
-            return None;
+            None
+        } else {
+            match keyword.name() {
+                "ref" => Some(ValueType::Ref),
+                "boolean" => Some(ValueType::Boolean),
+                "instant" => Some(ValueType::Instant),
+                "long" => Some(ValueType::Long),
+                "double" => Some(ValueType::Double),
+                "string" => Some(ValueType::String),
+                "keyword" => Some(ValueType::Keyword),
+                "uuid" => Some(ValueType::Uuid),
+                _ => None,
+            }
         }
-
-        return match keyword.name() {
-            "ref" => Some(ValueType::Ref),
-            "boolean" => Some(ValueType::Boolean),
-            "instant" => Some(ValueType::Instant),
-            "long" => Some(ValueType::Long),
-            "double" => Some(ValueType::Double),
-            "string" => Some(ValueType::String),
-            "keyword" => Some(ValueType::Keyword),
-            "uuid" => Some(ValueType::Uuid),
-            _ => None,
-        };
     }
 
     pub fn into_typed_value(self) -> TypedValue {
@@ -372,9 +372,9 @@ impl ValueType {
         }
     }
 
-    pub fn is_numeric(&self) -> bool {
+    pub fn is_numeric(self) -> bool {
         match self {
-            &ValueType::Long | &ValueType::Double => true,
+            ValueType::Long | ValueType::Double => true,
             _ => false,
         }
     }
@@ -440,14 +440,14 @@ impl TypedValue {
 
     pub fn value_type(&self) -> ValueType {
         match self {
-            &TypedValue::Ref(_) => ValueType::Ref,
-            &TypedValue::Boolean(_) => ValueType::Boolean,
-            &TypedValue::Long(_) => ValueType::Long,
-            &TypedValue::Instant(_) => ValueType::Instant,
-            &TypedValue::Double(_) => ValueType::Double,
-            &TypedValue::String(_) => ValueType::String,
-            &TypedValue::Keyword(_) => ValueType::Keyword,
-            &TypedValue::Uuid(_) => ValueType::Uuid,
+            TypedValue::Ref(_) => ValueType::Ref,
+            TypedValue::Boolean(_) => ValueType::Boolean,
+            TypedValue::Long(_) => ValueType::Long,
+            TypedValue::Instant(_) => ValueType::Instant,
+            TypedValue::Double(_) => ValueType::Double,
+            TypedValue::String(_) => ValueType::String,
+            TypedValue::Keyword(_) => ValueType::Keyword,
+            TypedValue::Uuid(_) => ValueType::Uuid,
         }
     }
 
@@ -770,21 +770,21 @@ impl Binding {
 
     pub fn as_scalar(&self) -> Option<&TypedValue> {
         match self {
-            &Binding::Scalar(ref v) => Some(v),
+            Binding::Scalar(ref v) => Some(v),
             _ => None,
         }
     }
 
     pub fn as_vec(&self) -> Option<&Vec<Binding>> {
         match self {
-            &Binding::Vec(ref v) => Some(v),
+            Binding::Vec(ref v) => Some(v),
             _ => None,
         }
     }
 
     pub fn as_map(&self) -> Option<&StructuredMap> {
         match self {
-            &Binding::Map(ref v) => Some(v),
+            Binding::Map(ref v) => Some(v),
             _ => None,
         }
     }
@@ -856,10 +856,10 @@ impl Binding {
 
     pub fn value_type(&self) -> Option<ValueType> {
         match self {
-            &Binding::Scalar(ref v) => Some(v.value_type()),
+            Binding::Scalar(ref v) => Some(v.value_type()),
 
-            &Binding::Map(_) => None,
-            &Binding::Vec(_) => None,
+            Binding::Map(_) => None,
+            Binding::Vec(_) => None,
         }
     }
 }
@@ -970,56 +970,56 @@ impl Binding {
 
     pub fn as_entid(&self) -> Option<&Entid> {
         match self {
-            &Binding::Scalar(TypedValue::Ref(ref v)) => Some(v),
+            Binding::Scalar(TypedValue::Ref(ref v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn as_kw(&self) -> Option<&ValueRc<Keyword>> {
         match self {
-            &Binding::Scalar(TypedValue::Keyword(ref v)) => Some(v),
+            Binding::Scalar(TypedValue::Keyword(ref v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn as_boolean(&self) -> Option<&bool> {
         match self {
-            &Binding::Scalar(TypedValue::Boolean(ref v)) => Some(v),
+            Binding::Scalar(TypedValue::Boolean(ref v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn as_long(&self) -> Option<&i64> {
         match self {
-            &Binding::Scalar(TypedValue::Long(ref v)) => Some(v),
+            Binding::Scalar(TypedValue::Long(ref v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn as_double(&self) -> Option<&f64> {
         match self {
-            &Binding::Scalar(TypedValue::Double(ref v)) => Some(&v.0),
+            Binding::Scalar(TypedValue::Double(ref v)) => Some(&v.0),
             _ => None,
         }
     }
 
     pub fn as_instant(&self) -> Option<&DateTime<Utc>> {
         match self {
-            &Binding::Scalar(TypedValue::Instant(ref v)) => Some(v),
+            Binding::Scalar(TypedValue::Instant(ref v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn as_string(&self) -> Option<&ValueRc<String>> {
         match self {
-            &Binding::Scalar(TypedValue::String(ref v)) => Some(v),
+            Binding::Scalar(TypedValue::String(ref v)) => Some(v),
             _ => None,
         }
     }
 
     pub fn as_uuid(&self) -> Option<&Uuid> {
         match self {
-            &Binding::Scalar(TypedValue::Uuid(ref v)) => Some(v),
+            Binding::Scalar(TypedValue::Uuid(ref v)) => Some(v),
             _ => None,
         }
     }

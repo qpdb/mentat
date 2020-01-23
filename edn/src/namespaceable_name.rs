@@ -85,7 +85,7 @@ impl NamespaceableName {
 
         NamespaceableName {
             components: dest,
-            boundary: boundary,
+            boundary,
         }
     }
 
@@ -144,7 +144,7 @@ impl NamespaceableName {
     }
 
     #[inline]
-    pub fn components<'a>(&'a self) -> (&'a str, &'a str) {
+    pub fn components(&self) -> (&str, &str) {
         if self.boundary > 0 {
             (
                 &self.components[0..self.boundary],
@@ -219,11 +219,11 @@ impl<'de> Deserialize<'de> for NamespaceableName {
         D: Deserializer<'de>,
     {
         let separated = SerializedNamespaceableName::deserialize(deserializer)?;
-        if separated.name.len() == 0 {
+        if separated.name.is_empty() {
             return Err(de::Error::custom("Empty name in keyword or symbol"));
         }
         if let Some(ns) = separated.namespace {
-            if ns.len() == 0 {
+            if ns.is_empty() {
                 Err(de::Error::custom(
                     "Empty but present namespace in keyword or symbol",
                 ))

@@ -47,7 +47,7 @@ impl ConjoiningClauses {
 
         let named_values = ComputedTable::NamedValues {
             names: names.clone(),
-            values: values,
+            values,
         };
 
         let table = self.computed_tables.push_computed(named_values);
@@ -103,13 +103,13 @@ impl ConjoiningClauses {
             if existing != value {
                 self.mark_known_empty(EmptyBecause::ConflictingBindings {
                     var: var.clone(),
-                    existing: existing.clone(),
+                    existing,
                     desired: value,
                 });
                 return Ok(());
             }
         } else {
-            self.bind_value(&var, value.clone());
+            self.bind_value(&var, value);
         }
 
         Ok(())
@@ -180,7 +180,7 @@ impl ConjoiningClauses {
                     .into_iter()
                     .filter_map(|arg| -> Option<Result<TypedValue>> {
                         // We need to get conversion errors out.
-                        // We also want to mark known-empty on impossibilty, but
+                        // We also want to mark known-empty on impossibility, but
                         // still detect serious errors.
                         match self.typed_value_from_arg(schema, &var, arg, known_types) {
                             Ok(ValueConversion::Val(tv)) => {
@@ -188,7 +188,7 @@ impl ConjoiningClauses {
                                     && !accumulated_types.is_unit()
                                 {
                                     // Values not all of the same type.
-                                    Some(Err(AlgebrizerError::InvalidGroundConstant.into()))
+                                    Some(Err(AlgebrizerError::InvalidGroundConstant))
                                 } else {
                                     Some(Ok(tv))
                                 }
@@ -198,7 +198,7 @@ impl ConjoiningClauses {
                                 skip = Some(because);
                                 None
                             }
-                            Err(e) => Some(Err(e.into())),
+                            Err(e) => Some(Err(e)),
                         }
                     })
                     .collect::<Result<Vec<TypedValue>>>()?;
@@ -211,7 +211,7 @@ impl ConjoiningClauses {
 
                 // Otherwise, we now have the values and the type.
                 let types = vec![accumulated_types.exemplar().unwrap()];
-                let names = vec![var.clone()];
+                let names = vec![var];
 
                 self.collect_named_bindings(schema, names, types, values);
                 Ok(())
@@ -227,8 +227,8 @@ impl ConjoiningClauses {
                 let template: Vec<Option<(Variable, ValueTypeSet)>> = places
                     .iter()
                     .map(|x| match x {
-                        &VariableOrPlaceholder::Placeholder => None,
-                        &VariableOrPlaceholder::Variable(ref v) => {
+                        VariableOrPlaceholder::Placeholder => None,
+                        VariableOrPlaceholder::Variable(ref v) => {
                             Some((v.clone(), self.known_type_set(v)))
                         }
                     })
@@ -271,7 +271,7 @@ impl ConjoiningClauses {
                                 // Convert each item in the row.
                                 // If any value in the row is impossible, then skip the row.
                                 // If all rows are impossible, fail the entire CC.
-                                if let &Some(ref pair) = pair {
+                                if let Some(ref pair) = pair {
                                     match self.typed_value_from_arg(schema, &pair.0, col, pair.1)? {
                                         ValueConversion::Val(tv) => vals.push(tv),
                                         ValueConversion::Impossible(because) => {

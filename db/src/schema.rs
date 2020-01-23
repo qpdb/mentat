@@ -77,7 +77,7 @@ fn validate_attribute_map(entid_map: &EntidMap, attribute_map: &AttributeMap) ->
             entid_map
                 .get(entid)
                 .map(|ident| ident.to_string())
-                .unwrap_or(entid.to_string())
+                .unwrap_or_else(|| entid.to_string())
         };
         attribute.validate(ident)?;
     }
@@ -108,7 +108,7 @@ impl AttributeBuilder {
 
     /// Make a new AttributeBuilder from an existing Attribute. This is important to allow
     /// retraction. Only attributes that we allow to change are duplicated here.
-    pub fn to_modify_attribute(attribute: &Attribute) -> Self {
+    pub fn modify_attribute(attribute: &Attribute) -> Self {
         let mut ab = AttributeBuilder::default();
         ab.multival = Some(attribute.multival);
         ab.unique = Some(attribute.unique);
@@ -116,22 +116,22 @@ impl AttributeBuilder {
         ab
     }
 
-    pub fn value_type<'a>(&'a mut self, value_type: ValueType) -> &'a mut Self {
+    pub fn value_type(&mut self, value_type: ValueType) -> &mut Self {
         self.value_type = Some(value_type);
         self
     }
 
-    pub fn multival<'a>(&'a mut self, multival: bool) -> &'a mut Self {
+    pub fn multival(&mut self, multival: bool) -> &mut Self {
         self.multival = Some(multival);
         self
     }
 
-    pub fn non_unique<'a>(&'a mut self) -> &'a mut Self {
+    pub fn non_unique(&mut self) -> &mut Self {
         self.unique = Some(None);
         self
     }
 
-    pub fn unique<'a>(&'a mut self, unique: attribute::Unique) -> &'a mut Self {
+    pub fn unique(&mut self, unique: attribute::Unique) -> &mut Self {
         if self.helpful && unique == attribute::Unique::Identity {
             self.index = Some(true);
         }
@@ -139,12 +139,12 @@ impl AttributeBuilder {
         self
     }
 
-    pub fn index<'a>(&'a mut self, index: bool) -> &'a mut Self {
+    pub fn index(&mut self, index: bool) -> &mut Self {
         self.index = Some(index);
         self
     }
 
-    pub fn fulltext<'a>(&'a mut self, fulltext: bool) -> &'a mut Self {
+    pub fn fulltext(&mut self, fulltext: bool) -> &mut Self {
         self.fulltext = Some(fulltext);
         if self.helpful && fulltext {
             self.index = Some(true);
@@ -152,12 +152,12 @@ impl AttributeBuilder {
         self
     }
 
-    pub fn component<'a>(&'a mut self, component: bool) -> &'a mut Self {
+    pub fn component(&mut self, component: bool) -> &mut Self {
         self.component = Some(component);
         self
     }
 
-    pub fn no_history<'a>(&'a mut self, no_history: bool) -> &'a mut Self {
+    pub fn no_history(&mut self, no_history: bool) -> &mut Self {
         self.no_history = Some(no_history);
         self
     }
@@ -197,7 +197,7 @@ impl AttributeBuilder {
             attribute.multival = multival;
         }
         if let Some(ref unique) = self.unique {
-            attribute.unique = unique.clone();
+            attribute.unique = *unique;
         }
         if let Some(index) = self.index {
             attribute.index = index;
@@ -223,14 +223,12 @@ impl AttributeBuilder {
 
         if let Some(ref unique) = self.unique {
             if *unique != attribute.unique {
-                attribute.unique = unique.clone();
+                attribute.unique = *unique;
                 mutations.push(AttributeAlteration::Unique);
             }
-        } else {
-            if attribute.unique != None {
-                attribute.unique = None;
-                mutations.push(AttributeAlteration::Unique);
-            }
+        } else if attribute.unique != None {
+            attribute.unique = None;
+            mutations.push(AttributeAlteration::Unique);
         }
 
         if let Some(index) = self.index {
@@ -272,17 +270,17 @@ pub trait SchemaBuilding {
 impl SchemaBuilding for Schema {
     fn require_ident(&self, entid: Entid) -> Result<&symbols::Keyword> {
         self.get_ident(entid)
-            .ok_or(DbErrorKind::UnrecognizedEntid(entid).into())
+            .ok_or_else(|| DbErrorKind::UnrecognizedEntid(entid).into())
     }
 
     fn require_entid(&self, ident: &symbols::Keyword) -> Result<KnownEntid> {
         self.get_entid(&ident)
-            .ok_or(DbErrorKind::UnrecognizedIdent(ident.to_string()).into())
+            .ok_or_else(|| DbErrorKind::UnrecognizedIdent(ident.to_string()).into())
     }
 
     fn require_attribute_for_entid(&self, entid: Entid) -> Result<&Attribute> {
         self.attribute_for_entid(entid)
-            .ok_or(DbErrorKind::UnrecognizedEntid(entid).into())
+            .ok_or_else(|| DbErrorKind::UnrecognizedEntid(entid).into())
     }
 
     /// Create a valid `Schema` from the constituent maps.
@@ -290,10 +288,7 @@ impl SchemaBuilding for Schema {
         ident_map: IdentMap,
         attribute_map: AttributeMap,
     ) -> Result<Schema> {
-        let entid_map: EntidMap = ident_map
-            .iter()
-            .map(|(k, v)| (v.clone(), k.clone()))
-            .collect();
+        let entid_map: EntidMap = ident_map.iter().map(|(k, v)| (*v, k.clone())).collect();
 
         validate_attribute_map(&entid_map, &attribute_map)?;
         Ok(Schema::new(ident_map, entid_map, attribute_map))
@@ -309,10 +304,10 @@ impl SchemaBuilding for Schema {
             .map(|(symbolic_ident, symbolic_attr, value)| {
                 let ident: i64 = *ident_map
                     .get(&symbolic_ident)
-                    .ok_or(DbErrorKind::UnrecognizedIdent(symbolic_ident.to_string()))?;
+                    .ok_or_else(|| DbErrorKind::UnrecognizedIdent(symbolic_ident.to_string()))?;
                 let attr: i64 = *ident_map
                     .get(&symbolic_attr)
-                    .ok_or(DbErrorKind::UnrecognizedIdent(symbolic_attr.to_string()))?;
+                    .ok_or_else(|| DbErrorKind::UnrecognizedIdent(symbolic_attr.to_string()))?;
                 Ok((ident, attr, value))
             })
             .collect();

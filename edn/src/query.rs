@@ -51,10 +51,6 @@ impl Variable {
         self.0.as_ref().0.as_str()
     }
 
-    pub fn to_string(&self) -> String {
-        self.0.as_ref().0.clone()
-    }
-
     pub fn name(&self) -> PlainSymbol {
         self.0.as_ref().clone()
     }
@@ -87,7 +83,7 @@ impl FromValue<Variable> for Variable {
 impl Variable {
     pub fn from_rc(sym: Rc<PlainSymbol>) -> Option<Variable> {
         if sym.is_var_symbol() {
-            Some(Variable(sym.clone()))
+            Some(Variable(sym))
         } else {
             None
         }
@@ -246,18 +242,18 @@ impl FromValue<FnArg> for FnArg {
 impl std::fmt::Display for FnArg {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            &FnArg::Variable(ref var) => write!(f, "{}", var),
-            &FnArg::SrcVar(ref var) => {
+            FnArg::Variable(ref var) => write!(f, "{}", var),
+            FnArg::SrcVar(ref var) => {
                 if var == &SrcVar::DefaultSrc {
                     write!(f, "$")
                 } else {
                     write!(f, "{:?}", var)
                 }
             }
-            &FnArg::EntidOrInteger(entid) => write!(f, "{}", entid),
-            &FnArg::IdentOrKeyword(ref kw) => write!(f, "{}", kw),
-            &FnArg::Constant(ref constant) => write!(f, "{:?}", constant),
-            &FnArg::Vector(ref vec) => write!(f, "{:?}", vec),
+            FnArg::EntidOrInteger(entid) => write!(f, "{}", entid),
+            FnArg::IdentOrKeyword(ref kw) => write!(f, "{}", kw),
+            FnArg::Constant(ref constant) => write!(f, "{:?}", constant),
+            FnArg::Vector(ref vec) => write!(f, "{:?}", vec),
         }
     }
 }
@@ -265,7 +261,7 @@ impl std::fmt::Display for FnArg {
 impl FnArg {
     pub fn as_variable(&self) -> Option<&Variable> {
         match self {
-            &FnArg::Variable(ref v) => Some(v),
+            FnArg::Variable(ref v) => Some(v),
             _ => None,
         }
     }
@@ -332,12 +328,10 @@ impl FromValue<PatternNonValuePlace> for PatternNonValuePlace {
             ::SpannedValue::PlainSymbol(ref x) => {
                 if x.0.as_str() == "_" {
                     Some(PatternNonValuePlace::Placeholder)
+                } else if let Some(v) = Variable::from_symbol(x) {
+                    Some(PatternNonValuePlace::Variable(v))
                 } else {
-                    if let Some(v) = Variable::from_symbol(x) {
-                        Some(PatternNonValuePlace::Variable(v))
-                    } else {
-                        None
-                    }
+                    None
                 }
             }
             ::SpannedValue::Keyword(ref x) => Some(x.clone().into()),
@@ -404,9 +398,9 @@ impl FromValue<PatternValuePlace> for PatternValuePlace {
             {
                 Some(PatternValuePlace::Constant(x.clone().into()))
             }
-            ::SpannedValue::Uuid(ref u) => Some(PatternValuePlace::Constant(
-                NonIntegerConstant::Uuid(u.clone()),
-            )),
+            ::SpannedValue::Uuid(ref u) => {
+                Some(PatternValuePlace::Constant(NonIntegerConstant::Uuid(*u)))
+            }
 
             // These don't appear in queries.
             ::SpannedValue::Nil => None,
@@ -498,15 +492,15 @@ pub enum PullAttributeSpec {
 impl std::fmt::Display for PullConcreteAttribute {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            &PullConcreteAttribute::Ident(ref k) => write!(f, "{}", k),
-            &PullConcreteAttribute::Entid(i) => write!(f, "{}", i),
+            PullConcreteAttribute::Ident(ref k) => write!(f, "{}", k),
+            PullConcreteAttribute::Entid(i) => write!(f, "{}", i),
         }
     }
 }
 
 impl std::fmt::Display for NamedPullAttribute {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let &Some(ref alias) = &self.alias {
+        if let Some(ref alias) = self.alias {
             write!(f, "{} :as {}", self.attribute, alias)
         } else {
             write!(f, "{}", self.attribute)
@@ -517,8 +511,8 @@ impl std::fmt::Display for NamedPullAttribute {
 impl std::fmt::Display for PullAttributeSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            &PullAttributeSpec::Wildcard => write!(f, "*"),
-            &PullAttributeSpec::Attribute(ref attr) => write!(f, "{}", attr),
+            PullAttributeSpec::Wildcard => write!(f, "*"),
+            PullAttributeSpec::Attribute(ref attr) => write!(f, "{}", attr),
         }
     }
 }
@@ -553,10 +547,10 @@ impl Element {
     /// Returns true if the element must yield only one value.
     pub fn is_unit(&self) -> bool {
         match self {
-            &Element::Variable(_) => false,
-            &Element::Pull(_) => false,
-            &Element::Aggregate(_) => true,
-            &Element::Corresponding(_) => true,
+            Element::Variable(_) => false,
+            Element::Pull(_) => false,
+            Element::Aggregate(_) => true,
+            Element::Corresponding(_) => true,
         }
     }
 }
@@ -570,8 +564,8 @@ impl From<Variable> for Element {
 impl std::fmt::Display for Element {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            &Element::Variable(ref var) => write!(f, "{}", var),
-            &Element::Pull(Pull {
+            Element::Variable(ref var) => write!(f, "{}", var),
+            Element::Pull(Pull {
                 ref var,
                 ref patterns,
             }) => {
@@ -581,12 +575,12 @@ impl std::fmt::Display for Element {
                 }
                 write!(f, "])")
             }
-            &Element::Aggregate(ref agg) => match agg.args.len() {
+            Element::Aggregate(ref agg) => match agg.args.len() {
                 0 => write!(f, "({})", agg.func),
                 1 => write!(f, "({} {})", agg.func, agg.args[0]),
                 _ => write!(f, "({} {:?})", agg.func, agg.args),
             },
-            &Element::Corresponding(ref var) => write!(f, "(the {})", var),
+            Element::Corresponding(ref var) => write!(f, "(the {})", var),
         }
     }
 }
@@ -609,20 +603,15 @@ pub enum Limit {
 ///
 /// ```rust
 /// # use edn::query::{Element, FindSpec, Variable};
+/// let elements = vec![
+///   Element::Variable(Variable::from_valid_name("?foo")),
+///   Element::Variable(Variable::from_valid_name("?bar")),
+/// ];
+/// let rel = FindSpec::FindRel(elements);
 ///
-/// # fn main() {
-///
-///   let elements = vec![
-///     Element::Variable(Variable::from_valid_name("?foo")),
-///     Element::Variable(Variable::from_valid_name("?bar")),
-///   ];
-///   let rel = FindSpec::FindRel(elements);
-///
-///   if let FindSpec::FindRel(elements) = rel {
-///     assert_eq!(2, elements.len());
-///   }
-///
-/// # }
+/// if let FindSpec::FindRel(elements) = rel {
+///   assert_eq!(2, elements.len());
+/// }
 /// ```
 ///
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -649,19 +638,19 @@ impl FindSpec {
     pub fn is_unit_limited(&self) -> bool {
         use self::FindSpec::*;
         match self {
-            &FindScalar(..) => true,
-            &FindTuple(..) => true,
-            &FindRel(..) => false,
-            &FindColl(..) => false,
+            FindScalar(..) => true,
+            FindTuple(..) => true,
+            FindRel(..) => false,
+            FindColl(..) => false,
         }
     }
 
     pub fn expected_column_count(&self) -> usize {
         use self::FindSpec::*;
         match self {
-            &FindScalar(..) => 1,
-            &FindColl(..) => 1,
-            &FindTuple(ref elems) | &FindRel(ref elems) => elems.len(),
+            FindScalar(..) => 1,
+            FindColl(..) => 1,
+            FindTuple(ref elems) | &FindRel(ref elems) => elems.len(),
         }
     }
 
@@ -690,10 +679,10 @@ impl FindSpec {
     pub fn columns<'s>(&'s self) -> Box<dyn Iterator<Item = &Element> + 's> {
         use self::FindSpec::*;
         match self {
-            &FindScalar(ref e) => Box::new(std::iter::once(e)),
-            &FindColl(ref e) => Box::new(std::iter::once(e)),
-            &FindTuple(ref v) => Box::new(v.iter()),
-            &FindRel(ref v) => Box::new(v.iter()),
+            FindScalar(ref e) => Box::new(std::iter::once(e)),
+            FindColl(ref e) => Box::new(std::iter::once(e)),
+            FindTuple(ref v) => Box::new(v.iter()),
+            FindRel(ref v) => Box::new(v.iter()),
         }
     }
 }
@@ -716,8 +705,8 @@ impl VariableOrPlaceholder {
 
     pub fn var(&self) -> Option<&Variable> {
         match self {
-            &VariableOrPlaceholder::Placeholder => None,
-            &VariableOrPlaceholder::Variable(ref var) => Some(var),
+            VariableOrPlaceholder::Placeholder => None,
+            VariableOrPlaceholder::Variable(ref var) => Some(var),
         }
     }
 }
@@ -771,11 +760,11 @@ impl Binding {
     /// ```
     pub fn is_valid(&self) -> bool {
         match self {
-            &Binding::BindScalar(_) | &Binding::BindColl(_) => true,
-            &Binding::BindRel(ref vars) | &Binding::BindTuple(ref vars) => {
+            Binding::BindScalar(_) | &Binding::BindColl(_) => true,
+            Binding::BindRel(ref vars) | &Binding::BindTuple(ref vars) => {
                 let mut acc = HashSet::<Variable>::new();
                 for var in vars {
-                    if let &VariableOrPlaceholder::Variable(ref var) = var {
+                    if let VariableOrPlaceholder::Variable(ref var) = *var {
                         if !acc.insert(var.clone()) {
                             // It's invalid if there was an equal var already present in the set --
                             // i.e., we have a duplicate var.
@@ -832,7 +821,7 @@ impl Pattern {
                         entity: v_e,
                         attribute: k.to_reversed().into(),
                         value: e_v,
-                        tx: tx,
+                        tx,
                     });
                 } else {
                     return None;
@@ -844,7 +833,7 @@ impl Pattern {
             entity: e,
             attribute: a,
             value: v,
-            tx: tx,
+            tx,
         })
     }
 }
@@ -894,7 +883,7 @@ pub enum UnifyVars {
 impl WhereClause {
     pub fn is_pattern(&self) -> bool {
         match self {
-            &WhereClause::Pattern(_) => true,
+            WhereClause::Pattern(_) => true,
             _ => false,
         }
     }
@@ -909,8 +898,8 @@ pub enum OrWhereClause {
 impl OrWhereClause {
     pub fn is_pattern_or_patterns(&self) -> bool {
         match self {
-            &OrWhereClause::Clause(WhereClause::Pattern(_)) => true,
-            &OrWhereClause::And(ref clauses) => clauses.iter().all(|clause| clause.is_pattern()),
+            OrWhereClause::Clause(WhereClause::Pattern(_)) => true,
+            OrWhereClause::And(ref clauses) => clauses.iter().all(|clause| clause.is_pattern()),
             _ => false,
         }
     }
@@ -934,8 +923,8 @@ pub struct NotJoin {
 impl NotJoin {
     pub fn new(unify_vars: UnifyVars, clauses: Vec<WhereClause>) -> NotJoin {
         NotJoin {
-            unify_vars: unify_vars,
-            clauses: clauses,
+            unify_vars,
+            clauses,
         }
     }
 }
@@ -1041,8 +1030,8 @@ impl ParsedQuery {
         Ok(ParsedQuery {
             find_spec: find_spec.ok_or("expected :find")?,
             default_source: SrcVar::DefaultSrc,
-            with: with.unwrap_or(vec![]),
-            in_vars: in_vars.unwrap_or(vec![]),
+            with: with.unwrap_or_else(|| vec![]),
+            in_vars: in_vars.unwrap_or_else(|| vec![]),
             in_sources: BTreeSet::default(),
             limit: limit.unwrap_or(Limit::None),
             where_clauses: where_clauses.ok_or("expected :where")?,
@@ -1054,8 +1043,8 @@ impl ParsedQuery {
 impl OrJoin {
     pub fn new(unify_vars: UnifyVars, clauses: Vec<OrWhereClause>) -> OrJoin {
         OrJoin {
-            unify_vars: unify_vars,
-            clauses: clauses,
+            unify_vars,
+            clauses,
             mentioned_vars: None,
         }
     }
@@ -1064,8 +1053,8 @@ impl OrJoin {
     /// every variable mentioned inside the join is also mentioned in the `UnifyVars` list.
     pub fn is_fully_unified(&self) -> bool {
         match &self.unify_vars {
-            &UnifyVars::Implicit => true,
-            &UnifyVars::Explicit(ref vars) => {
+            UnifyVars::Implicit => true,
+            UnifyVars::Explicit(ref vars) => {
                 // We know that the join list must be a subset of the vars in the pattern, or
                 // it would have failed validation. That allows us to simply compare counts here.
                 // TODO: in debug mode, do a full intersection, and verify that our count check
@@ -1094,13 +1083,13 @@ impl ContainsVariables for WhereClause {
     fn accumulate_mentioned_variables(&self, acc: &mut BTreeSet<Variable>) {
         use self::WhereClause::*;
         match self {
-            &OrJoin(ref o) => o.accumulate_mentioned_variables(acc),
-            &Pred(ref p) => p.accumulate_mentioned_variables(acc),
-            &Pattern(ref p) => p.accumulate_mentioned_variables(acc),
-            &NotJoin(ref n) => n.accumulate_mentioned_variables(acc),
-            &WhereFn(ref f) => f.accumulate_mentioned_variables(acc),
-            &TypeAnnotation(ref a) => a.accumulate_mentioned_variables(acc),
-            &RuleExpr => (),
+            OrJoin(ref o) => o.accumulate_mentioned_variables(acc),
+            Pred(ref p) => p.accumulate_mentioned_variables(acc),
+            Pattern(ref p) => p.accumulate_mentioned_variables(acc),
+            NotJoin(ref n) => n.accumulate_mentioned_variables(acc),
+            WhereFn(ref f) => f.accumulate_mentioned_variables(acc),
+            TypeAnnotation(ref a) => a.accumulate_mentioned_variables(acc),
+            RuleExpr => (),
         }
     }
 }
@@ -1109,12 +1098,12 @@ impl ContainsVariables for OrWhereClause {
     fn accumulate_mentioned_variables(&self, acc: &mut BTreeSet<Variable>) {
         use self::OrWhereClause::*;
         match self {
-            &And(ref clauses) => {
+            And(ref clauses) => {
                 for clause in clauses {
                     clause.accumulate_mentioned_variables(acc)
                 }
             }
-            &Clause(ref clause) => clause.accumulate_mentioned_variables(acc),
+            Clause(ref clause) => clause.accumulate_mentioned_variables(acc),
         }
     }
 }
@@ -1161,7 +1150,7 @@ impl ContainsVariables for NotJoin {
 impl ContainsVariables for Predicate {
     fn accumulate_mentioned_variables(&self, acc: &mut BTreeSet<Variable>) {
         for arg in &self.args {
-            if let &FnArg::Variable(ref v) = arg {
+            if let FnArg::Variable(ref v) = *arg {
                 acc_ref(acc, v)
             }
         }
@@ -1177,10 +1166,10 @@ impl ContainsVariables for TypeAnnotation {
 impl ContainsVariables for Binding {
     fn accumulate_mentioned_variables(&self, acc: &mut BTreeSet<Variable>) {
         match self {
-            &Binding::BindScalar(ref v) | &Binding::BindColl(ref v) => acc_ref(acc, v),
-            &Binding::BindRel(ref vs) | &Binding::BindTuple(ref vs) => {
+            Binding::BindScalar(ref v) | &Binding::BindColl(ref v) => acc_ref(acc, v),
+            Binding::BindRel(ref vs) | &Binding::BindTuple(ref vs) => {
                 for v in vs {
-                    if let &VariableOrPlaceholder::Variable(ref v) = v {
+                    if let VariableOrPlaceholder::Variable(ref v) = *v {
                         acc_ref(acc, v);
                     }
                 }
@@ -1192,7 +1181,7 @@ impl ContainsVariables for Binding {
 impl ContainsVariables for WhereFn {
     fn accumulate_mentioned_variables(&self, acc: &mut BTreeSet<Variable>) {
         for arg in &self.args {
-            if let &FnArg::Variable(ref v) = arg {
+            if let FnArg::Variable(ref v) = *arg {
                 acc_ref(acc, v)
             }
         }

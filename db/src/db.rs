@@ -66,10 +66,9 @@ fn make_connection(
     let page_size = 32768;
 
     let initial_pragmas = if let Some(encryption_key) = maybe_encryption_key {
-        assert!(
-            cfg!(feature = "sqlcipher"),
-            "This function shouldn't be called with a key unless we have sqlcipher support"
-        );
+        if !cfg!(feature = "sqlcipher") {
+            panic!("This function shouldn't be called with a key unless we have sqlcipher support");
+        }
         // Important: The `cipher_page_size` cannot be changed without breaking
         // the ability to open databases that were written when using a
         // different `cipher_page_size`. Additionally, it (AFAICT) must be a
@@ -147,10 +146,10 @@ pub const CURRENT_VERSION: i32 = 1;
 
 /// MIN_SQLITE_VERSION should be changed when there's a new minimum version of sqlite required
 /// for the project to work.
-const MIN_SQLITE_VERSION: i32 = 3008000;
+const MIN_SQLITE_VERSION: i32 = 3_008_000;
 
-const TRUE: &'static bool = &true;
-const FALSE: &'static bool = &false;
+const TRUE: &bool = &true;
+const FALSE: &bool = &false;
 
 /// Turn an owned bool into a static reference to a bool.
 ///
@@ -360,9 +359,10 @@ pub fn create_current_version(conn: &mut rusqlite::Connection) -> Result<DB> {
     // TODO: validate metadata mutations that aren't schema related, like additional partitions.
     if let Some(next_schema) = next_schema {
         if next_schema != db.schema {
-            bail!(DbErrorKind::NotYetImplemented(format!(
+            bail!(DbErrorKind::NotYetImplemented(
                 "Initial bootstrap transaction did not produce expected bootstrap schema"
-            )));
+                    .to_string()
+            ));
         }
     }
 
@@ -396,7 +396,7 @@ pub trait TypedSQLValue {
         value: rusqlite::types::Value,
         value_type_tag: i32,
     ) -> Result<TypedValue>;
-    fn to_sql_value_pair<'a>(&'a self) -> (ToSqlOutput<'a>, i32);
+    fn to_sql_value_pair(&self) -> (ToSqlOutput, i32);
     fn from_edn_value(value: &Value) -> Option<TypedValue>;
     fn to_edn_value_pair(&self) -> (Value, ValueType);
 }
@@ -446,43 +446,43 @@ impl TypedSQLValue for TypedValue {
     /// This function is deterministic.
     fn from_edn_value(value: &Value) -> Option<TypedValue> {
         match value {
-            &Value::Boolean(x) => Some(TypedValue::Boolean(x)),
-            &Value::Instant(x) => Some(TypedValue::Instant(x)),
-            &Value::Integer(x) => Some(TypedValue::Long(x)),
-            &Value::Uuid(x) => Some(TypedValue::Uuid(x)),
-            &Value::Float(ref x) => Some(TypedValue::Double(x.clone())),
-            &Value::Text(ref x) => Some(x.clone().into()),
-            &Value::Keyword(ref x) => Some(x.clone().into()),
+            Value::Boolean(x) => Some(TypedValue::Boolean(*x)),
+            Value::Instant(x) => Some(TypedValue::Instant(*x)),
+            Value::Integer(x) => Some(TypedValue::Long(*x)),
+            Value::Uuid(x) => Some(TypedValue::Uuid(*x)),
+            Value::Float(ref x) => Some(TypedValue::Double(*x)),
+            Value::Text(ref x) => Some(x.clone().into()),
+            Value::Keyword(ref x) => Some(x.clone().into()),
             _ => None,
         }
     }
 
     /// Return the corresponding SQLite `value` and `value_type_tag` pair.
-    fn to_sql_value_pair<'a>(&'a self) -> (ToSqlOutput<'a>, i32) {
+    fn to_sql_value_pair(&self) -> (ToSqlOutput, i32) {
         match self {
-            &TypedValue::Ref(x) => (x.into(), 0),
-            &TypedValue::Boolean(x) => ((if x { 1 } else { 0 }).into(), 1),
-            &TypedValue::Instant(x) => (x.to_micros().into(), 4),
+            TypedValue::Ref(x) => ((*x).into(), 0),
+            TypedValue::Boolean(x) => ((if *x { 1 } else { 0 }).into(), 1),
+            TypedValue::Instant(x) => (x.to_micros().into(), 4),
             // SQLite distinguishes integral from decimal types, allowing long and double to share a tag.
-            &TypedValue::Long(x) => (x.into(), 5),
-            &TypedValue::Double(x) => (x.into_inner().into(), 5),
-            &TypedValue::String(ref x) => (x.as_str().into(), 10),
-            &TypedValue::Uuid(ref u) => (u.as_bytes().to_vec().into(), 11),
-            &TypedValue::Keyword(ref x) => (x.to_string().into(), 13),
+            TypedValue::Long(x) => ((*x).into(), 5),
+            TypedValue::Double(x) => (x.into_inner().into(), 5),
+            TypedValue::String(ref x) => (x.as_str().into(), 10),
+            TypedValue::Uuid(ref u) => (u.as_bytes().to_vec().into(), 11),
+            TypedValue::Keyword(ref x) => (x.to_string().into(), 13),
         }
     }
 
     /// Return the corresponding EDN `value` and `value_type` pair.
     fn to_edn_value_pair(&self) -> (Value, ValueType) {
         match self {
-            &TypedValue::Ref(x) => (Value::Integer(x), ValueType::Ref),
-            &TypedValue::Boolean(x) => (Value::Boolean(x), ValueType::Boolean),
-            &TypedValue::Instant(x) => (Value::Instant(x), ValueType::Instant),
-            &TypedValue::Long(x) => (Value::Integer(x), ValueType::Long),
-            &TypedValue::Double(x) => (Value::Float(x), ValueType::Double),
-            &TypedValue::String(ref x) => (Value::Text(x.as_ref().clone()), ValueType::String),
-            &TypedValue::Uuid(ref u) => (Value::Uuid(u.clone()), ValueType::Uuid),
-            &TypedValue::Keyword(ref x) => (Value::Keyword(x.as_ref().clone()), ValueType::Keyword),
+            TypedValue::Ref(x) => (Value::Integer(*x), ValueType::Ref),
+            TypedValue::Boolean(x) => (Value::Boolean(*x), ValueType::Boolean),
+            TypedValue::Instant(x) => (Value::Instant(*x), ValueType::Instant),
+            TypedValue::Long(x) => (Value::Integer(*x), ValueType::Long),
+            TypedValue::Double(x) => (Value::Float(*x), ValueType::Double),
+            TypedValue::String(ref x) => (Value::Text(x.as_ref().clone()), ValueType::String),
+            TypedValue::Uuid(ref u) => (Value::Uuid(*u), ValueType::Uuid),
+            TypedValue::Keyword(ref x) => (Value::Keyword(x.as_ref().clone()), ValueType::Keyword),
         }
     }
 }
@@ -510,7 +510,7 @@ pub fn read_partition_map(conn: &rusqlite::Connection) -> Result<PartitionMap> {
     // First part of the union sprinkles 'allow_excision' into the 'parts' view.
     // Second part of the union takes care of partitions which are known
     // but don't have any transactions.
-    let mut stmt: rusqlite::Statement = conn.prepare(
+    conn.prepare(
         "
         SELECT
             known_parts.part,
@@ -536,16 +536,14 @@ pub fn read_partition_map(conn: &rusqlite::Connection) -> Result<PartitionMap> {
             known_parts
         WHERE
             part NOT IN (SELECT part FROM parts)",
-    )?;
-    let m = stmt
-        .query_and_then(rusqlite::params![], |row| -> Result<(String, Partition)> {
-            Ok((
-                row.get(0)?,
-                Partition::new(row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?),
-            ))
-        })?
-        .collect();
-    m
+    )?
+    .query_and_then(rusqlite::params![], |row| -> Result<(String, Partition)> {
+        Ok((
+            row.get(0)?,
+            Partition::new(row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?),
+        ))
+    })?
+    .collect()
 }
 
 /// Read the ident map materialized view from the given SQL store.
@@ -767,7 +765,7 @@ impl MentatStoring for rusqlite::Connection {
         //
         // TODO: `collect` into a HashSet so that any (a, v) is resolved at most once.
         let max_vars = self.limit(Limit::SQLITE_LIMIT_VARIABLE_NUMBER) as usize;
-        let chunks: itertools::IntoChunks<_> = avs.into_iter().enumerate().chunks(max_vars / 4);
+        let chunks: itertools::IntoChunks<_> = avs.iter().enumerate().chunks(max_vars / 4);
 
         // We'd like to `flat_map` here, but it's not obvious how to `flat_map` across `Result`.
         // Alternatively, this is a `fold`, and it might be wise to express it as such.
@@ -900,9 +898,8 @@ impl MentatStoring for rusqlite::Connection {
         let bindings_per_statement = 6;
 
         let max_vars = self.limit(Limit::SQLITE_LIMIT_VARIABLE_NUMBER) as usize;
-        let chunks: itertools::IntoChunks<_> = entities
-            .into_iter()
-            .chunks(max_vars / bindings_per_statement);
+        let chunks: itertools::IntoChunks<_> =
+            entities.iter().chunks(max_vars / bindings_per_statement);
 
         // We'd like to flat_map here, but it's not obvious how to flat_map across Result.
         let results: Result<Vec<()>> = chunks.into_iter().map(|chunk| -> Result<()> {
@@ -973,9 +970,8 @@ impl MentatStoring for rusqlite::Connection {
 
         let mut outer_searchid = 2000;
 
-        let chunks: itertools::IntoChunks<_> = entities
-            .into_iter()
-            .chunks(max_vars / bindings_per_statement);
+        let chunks: itertools::IntoChunks<_> =
+            entities.iter().chunks(max_vars / bindings_per_statement);
 
         // From string to (searchid, value_type_tag).
         let mut seen: HashMap<ValueRc<String>, (i64, i32)> = HashMap::with_capacity(entities.len());
@@ -996,7 +992,7 @@ impl MentatStoring for rusqlite::Connection {
                                    u8 /* flags0 */,
                                    i64 /* searchid */)>> = chunk.map(|&(e, a, ref attribute, ref typed_value, added)| {
                 match typed_value {
-                    &TypedValue::String(ref rc) => {
+                    TypedValue::String(ref rc) => {
                         datom_count += 1;
                         let entry = seen.entry(rc.clone());
                         match entry {
@@ -1186,7 +1182,10 @@ pub fn update_metadata(
     // TODO: use concat! to avoid creating String instances.
     if !metadata_report.idents_altered.is_empty() {
         // Idents is the materialized view of the [entid :db/ident ident] slice of datoms.
-        conn.execute(format!("DELETE FROM idents").as_str(), rusqlite::params![])?;
+        conn.execute(
+            "DELETE FROM idents".to_string().as_str(),
+            rusqlite::params![],
+        )?;
         conn.execute(
             format!(
                 "INSERT INTO idents SELECT e, a, v, value_type_tag FROM datoms WHERE a IN {}",
@@ -1208,7 +1207,10 @@ pub fn update_metadata(
         || !metadata_report.attributes_altered.is_empty()
         || !metadata_report.idents_altered.is_empty()
     {
-        conn.execute(format!("DELETE FROM schema").as_str(), rusqlite::params![])?;
+        conn.execute(
+            "DELETE FROM schema".to_string().as_str(),
+            rusqlite::params![],
+        )?;
         // NB: we're using :db/valueType as a placeholder for the entire schema-defining set.
         let s = format!(
             r#"

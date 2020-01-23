@@ -135,7 +135,7 @@ impl Schema {
     }
 
     fn get_raw_entid(&self, x: &Keyword) -> Option<Entid> {
-        self.ident_map.get(x).map(|x| *x)
+        self.ident_map.get(x).copied()
     }
 
     pub fn update_component_attributes(&mut self) {

@@ -117,7 +117,7 @@ impl Datom {
     pub fn to_edn(&self) -> edn::Value {
         let f = |entid: &EntidOrIdent| -> edn::Value {
             match *entid {
-                EntidOrIdent::Entid(ref y) => edn::Value::Integer(y.clone()),
+                EntidOrIdent::Entid(ref y) => edn::Value::Integer(*y),
                 EntidOrIdent::Ident(ref y) => edn::Value::Keyword(y.clone()),
             }
         };
@@ -134,13 +134,13 @@ impl Datom {
 
 impl Datoms {
     pub fn to_edn(&self) -> edn::Value {
-        edn::Value::Vector((&self.0).into_iter().map(|x| x.to_edn()).collect())
+        edn::Value::Vector((&self.0).iter().map(|x| x.to_edn()).collect())
     }
 }
 
 impl Transactions {
     pub fn to_edn(&self) -> edn::Value {
-        edn::Value::Vector((&self.0).into_iter().map(|x| x.to_edn()).collect())
+        edn::Value::Vector((&self.0).iter().map(|x| x.to_edn()).collect())
     }
 }
 
@@ -148,7 +148,7 @@ impl FulltextValues {
     pub fn to_edn(&self) -> edn::Value {
         edn::Value::Vector(
             (&self.0)
-                .into_iter()
+                .iter()
                 .map(|&(x, ref y)| {
                     edn::Value::Vector(vec![edn::Value::Integer(x), edn::Value::Text(y.clone())])
                 })
@@ -238,7 +238,7 @@ pub fn datoms_after<S: Borrow<Schema>>(
                 e: EntidOrIdent::Entid(e),
                 a: to_entid(borrowed_schema, a),
                 v: value,
-                tx: tx,
+                tx,
                 added: None,
             }))
         })?
@@ -286,7 +286,7 @@ pub fn transactions_after<S: Borrow<Schema>>(
                 e: EntidOrIdent::Entid(e),
                 a: to_entid(borrowed_schema, a),
                 v: value,
-                tx: tx,
+                tx,
                 added: Some(added),
             })
         })?
@@ -332,12 +332,12 @@ pub fn dump_sql_query(
     let mut stmt: rusqlite::Statement = conn.prepare(sql)?;
 
     let mut tw = TabWriter::new(Vec::new()).padding(2);
-    write!(&mut tw, "{}\n", sql).unwrap();
+    writeln!(&mut tw, "{}", sql).unwrap();
 
     for column_name in stmt.column_names() {
         write!(&mut tw, "{}\t", column_name).unwrap();
     }
-    write!(&mut tw, "\n").unwrap();
+    writeln!(&mut tw).unwrap();
 
     let r: Result<Vec<_>> = stmt
         .query_and_then(params, |row| {
@@ -345,7 +345,7 @@ pub fn dump_sql_query(
                 let value: rusqlite::types::Value = row.get(i)?;
                 write!(&mut tw, "{:?}\t", value).unwrap();
             }
-            write!(&mut tw, "\n").unwrap();
+            writeln!(&mut tw).unwrap();
             Ok(())
         })?
         .collect();
@@ -381,8 +381,9 @@ impl TestConn {
         I: Borrow<str>,
     {
         // Failure to parse the transaction is a coding error, so we unwrap.
-        let entities = edn::parse::entities(transaction.borrow())
-            .expect(format!("to be able to parse {} into entities", transaction.borrow()).as_str());
+        let entities = edn::parse::entities(transaction.borrow()).unwrap_or_else(|_| {
+            panic!("to be able to parse {} into entities", transaction.borrow())
+        });
 
         let details = {
             // The block scopes the borrow of self.sqlite.

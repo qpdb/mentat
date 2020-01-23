@@ -52,7 +52,7 @@ impl Store {
         let mut connection = crate::new_connection(path)?;
         let conn = Conn::connect(&mut connection)?;
         Ok(Store {
-            conn: conn,
+            conn,
             sqlite: connection,
         })
     }
@@ -100,7 +100,7 @@ impl Store {
         let mut connection = crate::new_connection_with_key(path, encryption_key)?;
         let conn = Conn::connect(&mut connection)?;
         Ok(Store {
-            conn: conn,
+            conn,
             sqlite: connection,
         })
     }
