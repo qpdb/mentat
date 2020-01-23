@@ -56,7 +56,7 @@ impl Value {
         I: IntoIterator<Item = &'a Value>,
     {
         let open = open.into();
-        let n = open.len() as isize;
+        let n = open.len();// as isize;
         let i = vs
             .into_iter()
             .map(|v| v.as_doc(allocator))

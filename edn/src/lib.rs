@@ -74,14 +74,6 @@ pub type ParseError = peg::error::ParseError<peg::str::LineCol>;
 
 peg::parser!(pub grammar parse() for str {
 
-    // Clojure (and thus EDN) regards commas as whitespace, and thus the two-element vectors [1 2] and
-    // [1,,,,2] are equivalent, as are the maps {:a 1, :b 2} and {:a 1 :b 2}.
-    rule whitespace() = quiet!{[' ' | '\r' | '\n' | '\t' | ',']}
-    rule comment() = quiet!{";" (!['\r' | '\n'][_])* ['\r' | '\n']?}
-
-    rule __() = whitespace() / comment()*
-
-
     pub rule nil() -> SpannedValue = "nil" { SpannedValue::Nil }
     pub rule nan() -> SpannedValue = "#f" whitespace()+ "NaN" { SpannedValue::Float(OrderedFloat(NAN)) }
 
@@ -123,12 +115,12 @@ peg::parser!(pub grammar parse() for str {
 
     // TODO: standalone characters: \<char>, \newline, \return, \space and \tab.
     // rule string_standalone_chars() ->
-    rule string_special_char() -> &'input str = c:$( "\\" $(['\\' | '"' | 'n' | 't' | 'r']) ) { c }
-    rule string_normal_chars() -> &'input str = c:$(['^' | '"' | '\\' ]+) { c }
+    rule string_special_char() -> &'input str = "\\" c:$(['\\' | '"' | 'n' | 't' | 'r']) { c }
+    rule string_normal_chars() -> &'input str = c:$((!['\"' | '\\'][_])+) { c }
 
     // This is what we need to do in order to unescape. We can't just match the entire string slice:
-    // we get a Vec<&str> from rust-peg, where some of the parts might be unescaped special characters,
-    // and we join it together to form an output string.
+    // we get a Vec<&str> from rust-peg, where some parts might be unescaped special characters and
+    // we join it together to form an output string.
     // E.g., input = r#"\"foo\\\\bar\""#
     //      output = [quote, "foo", backslash, "bar", quote]
     //      result = r#""foo\\bar""#
@@ -239,6 +231,13 @@ peg::parser!(pub grammar parse() for str {
 
     rule atom() -> ValueAndSpan
         = v:value() {? if v.is_atom() { Ok(v) } else { Err("expected atom") } }
+
+    // Clojure (and thus EDN) regards commas as whitespace, and thus the two-element vectors [1 2] and
+    // [1,,,,2] are equivalent, as are the maps {:a 1, :b 2} and {:a 1 :b 2}.
+    rule whitespace() = quiet!{[' ' | '\r' | '\n' | '\t' | ',']}
+    rule comment() = quiet!{";" (!['\r' | '\n'][_])* ['\r' | '\n']?}
+
+    rule __() = (whitespace() / comment())*
 
     // Transaction entity parser starts here.
 
