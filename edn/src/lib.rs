@@ -12,8 +12,8 @@ extern crate chrono;
 extern crate itertools;
 extern crate num;
 extern crate ordered_float;
-extern crate pretty;
 extern crate peg;
+extern crate pretty;
 extern crate uuid;
 
 #[cfg(feature = "serde_support")]
@@ -50,13 +50,11 @@ pub use types::{
 
 pub use symbols::{Keyword, NamespacedSymbol, PlainSymbol};
 
-use std::collections::{BTreeSet, BTreeMap, LinkedList};
+use std::collections::{BTreeMap, BTreeSet, LinkedList};
+use std::f64::{INFINITY, NAN, NEG_INFINITY};
 use std::iter::FromIterator;
-use std::f64::{NAN, INFINITY, NEG_INFINITY};
 
-use chrono::{
-    TimeZone,
-};
+use chrono::TimeZone;
 
 use entities::*;
 use query::FromValue;
@@ -525,4 +523,3 @@ peg::parser!(pub grammar parse() for str {
         / v:variable() { query::Binding::BindScalar(v) }
 
 });
-

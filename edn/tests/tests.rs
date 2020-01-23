@@ -23,7 +23,11 @@ use num::traits::{One, Zero};
 use ordered_float::OrderedFloat;
 
 use chrono::{TimeZone, Utc};
-use edn::{parse, symbols, types::{Span, SpannedValue, Value, ValueAndSpan}, utils, ParseError};
+use edn::{
+    parse, symbols,
+    types::{Span, SpannedValue, Value, ValueAndSpan},
+    utils, ParseError,
+};
 
 // Helper for making wrapped keywords with a namespace.
 fn k_ns(ns: &str, name: &str) -> Value {
