@@ -32,9 +32,8 @@ pub use chrono::{
     Timelike, // For truncation.
 };
 
-pub use edn::{Cloned, FromMicros, FromRc, Keyword, ToMicros, Utc, ValueRc};
-
 pub use edn::parse::parse_query;
+pub use edn::{Cloned, FromMicros, FromRc, Keyword, ToMicros, Utc, ValueRc};
 
 pub use cache::{CachedAttributes, UpdateableCache};
 

@@ -27,7 +27,7 @@ use mentat_transaction::{
     CacheAction, CacheDirection, InProgress, InProgressRead, Pullable, Queryable,
 };
 
-use super::conn::Conn;
+use crate::conn::Conn;
 
 use public_traits::errors::Result;
 
@@ -37,7 +37,7 @@ use mentat_transaction::query::{PreparedResult, QueryExplanation, QueryInputs, Q
 use mentat_tolstoy::{SyncFollowup, SyncReport, SyncResult};
 
 #[cfg(feature = "syncable")]
-use super::sync::Syncable;
+use crate::sync::Syncable;
 
 /// A convenience wrapper around a single SQLite connection and a Conn. This is suitable
 /// for applications that don't require complex connection management.
@@ -97,7 +97,7 @@ impl Store {
     /// supplied. Fails unless linked against sqlcipher (or something else that
     /// supports the Sqlite Encryption Extension).
     pub fn open_with_key(path: &str, encryption_key: &str) -> Result<Store> {
-        let mut connection = ::new_connection_with_key(path, encryption_key)?;
+        let mut connection = crate::new_connection_with_key(path, encryption_key)?;
         let conn = Conn::connect(&mut connection)?;
         Ok(Store {
             conn: conn,
@@ -109,7 +109,7 @@ impl Store {
     /// rekey`). Fails unless linked against sqlcipher (or something else that supports the Sqlite
     /// Encryption Extension).
     pub fn change_encryption_key(&mut self, new_encryption_key: &str) -> Result<()> {
-        ::change_encryption_key(&self.sqlite, new_encryption_key)?;
+        crate::change_encryption_key(&self.sqlite, new_encryption_key)?;
         Ok(())
     }
 }

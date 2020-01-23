@@ -60,7 +60,7 @@ impl Value {
         let i = vs
             .into_iter()
             .map(|v| v.as_doc(allocator))
-            .intersperse(allocator.space());
+            .intersperse(allocator.line());
         allocator
             .text(open)
             .append(allocator.concat(i).nest(n))
@@ -84,8 +84,8 @@ impl Value {
                 let xs = vs
                     .iter()
                     .rev()
-                    .map(|(k, v)| k.as_doc(pp).append(pp.space()).append(v.as_doc(pp)).group())
-                    .intersperse(pp.space());
+                    .map(|(k, v)| k.as_doc(pp).append(pp.line()).append(v.as_doc(pp)).group())
+                    .intersperse(pp.line());
                 pp.text("{")
                     .append(pp.concat(xs).nest(1))
                     .append(pp.text("}"))
