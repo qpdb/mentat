@@ -662,7 +662,7 @@ pub struct AttributeCaches {
     non_unique_reverse: BTreeMap<Entid, NonUniqueReverseAttributeCache>,
 }
 
-// TODO: if an entity or attribute is ever renumbered, the cache will need to be rebuilt.
+// TODO: if an entity or attribute is ever re-numbered, the cache will need to be rebuilt.
 impl AttributeCaches {
     //
     // These function names are brief and local.
