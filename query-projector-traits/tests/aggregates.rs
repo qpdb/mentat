@@ -101,9 +101,9 @@ fn test_the_without_max_or_min() {
     // … when we look at the projection list, we cannot reconcile the types.
     let projection = query_projection(&schema, &algebrized);
     assert!(projection.is_err());
-    use query_projector_traits::errors::ProjectorError;
+    use query_projector_traits::errors::ProjectorErrorKind;
     match projection.err().expect("expected failure") {
-        ProjectorError::InvalidProjection(s) => {
+        ProjectorErrorKind::InvalidProjection(s) => {
             assert_eq!(s.as_str(), "Warning: used `the` without `min` or `max`.");
         }
         _ => panic!(),

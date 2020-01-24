@@ -43,7 +43,7 @@ pub use mentat_query_projector::{
     RelResult,
 };
 
-use public_traits::errors::{MentatError, Result};
+use public_traits::errors::{MentatErrorKind, Result};
 
 pub type QueryExecutionResult = Result<QueryOutput>;
 pub type PreparedResult<'sqlite> = Result<PreparedQuery<'sqlite>>;
@@ -156,7 +156,7 @@ where
     // If they aren't, the user has made an error -- perhaps writing the wrong variable in `:in`, or
     // not binding in the `QueryInput`.
     if !unbound.is_empty() {
-        bail!(MentatError::UnboundVariables(
+        bail!(MentatErrorKind::UnboundVariables(
             unbound.into_iter().map(|v| v.to_string()).collect()
         ));
     }
@@ -198,7 +198,7 @@ fn fetch_values<'sqlite>(
 fn lookup_attribute(schema: &Schema, attribute: &Keyword) -> Result<KnownEntid> {
     schema
         .get_entid(attribute)
-        .ok_or_else(|| MentatError::UnknownAttribute(attribute.name().into()).into())
+        .ok_or_else(|| MentatErrorKind::UnknownAttribute(attribute.name().into()).into())
 }
 
 /// Return a single value for the provided entity and attribute.
@@ -415,7 +415,7 @@ where
     if !unbound.is_empty() {
         // TODO: Allow binding variables at execution time, not just
         // preparation time.
-        bail!(MentatError::UnboundVariables(
+        bail!(MentatErrorKind::UnboundVariables(
             unbound.into_iter().map(|v| v.to_string()).collect()
         ));
     }

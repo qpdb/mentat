@@ -12,7 +12,7 @@ use edn::query::{ContainsVariables, NotJoin, UnifyVars};
 
 use clauses::ConjoiningClauses;
 
-use query_algebrizer_traits::errors::{AlgebrizerError, Result};
+use query_algebrizer_traits::errors::{AlgebrizerErrorKind, Result};
 
 use types::{ColumnConstraint, ComputedTable};
 
@@ -35,7 +35,7 @@ impl ConjoiningClauses {
                 let col = self.column_bindings.get(&v).unwrap()[0].clone();
                 template.column_bindings.insert(v.clone(), vec![col]);
             } else {
-                bail!(AlgebrizerError::UnboundVariable(v.name()));
+                bail!(AlgebrizerErrorKind::UnboundVariable(v.name()));
             }
         }
 
@@ -89,7 +89,7 @@ mod testing {
 
     use clauses::{add_attribute, associate_ident, QueryInputs};
 
-    use query_algebrizer_traits::errors::AlgebrizerError;
+    use query_algebrizer_traits::errors::AlgebrizerErrorKind;
 
     use types::{
         ColumnAlternation, ColumnConstraint, ColumnConstraintOrAlternation, ColumnIntersection,
@@ -714,7 +714,7 @@ mod testing {
         let parsed = parse_find_string(query).expect("parse failed");
         let err = algebrize(known, parsed).expect_err("algebrization should have failed");
         match err {
-            AlgebrizerError::UnboundVariable(var) => {
+            AlgebrizerErrorKind::UnboundVariable(var) => {
                 assert_eq!(var, PlainSymbol("?x".to_string()));
             }
             x => panic!("expected Unbound Variable error, got {:?}", x),

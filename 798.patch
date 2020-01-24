@@ -1,0 +1,2447 @@
+From 4735f56745559867895b2f167932b2afa32d85de Mon Sep 17 00:00:00 2001
+From: Thom Chiovoloni <tchiovoloni@mozilla.com>
+Date: Mon, 23 Jul 2018 16:58:08 -0700
+Subject: [PATCH] Make sure mentat error types preserve failure backtraces
+ (wip)
+
+This adds a lot of boilerplate which could be simplified by macros.
+
+I was planning on cleaning this up before pushing it but here it is!
+---
+ query-algebrizer/src/clauses/convert.rs    |  12 +-
+ query-algebrizer/src/clauses/fulltext.rs   |  34 +++---
+ query-algebrizer/src/clauses/ground.rs     |  26 ++---
+ query-algebrizer/src/clauses/inputs.rs     |   4 +-
+ query-algebrizer/src/clauses/mod.rs        |   4 +-
+ query-algebrizer/src/clauses/not.rs        |  10 +-
+ query-algebrizer/src/clauses/predicate.rs  |  14 +--
+ query-algebrizer/src/clauses/resolve.rs    |  22 ++--
+ query-algebrizer/src/clauses/tx_log_api.rs |  26 ++---
+ query-algebrizer/src/clauses/where_fn.rs   |   4 +-
+ query-algebrizer/src/errors.rs             |  59 +++++++++-
+ query-algebrizer/src/lib.rs                |  13 ++-
+ query-algebrizer/src/validate.rs           |   8 +-
+ query-algebrizer/tests/ground.rs           |  26 ++---
+ query-algebrizer/tests/predicate.rs        |  10 +-
+ query-projector/src/aggregates.rs          |  12 +-
+ query-projector/src/binding_tuple.rs       |  28 ++---
+ query-projector/src/errors.rs              |  76 +++++++++++-
+ query-projector/src/lib.rs                 |  43 ++++---
+ query-projector/src/project.rs             |  22 ++--
+ query-projector/tests/aggregates.rs        |   6 +-
+ query-pull/src/errors.rs                   |  58 +++++++++-
+ query-pull/src/lib.rs                      |   5 +-
+ query-translator/src/lib.rs                |   3 +-
+ sql/src/lib.rs                             |  57 ++++++++-
+ src/conn.rs                                |  47 +++++---
+ src/entity_builder.rs                      |   6 +-
+ src/errors.rs                              | 127 +++++++++++++++++++--
+ src/lib.rs                                 |   1 +
+ src/query.rs                               |   8 +-
+ src/query_builder.rs                       |   4 +-
+ src/store.rs                               |   6 +-
+ src/vocabulary.rs                          |  20 ++--
+ tests/query.rs                             |  75 +++++++-----
+ tests/vocabulary.rs                        |  12 +-
+ tools/cli/src/mentat_cli/repl.rs           |   2 +-
+ 36 files changed, 636 insertions(+), 254 deletions(-)
+
+diff --git a/query-algebrizer/src/clauses/convert.rs b/query-algebrizer/src/clauses/convert.rs
+index f4a1ad93d..7e6d697a3 100644
+--- a/query-algebrizer/src/clauses/convert.rs
++++ b/query-algebrizer/src/clauses/convert.rs
+@@ -28,7 +28,7 @@ use clauses::{
+ };
+ 
+ use errors::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     Result,
+ };
+ 
+@@ -80,12 +80,12 @@ impl ValueTypes for FnArg {
+ 
+                 &FnArg::Constant(NonIntegerConstant::BigInteger(_)) => {
+                     // Not yet implemented.
+-                    bail!(AlgebrizerError::UnsupportedArgument)
++                    bail!(AlgebrizerErrorKind::UnsupportedArgument)
+                 },
+ 
+                 // These don't make sense here. TODO: split FnArg into scalar and non-scalar…
+                 &FnArg::Vector(_) |
+-                &FnArg::SrcVar(_) => bail!(AlgebrizerError::UnsupportedArgument),
++                &FnArg::SrcVar(_) => bail!(AlgebrizerErrorKind::UnsupportedArgument),
+ 
+                 // These are all straightforward.
+                 &FnArg::Constant(NonIntegerConstant::Boolean(_)) => ValueTypeSet::of_one(ValueType::Boolean),
+@@ -196,7 +196,7 @@ impl ConjoiningClauses {
+             FnArg::Variable(in_var) => {
+                 // TODO: technically you could ground an existing variable inside the query….
+                 if !self.input_variables.contains(&in_var) {
+-                    bail!(AlgebrizerError::UnboundVariable((*in_var.0).clone()))
++                    bail!(AlgebrizerErrorKind::UnboundVariable((*in_var.0).clone()))
+                 }
+                 match self.bound_value(&in_var) {
+                     // The type is already known if it's a bound variable….
+@@ -205,7 +205,7 @@ impl ConjoiningClauses {
+                         // The variable is present in `:in`, but it hasn't yet been provided.
+                         // This is a restriction we will eventually relax: we don't yet have a way
+                         // to collect variables as part of a computed table or substitution.
+-                        bail!(AlgebrizerError::UnboundVariable((*in_var.0).clone()))
++                        bail!(AlgebrizerErrorKind::UnboundVariable((*in_var.0).clone()))
+                     },
+                 }
+             },
+@@ -215,7 +215,7 @@ impl ConjoiningClauses {
+ 
+             // These don't make sense here.
+             FnArg::Vector(_) |
+-            FnArg::SrcVar(_) => bail!(AlgebrizerError::InvalidGroundConstant),
++            FnArg::SrcVar(_) => bail!(AlgebrizerErrorKind::InvalidGroundConstant),
+ 
+             // These are all straightforward.
+             FnArg::Constant(NonIntegerConstant::Boolean(x)) => {
+diff --git a/query-algebrizer/src/clauses/fulltext.rs b/query-algebrizer/src/clauses/fulltext.rs
+index 6f5159f43..16231d418 100644
+--- a/query-algebrizer/src/clauses/fulltext.rs
++++ b/query-algebrizer/src/clauses/fulltext.rs
+@@ -30,7 +30,7 @@ use clauses::{
+ };
+ 
+ use errors::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     BindingError,
+     Result,
+ };
+@@ -53,17 +53,17 @@ impl ConjoiningClauses {
+     #[allow(unused_variables)]
+     pub(crate) fn apply_fulltext(&mut self, known: Known, where_fn: WhereFn) -> Result<()> {
+         if where_fn.args.len() != 3 {
+-            bail!(AlgebrizerError::InvalidNumberOfArguments(where_fn.operator.clone(), where_fn.args.len(), 3));
++            bail!(AlgebrizerErrorKind::InvalidNumberOfArguments(where_fn.operator.clone(), where_fn.args.len(), 3));
+         }
+ 
+         if where_fn.binding.is_empty() {
+             // The binding must introduce at least one bound variable.
+-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::NoBoundVariable));
++            bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(), BindingError::NoBoundVariable));
+         }
+ 
+         if !where_fn.binding.is_valid() {
+             // The binding must not duplicate bound variables.
+-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::RepeatedBoundVariable));
++            bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(), BindingError::RepeatedBoundVariable));
+         }
+ 
+         // We should have exactly four bindings. Destructure them now.
+@@ -71,7 +71,7 @@ impl ConjoiningClauses {
+             Binding::BindRel(bindings) => {
+                 let bindings_count = bindings.len();
+                 if bindings_count < 1 || bindings_count > 4 {
+-                    bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(),
++                    bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(),
+                         BindingError::InvalidNumberOfBindings {
+                             number: bindings.len(),
+                             expected: 4,
+@@ -82,7 +82,7 @@ impl ConjoiningClauses {
+             },
+             Binding::BindScalar(_) |
+             Binding::BindTuple(_) |
+-            Binding::BindColl(_) => bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::ExpectedBindRel)),
++            Binding::BindColl(_) => bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(), BindingError::ExpectedBindRel)),
+         };
+         let mut bindings = bindings.into_iter();
+         let b_entity = bindings.next().unwrap();
+@@ -95,7 +95,7 @@ impl ConjoiningClauses {
+         // TODO: process source variables.
+         match args.next().unwrap() {
+             FnArg::SrcVar(SrcVar::DefaultSrc) => {},
+-            _ => bail!(AlgebrizerError::InvalidArgument(where_fn.operator.clone(), "source variable", 0)),
++            _ => bail!(AlgebrizerErrorKind::InvalidArgument(where_fn.operator.clone(), "source variable", 0)),
+         }
+ 
+         let schema = known.schema;
+@@ -115,10 +115,10 @@ impl ConjoiningClauses {
+                 match self.bound_value(&v) {
+                     Some(TypedValue::Ref(entid)) => Some(entid),
+                     Some(tv) => {
+-                        bail!(AlgebrizerError::InputTypeDisagreement(v.name().clone(), ValueType::Ref, tv.value_type()))
++                        bail!(AlgebrizerErrorKind::InputTypeDisagreement(v.name().clone(), ValueType::Ref, tv.value_type()))
+                     },
+                     None => {
+-                        bail!(AlgebrizerError::UnboundVariable((*v.0).clone()))
++                        bail!(AlgebrizerErrorKind::UnboundVariable((*v.0).clone()))
+                     }
+                 }
+             },
+@@ -128,10 +128,10 @@ impl ConjoiningClauses {
+         // An unknown ident, or an entity that isn't present in the store, or isn't a fulltext
+         // attribute, is likely enough to be a coding error that we choose to bail instead of
+         // marking the pattern as known-empty.
+-        let a = a.ok_or(AlgebrizerError::InvalidArgument(where_fn.operator.clone(), "attribute", 1))?;
++        let a = a.ok_or(AlgebrizerErrorKind::InvalidArgument(where_fn.operator.clone(), "attribute", 1))?;
+         let attribute = schema.attribute_for_entid(a)
+                               .cloned()
+-                              .ok_or(AlgebrizerError::InvalidArgument(where_fn.operator.clone(),
++                              .ok_or(AlgebrizerErrorKind::InvalidArgument(where_fn.operator.clone(),
+                                                                 "attribute", 1))?;
+ 
+         if !attribute.fulltext {
+@@ -170,18 +170,18 @@ impl ConjoiningClauses {
+             FnArg::Variable(in_var) => {
+                 match self.bound_value(&in_var) {
+                     Some(t @ TypedValue::String(_)) => Either::Left(t),
+-                    Some(_) => bail!(AlgebrizerError::InvalidArgument(where_fn.operator.clone(), "string", 2)),
++                    Some(_) => bail!(AlgebrizerErrorKind::InvalidArgument(where_fn.operator.clone(), "string", 2)),
+                     None => {
+                         // Regardless of whether we'll be providing a string later, or the value
+                         // comes from a column, it must be a string.
+                         if self.known_type(&in_var) != Some(ValueType::String) {
+-                            bail!(AlgebrizerError::InvalidArgument(where_fn.operator.clone(), "string", 2))
++                            bail!(AlgebrizerErrorKind::InvalidArgument(where_fn.operator.clone(), "string", 2))
+                         }
+ 
+                         if self.input_variables.contains(&in_var) {
+                             // Sorry, we haven't implemented late binding.
+                             // TODO: implement this.
+-                            bail!(AlgebrizerError::UnboundVariable((*in_var.0).clone()))
++                            bail!(AlgebrizerErrorKind::UnboundVariable((*in_var.0).clone()))
+                         } else {
+                             // It must be bound earlier in the query. We already established that
+                             // it must be a string column.
+@@ -190,13 +190,13 @@ impl ConjoiningClauses {
+                                                        .and_then(|bindings| bindings.get(0).cloned()) {
+                                 Either::Right(binding)
+                             } else {
+-                                bail!(AlgebrizerError::UnboundVariable((*in_var.0).clone()))
++                                bail!(AlgebrizerErrorKind::UnboundVariable((*in_var.0).clone()))
+                             }
+                         }
+                     },
+                 }
+             },
+-            _ => bail!(AlgebrizerError::InvalidArgument(where_fn.operator.clone(), "string", 2)),
++            _ => bail!(AlgebrizerErrorKind::InvalidArgument(where_fn.operator.clone(), "string", 2)),
+         };
+ 
+         let qv = match search {
+@@ -245,7 +245,7 @@ impl ConjoiningClauses {
+ 
+             // We do not allow the score to be bound.
+             if self.value_bindings.contains_key(var) || self.input_variables.contains(var) {
+-                bail!(AlgebrizerError::InvalidBinding(var.name(), BindingError::UnexpectedBinding));
++                bail!(AlgebrizerErrorKind::InvalidBinding(var.name(), BindingError::UnexpectedBinding));
+             }
+ 
+             // We bind the value ourselves. This handily takes care of substituting into existing uses.
+diff --git a/query-algebrizer/src/clauses/ground.rs b/query-algebrizer/src/clauses/ground.rs
+index 2e18ef7e5..cab2923b3 100644
+--- a/query-algebrizer/src/clauses/ground.rs
++++ b/query-algebrizer/src/clauses/ground.rs
+@@ -31,7 +31,7 @@ use clauses::{
+ use clauses::convert::ValueConversion;
+ 
+ use errors::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     BindingError,
+     Result,
+ };
+@@ -117,19 +117,19 @@ impl ConjoiningClauses {
+ 
+     pub(crate) fn apply_ground(&mut self, known: Known, where_fn: WhereFn) -> Result<()> {
+         if where_fn.args.len() != 1 {
+-            bail!(AlgebrizerError::InvalidNumberOfArguments(where_fn.operator.clone(), where_fn.args.len(), 1));
++            bail!(AlgebrizerErrorKind::InvalidNumberOfArguments(where_fn.operator.clone(), where_fn.args.len(), 1));
+         }
+ 
+         let mut args = where_fn.args.into_iter();
+ 
+         if where_fn.binding.is_empty() {
+             // The binding must introduce at least one bound variable.
+-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::NoBoundVariable));
++            bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(), BindingError::NoBoundVariable));
+         }
+ 
+         if !where_fn.binding.is_valid() {
+             // The binding must not duplicate bound variables.
+-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::RepeatedBoundVariable));
++            bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(), BindingError::RepeatedBoundVariable));
+         }
+ 
+         let schema = known.schema;
+@@ -145,7 +145,7 @@ impl ConjoiningClauses {
+                 // Just the same, but we bind more than one column at a time.
+                 if children.len() != places.len() {
+                     // Number of arguments don't match the number of values. TODO: better error message.
+-                    bail!(AlgebrizerError::GroundBindingsMismatch)
++                    bail!(AlgebrizerErrorKind::GroundBindingsMismatch)
+                 }
+                 for (place, arg) in places.into_iter().zip(children.into_iter()) {
+                     self.apply_ground_place(schema, place, arg)?  // TODO: short-circuit on impossible.
+@@ -159,7 +159,7 @@ impl ConjoiningClauses {
+             // are all in a single structure. That makes it substantially simpler!
+             (Binding::BindColl(var), FnArg::Vector(children)) => {
+                 if children.is_empty() {
+-                    bail!(AlgebrizerError::InvalidGroundConstant)
++                    bail!(AlgebrizerErrorKind::InvalidGroundConstant)
+                 }
+ 
+                 // Turn a collection of arguments into a Vec of `TypedValue`s of the same type.
+@@ -177,7 +177,7 @@ impl ConjoiningClauses {
+                                                  if accumulated_types.insert(tv.value_type()) &&
+                                                     !accumulated_types.is_unit() {
+                                                      // Values not all of the same type.
+-                                                     Some(Err(AlgebrizerError::InvalidGroundConstant.into()))
++                                                     Some(Err(AlgebrizerErrorKind::InvalidGroundConstant.into()))
+                                                  } else {
+                                                      Some(Ok(tv))
+                                                  }
+@@ -208,7 +208,7 @@ impl ConjoiningClauses {
+ 
+             (Binding::BindRel(places), FnArg::Vector(rows)) => {
+                 if rows.is_empty() {
+-                    bail!(AlgebrizerError::InvalidGroundConstant)
++                    bail!(AlgebrizerErrorKind::InvalidGroundConstant)
+                 }
+ 
+                 // Grab the known types to which these args must conform, and track
+@@ -229,7 +229,7 @@ impl ConjoiningClauses {
+ 
+                 if expected_width == 0 {
+                     // They can't all be placeholders.
+-                    bail!(AlgebrizerError::InvalidGroundConstant)
++                    bail!(AlgebrizerErrorKind::InvalidGroundConstant)
+                 }
+ 
+                 // Accumulate values into `matrix` and types into `a_t_f_c`.
+@@ -245,7 +245,7 @@ impl ConjoiningClauses {
+                         FnArg::Vector(cols) => {
+                             // Make sure that every row is the same length.
+                             if cols.len() != full_width {
+-                                bail!(AlgebrizerError::InvalidGroundConstant)
++                                bail!(AlgebrizerErrorKind::InvalidGroundConstant)
+                             }
+ 
+                             // TODO: don't accumulate twice.
+@@ -280,13 +280,13 @@ impl ConjoiningClauses {
+                                 let inserted = acc.insert(val.value_type());
+                                 if inserted && !acc.is_unit() {
+                                     // Heterogeneous types.
+-                                    bail!(AlgebrizerError::InvalidGroundConstant)
++                                    bail!(AlgebrizerErrorKind::InvalidGroundConstant)
+                                 }
+                                 matrix.push(val);
+                             }
+ 
+                         },
+-                        _ => bail!(AlgebrizerError::InvalidGroundConstant),
++                        _ => bail!(AlgebrizerErrorKind::InvalidGroundConstant),
+                     }
+                 }
+ 
+@@ -312,7 +312,7 @@ impl ConjoiningClauses {
+                 self.collect_named_bindings(schema, names, types, matrix);
+                 Ok(())
+             },
+-            (_, _) => bail!(AlgebrizerError::InvalidGroundConstant),
++            (_, _) => bail!(AlgebrizerErrorKind::InvalidGroundConstant),
+         }
+     }
+ }
+diff --git a/query-algebrizer/src/clauses/inputs.rs b/query-algebrizer/src/clauses/inputs.rs
+index 35c4371de..18cf4069b 100644
+--- a/query-algebrizer/src/clauses/inputs.rs
++++ b/query-algebrizer/src/clauses/inputs.rs
+@@ -20,7 +20,7 @@ use mentat_query::{
+ };
+ 
+ use errors::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     Result,
+ };
+ 
+@@ -72,7 +72,7 @@ impl QueryInputs {
+             let old = types.insert(var.clone(), t);
+             if let Some(old) = old {
+                 if old != t {
+-                    bail!(AlgebrizerError::InputTypeDisagreement(var.name(), old, t));
++                    bail!(AlgebrizerErrorKind::InputTypeDisagreement(var.name(), old, t));
+                 }
+             }
+         }
+diff --git a/query-algebrizer/src/clauses/mod.rs b/query-algebrizer/src/clauses/mod.rs
+index 2fca66b02..dc73d2113 100644
+--- a/query-algebrizer/src/clauses/mod.rs
++++ b/query-algebrizer/src/clauses/mod.rs
+@@ -53,7 +53,7 @@ use mentat_query::{
+ };
+ 
+ use errors::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     Result,
+ };
+ 
+@@ -1013,7 +1013,7 @@ impl ConjoiningClauses {
+ 
+             let qa = self.extracted_types
+                          .get(&var)
+-                         .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()))?;
++                         .ok_or_else(|| AlgebrizerErrorKind::UnboundVariable(var.name()))?;
+             self.wheres.add_intersection(ColumnConstraint::HasTypes {
+                 value: qa.0.clone(),
+                 value_types: types,
+diff --git a/query-algebrizer/src/clauses/not.rs b/query-algebrizer/src/clauses/not.rs
+index 7330342ff..eca47dfa9 100644
+--- a/query-algebrizer/src/clauses/not.rs
++++ b/query-algebrizer/src/clauses/not.rs
+@@ -17,7 +17,7 @@ use mentat_query::{
+ use clauses::ConjoiningClauses;
+ 
+ use errors::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     Result,
+ };
+ 
+@@ -45,7 +45,7 @@ impl ConjoiningClauses {
+                 let col = self.column_bindings.get(&v).unwrap()[0].clone();
+                 template.column_bindings.insert(v.clone(), vec![col]);
+             } else {
+-                bail!(AlgebrizerError::UnboundVariable(v.name()));
++                bail!(AlgebrizerErrorKind::UnboundVariable(v.name()));
+             }
+         }
+ 
+@@ -111,7 +111,7 @@ mod testing {
+     };
+ 
+     use errors::{
+-        AlgebrizerError,
++        AlgebrizerErrorKind,
+     };
+ 
+     use types::{
+@@ -553,8 +553,8 @@ mod testing {
+          :where (not [?x :foo/knows ?y])]"#;
+         let parsed = parse_find_string(query).expect("parse failed");
+         let err = algebrize(known, parsed).expect_err("algebrization should have failed");
+-        match err {
+-            AlgebrizerError::UnboundVariable(var) => { assert_eq!(var, PlainSymbol("?x".to_string())); },
++        match err.kind() {
++            &AlgebrizerErrorKind::UnboundVariable(ref var) => { assert_eq!(var, &PlainSymbol("?x".to_string())); },
+             x => panic!("expected Unbound Variable error, got {:?}", x),
+         }
+     }
+diff --git a/query-algebrizer/src/clauses/predicate.rs b/query-algebrizer/src/clauses/predicate.rs
+index e58ecf7f2..d090783f0 100644
+--- a/query-algebrizer/src/clauses/predicate.rs
++++ b/query-algebrizer/src/clauses/predicate.rs
+@@ -26,7 +26,7 @@ use clauses::ConjoiningClauses;
+ use clauses::convert::ValueTypes;
+ 
+ use errors::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     Result,
+ };
+ 
+@@ -53,7 +53,7 @@ impl ConjoiningClauses {
+         if let Some(op) = Inequality::from_datalog_operator(predicate.operator.0.as_str()) {
+             self.apply_inequality(known, op, predicate)
+         } else {
+-            bail!(AlgebrizerError::UnknownFunction(predicate.operator.clone()))
++            bail!(AlgebrizerErrorKind::UnknownFunction(predicate.operator.clone()))
+         }
+     }
+ 
+@@ -69,7 +69,7 @@ impl ConjoiningClauses {
+     pub(crate) fn apply_type_anno(&mut self, anno: &TypeAnnotation) -> Result<()> {
+         match ValueType::from_keyword(&anno.value_type) {
+             Some(value_type) => self.add_type_requirement(anno.variable.clone(), ValueTypeSet::of_one(value_type)),
+-            None => bail!(AlgebrizerError::InvalidArgumentType(PlainSymbol::plain("type"), ValueTypeSet::any(), 2)),
++            None => bail!(AlgebrizerErrorKind::InvalidArgumentType(PlainSymbol::plain("type"), ValueTypeSet::any(), 2)),
+         }
+         Ok(())
+     }
+@@ -80,7 +80,7 @@ impl ConjoiningClauses {
+     /// - Accumulates an `Inequality` constraint into the `wheres` list.
+     pub(crate) fn apply_inequality(&mut self, known: Known, comparison: Inequality, predicate: Predicate) -> Result<()> {
+         if predicate.args.len() != 2 {
+-            bail!(AlgebrizerError::InvalidNumberOfArguments(predicate.operator.clone(), predicate.args.len(), 2));
++            bail!(AlgebrizerErrorKind::InvalidNumberOfArguments(predicate.operator.clone(), predicate.args.len(), 2));
+         }
+ 
+         // Go from arguments -- parser output -- to columns or values.
+@@ -97,13 +97,13 @@ impl ConjoiningClauses {
+         let mut left_types = self.potential_types(known.schema, &left)?
+                                  .intersection(&supported_types);
+         if left_types.is_empty() {
+-            bail!(AlgebrizerError::InvalidArgumentType(predicate.operator.clone(), supported_types, 0));
++            bail!(AlgebrizerErrorKind::InvalidArgumentType(predicate.operator.clone(), supported_types, 0));
+         }
+ 
+         let mut right_types = self.potential_types(known.schema, &right)?
+                                   .intersection(&supported_types);
+         if right_types.is_empty() {
+-            bail!(AlgebrizerError::InvalidArgumentType(predicate.operator.clone(), supported_types, 1));
++            bail!(AlgebrizerErrorKind::InvalidArgumentType(predicate.operator.clone(), supported_types, 1));
+         }
+ 
+         // We would like to allow longs to compare to doubles.
+@@ -150,7 +150,7 @@ impl ConjoiningClauses {
+             left_v = self.resolve_ref_argument(known.schema, &predicate.operator, 0, left)?;
+             right_v = self.resolve_ref_argument(known.schema, &predicate.operator, 1, right)?;
+         } else {
+-            bail!(AlgebrizerError::InvalidArgumentType(predicate.operator.clone(), supported_types, 0));
++            bail!(AlgebrizerErrorKind::InvalidArgumentType(predicate.operator.clone(), supported_types, 0));
+         }
+ 
+         // These arguments must be variables or instant/numeric constants.
+diff --git a/query-algebrizer/src/clauses/resolve.rs b/query-algebrizer/src/clauses/resolve.rs
+index 87a18cf37..e772cd00f 100644
+--- a/query-algebrizer/src/clauses/resolve.rs
++++ b/query-algebrizer/src/clauses/resolve.rs
+@@ -24,7 +24,7 @@ use mentat_query::{
+ use clauses::ConjoiningClauses;
+ 
+ use errors::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     Result,
+ };
+ 
+@@ -49,14 +49,14 @@ impl ConjoiningClauses {
+                     if v.value_type().is_numeric() {
+                         Ok(QueryValue::TypedValue(v))
+                     } else {
+-                        bail!(AlgebrizerError::InputTypeDisagreement(var.name().clone(), ValueType::Long, v.value_type()))
++                        bail!(AlgebrizerErrorKind::InputTypeDisagreement(var.name().clone(), ValueType::Long, v.value_type()))
+                     }
+                 } else {
+                     self.constrain_var_to_numeric(var.clone());
+                     self.column_bindings
+                         .get(&var)
+                         .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
+-                        .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into())
++                        .ok_or_else(|| AlgebrizerErrorKind::UnboundVariable(var.name()).into())
+                 }
+             },
+             // Can't be an entid.
+@@ -70,7 +70,7 @@ impl ConjoiningClauses {
+             Constant(NonIntegerConstant::BigInteger(_)) |
+             Vector(_) => {
+                 self.mark_known_empty(EmptyBecause::NonNumericArgument);
+-                bail!(AlgebrizerError::InvalidArgument(function.clone(), "numeric", position))
++                bail!(AlgebrizerErrorKind::InvalidArgument(function.clone(), "numeric", position))
+             },
+             Constant(NonIntegerConstant::Float(f)) => Ok(QueryValue::TypedValue(TypedValue::Double(f))),
+         }
+@@ -83,13 +83,13 @@ impl ConjoiningClauses {
+             FnArg::Variable(var) => {
+                 match self.bound_value(&var) {
+                     Some(TypedValue::Instant(v)) => Ok(QueryValue::TypedValue(TypedValue::Instant(v))),
+-                    Some(v) => bail!(AlgebrizerError::InputTypeDisagreement(var.name().clone(), ValueType::Instant, v.value_type())),
++                    Some(v) => bail!(AlgebrizerErrorKind::InputTypeDisagreement(var.name().clone(), ValueType::Instant, v.value_type())),
+                     None => {
+                         self.constrain_var_to_type(var.clone(), ValueType::Instant);
+                         self.column_bindings
+                             .get(&var)
+                             .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
+-                            .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into())
++                            .ok_or_else(|| AlgebrizerErrorKind::UnboundVariable(var.name()).into())
+                     },
+                 }
+             },
+@@ -108,7 +108,7 @@ impl ConjoiningClauses {
+             Constant(NonIntegerConstant::BigInteger(_)) |
+             Vector(_) => {
+                 self.mark_known_empty(EmptyBecause::NonInstantArgument);
+-                bail!(AlgebrizerError::InvalidArgumentType(function.clone(), ValueType::Instant.into(), position))
++                bail!(AlgebrizerErrorKind::InvalidArgumentType(function.clone(), ValueType::Instant.into(), position))
+             },
+         }
+     }
+@@ -127,14 +127,14 @@ impl ConjoiningClauses {
+                     self.column_bindings
+                         .get(&var)
+                         .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
+-                        .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into())
++                        .ok_or_else(|| AlgebrizerErrorKind::UnboundVariable(var.name()).into())
+                 }
+             },
+             EntidOrInteger(i) => Ok(QueryValue::TypedValue(TypedValue::Ref(i))),
+             IdentOrKeyword(i) => {
+                 schema.get_entid(&i)
+                       .map(|known_entid| QueryValue::Entid(known_entid.into()))
+-                      .ok_or_else(|| AlgebrizerError::UnrecognizedIdent(i.to_string()).into())
++                      .ok_or_else(|| AlgebrizerErrorKind::UnrecognizedIdent(i.to_string()).into())
+             },
+             Constant(NonIntegerConstant::Boolean(_)) |
+             Constant(NonIntegerConstant::Float(_)) |
+@@ -145,7 +145,7 @@ impl ConjoiningClauses {
+             SrcVar(_) |
+             Vector(_) => {
+                 self.mark_known_empty(EmptyBecause::NonEntityArgument);
+-                bail!(AlgebrizerError::InvalidArgumentType(function.clone(), ValueType::Ref.into(), position))
++                bail!(AlgebrizerErrorKind::InvalidArgumentType(function.clone(), ValueType::Ref.into(), position))
+             },
+ 
+         }
+@@ -172,7 +172,7 @@ impl ConjoiningClauses {
+                         self.column_bindings
+                             .get(&var)
+                             .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
+-                            .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into())
++                            .ok_or_else(|| AlgebrizerErrorKind::UnboundVariable(var.name()).into())
+                     },
+                 }
+             },
+diff --git a/query-algebrizer/src/clauses/tx_log_api.rs b/query-algebrizer/src/clauses/tx_log_api.rs
+index 9c487be89..d1ab15af8 100644
+--- a/query-algebrizer/src/clauses/tx_log_api.rs
++++ b/query-algebrizer/src/clauses/tx_log_api.rs
+@@ -25,7 +25,7 @@ use clauses::{
+ };
+ 
+ use errors::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     BindingError,
+     Result,
+ };
+@@ -60,17 +60,17 @@ impl ConjoiningClauses {
+     // transactions that impact one of the given attributes.
+     pub(crate) fn apply_tx_ids(&mut self, known: Known, where_fn: WhereFn) -> Result<()> {
+         if where_fn.args.len() != 3 {
+-            bail!(AlgebrizerError::InvalidNumberOfArguments(where_fn.operator.clone(), where_fn.args.len(), 3));
++            bail!(AlgebrizerErrorKind::InvalidNumberOfArguments(where_fn.operator.clone(), where_fn.args.len(), 3));
+         }
+ 
+         if where_fn.binding.is_empty() {
+             // The binding must introduce at least one bound variable.
+-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::NoBoundVariable));
++            bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(), BindingError::NoBoundVariable));
+         }
+ 
+         if !where_fn.binding.is_valid() {
+             // The binding must not duplicate bound variables.
+-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::RepeatedBoundVariable));
++            bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(), BindingError::RepeatedBoundVariable));
+         }
+ 
+         // We should have exactly one binding. Destructure it now.
+@@ -78,7 +78,7 @@ impl ConjoiningClauses {
+             Binding::BindRel(bindings) => {
+                 let bindings_count = bindings.len();
+                 if bindings_count != 1 {
+-                    bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(),
++                    bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(),
+                                                     BindingError::InvalidNumberOfBindings {
+                                                         number: bindings_count,
+                                                         expected: 1,
+@@ -92,7 +92,7 @@ impl ConjoiningClauses {
+             Binding::BindColl(v) => v,
+             Binding::BindScalar(_) |
+             Binding::BindTuple(_) => {
+-                bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::ExpectedBindRelOrBindColl))
++                bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(), BindingError::ExpectedBindRelOrBindColl))
+             },
+         };
+ 
+@@ -101,7 +101,7 @@ impl ConjoiningClauses {
+         // TODO: process source variables.
+         match args.next().unwrap() {
+             FnArg::SrcVar(SrcVar::DefaultSrc) => {},
+-            _ => bail!(AlgebrizerError::InvalidArgument(where_fn.operator.clone(), "source variable", 0)),
++            _ => bail!(AlgebrizerErrorKind::InvalidArgument(where_fn.operator.clone(), "source variable", 0)),
+         }
+ 
+         let tx1 = self.resolve_tx_argument(&known.schema, &where_fn.operator, 1, args.next().unwrap())?;
+@@ -138,17 +138,17 @@ impl ConjoiningClauses {
+ 
+     pub(crate) fn apply_tx_data(&mut self, known: Known, where_fn: WhereFn) -> Result<()> {
+         if where_fn.args.len() != 2 {
+-            bail!(AlgebrizerError::InvalidNumberOfArguments(where_fn.operator.clone(), where_fn.args.len(), 2));
++            bail!(AlgebrizerErrorKind::InvalidNumberOfArguments(where_fn.operator.clone(), where_fn.args.len(), 2));
+         }
+ 
+         if where_fn.binding.is_empty() {
+             // The binding must introduce at least one bound variable.
+-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::NoBoundVariable));
++            bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(), BindingError::NoBoundVariable));
+         }
+ 
+         if !where_fn.binding.is_valid() {
+             // The binding must not duplicate bound variables.
+-            bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::RepeatedBoundVariable));
++            bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(), BindingError::RepeatedBoundVariable));
+         }
+ 
+         // We should have at most five bindings. Destructure them now.
+@@ -156,7 +156,7 @@ impl ConjoiningClauses {
+             Binding::BindRel(bindings) => {
+                 let bindings_count = bindings.len();
+                 if bindings_count < 1 || bindings_count > 5 {
+-                    bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(),
++                    bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(),
+                                                     BindingError::InvalidNumberOfBindings {
+                                                         number: bindings.len(),
+                                                         expected: 5,
+@@ -166,7 +166,7 @@ impl ConjoiningClauses {
+             },
+             Binding::BindScalar(_) |
+             Binding::BindTuple(_) |
+-            Binding::BindColl(_) => bail!(AlgebrizerError::InvalidBinding(where_fn.operator.clone(), BindingError::ExpectedBindRel)),
++            Binding::BindColl(_) => bail!(AlgebrizerErrorKind::InvalidBinding(where_fn.operator.clone(), BindingError::ExpectedBindRel)),
+         };
+         let mut bindings = bindings.into_iter();
+         let b_e = bindings.next().unwrap_or(VariableOrPlaceholder::Placeholder);
+@@ -180,7 +180,7 @@ impl ConjoiningClauses {
+         // TODO: process source variables.
+         match args.next().unwrap() {
+             FnArg::SrcVar(SrcVar::DefaultSrc) => {},
+-            _ => bail!(AlgebrizerError::InvalidArgument(where_fn.operator.clone(), "source variable", 0)),
++            _ => bail!(AlgebrizerErrorKind::InvalidArgument(where_fn.operator.clone(), "source variable", 0)),
+         }
+ 
+         let tx = self.resolve_tx_argument(&known.schema, &where_fn.operator, 1, args.next().unwrap())?;
+diff --git a/query-algebrizer/src/clauses/where_fn.rs b/query-algebrizer/src/clauses/where_fn.rs
+index 845a6a644..7ec7682e1 100644
+--- a/query-algebrizer/src/clauses/where_fn.rs
++++ b/query-algebrizer/src/clauses/where_fn.rs
+@@ -17,7 +17,7 @@ use clauses::{
+ };
+ 
+ use errors::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     Result,
+ };
+ 
+@@ -39,7 +39,7 @@ impl ConjoiningClauses {
+             "ground" => self.apply_ground(known, where_fn),
+             "tx-data" => self.apply_tx_data(known, where_fn),
+             "tx-ids" => self.apply_tx_ids(known, where_fn),
+-            _ => bail!(AlgebrizerError::UnknownFunction(where_fn.operator.clone())),
++            _ => bail!(AlgebrizerErrorKind::UnknownFunction(where_fn.operator.clone())),
+         }
+     }
+ }
+diff --git a/query-algebrizer/src/errors.rs b/query-algebrizer/src/errors.rs
+index 20f0979a5..6b4703ebd 100644
+--- a/query-algebrizer/src/errors.rs
++++ b/query-algebrizer/src/errors.rs
+@@ -21,6 +21,12 @@ use mentat_core::{
+ use self::mentat_query::{
+     PlainSymbol,
+ };
++use std::fmt;
++use failure::{
++    Backtrace,
++    Context,
++    Fail,
++};
+ 
+ pub type Result<T> = std::result::Result<T, AlgebrizerError>;
+ 
+@@ -31,6 +37,49 @@ macro_rules! bail {
+     )
+ }
+ 
++#[derive(Debug)]
++pub struct AlgebrizerError(Box<Context<AlgebrizerErrorKind>>);
++
++impl Fail for AlgebrizerError {
++    #[inline]
++    fn cause(&self) -> Option<&Fail> {
++        self.0.cause()
++    }
++
++    #[inline]
++    fn backtrace(&self) -> Option<&Backtrace> {
++        self.0.backtrace()
++    }
++}
++
++impl fmt::Display for AlgebrizerError {
++    #[inline]
++    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
++        fmt::Display::fmt(&*self.0, f)
++    }
++}
++
++impl AlgebrizerError {
++    #[inline]
++    pub fn kind(&self) -> &AlgebrizerErrorKind {
++        &*self.0.get_context()
++    }
++}
++
++impl From<AlgebrizerErrorKind> for AlgebrizerError {
++    #[inline]
++    fn from(kind: AlgebrizerErrorKind) -> AlgebrizerError {
++        AlgebrizerError(Box::new(Context::new(kind)))
++    }
++}
++
++impl From<Context<AlgebrizerErrorKind>> for AlgebrizerError {
++    #[inline]
++    fn from(inner: Context<AlgebrizerErrorKind>) -> AlgebrizerError {
++        AlgebrizerError(Box::new(inner))
++    }
++}
++
+ #[derive(Clone, Debug, Eq, PartialEq)]
+ pub enum BindingError {
+     NoBoundVariable,
+@@ -52,7 +101,7 @@ pub enum BindingError {
+ }
+ 
+ #[derive(Clone, Debug, Eq, Fail, PartialEq)]
+-pub enum AlgebrizerError {
++pub enum AlgebrizerErrorKind {
+     #[fail(display = "{} var {} is duplicated", _0, _1)]
+     DuplicateVariableError(PlainSymbol, &'static str),
+ 
+@@ -107,8 +156,14 @@ pub enum AlgebrizerError {
+     EdnParseError(#[cause] EdnParseError),
+ }
+ 
++impl From<EdnParseError> for AlgebrizerErrorKind {
++    fn from(error: EdnParseError) -> AlgebrizerErrorKind {
++        AlgebrizerErrorKind::EdnParseError(error)
++    }
++}
++
+ impl From<EdnParseError> for AlgebrizerError {
+     fn from(error: EdnParseError) -> AlgebrizerError {
+-        AlgebrizerError::EdnParseError(error)
++        AlgebrizerErrorKind::from(error).into()
+     }
+ }
+diff --git a/query-algebrizer/src/lib.rs b/query-algebrizer/src/lib.rs
+index 09e18bdc5..1e27d8941 100644
+--- a/query-algebrizer/src/lib.rs
++++ b/query-algebrizer/src/lib.rs
+@@ -49,6 +49,7 @@ use mentat_query::{
+ 
+ pub use errors::{
+     AlgebrizerError,
++    AlgebrizerErrorKind,
+     BindingError,
+     Result,
+ };
+@@ -215,7 +216,7 @@ fn validate_and_simplify_order(cc: &ConjoiningClauses, order: Option<Vec<Order>>
+ 
+                 // Fail if the var isn't bound by the query.
+                 if !cc.column_bindings.contains_key(&var) {
+-                    bail!(AlgebrizerError::UnboundVariable(var.name()))
++                    bail!(AlgebrizerErrorKind::UnboundVariable(var.name()))
+                 }
+ 
+                 // Otherwise, determine if we also need to order by type…
+@@ -241,14 +242,14 @@ fn simplify_limit(mut query: AlgebraicQuery) -> Result<AlgebraicQuery> {
+                     Some(TypedValue::Long(n)) => {
+                         if n <= 0 {
+                             // User-specified limits should always be natural numbers (> 0).
+-                            bail!(AlgebrizerError::InvalidLimit(n.to_string(), ValueType::Long))
++                            bail!(AlgebrizerErrorKind::InvalidLimit(n.to_string(), ValueType::Long))
+                         } else {
+                             Some(Limit::Fixed(n as u64))
+                         }
+                     },
+                     Some(val) => {
+                         // Same.
+-                        bail!(AlgebrizerError::InvalidLimit(format!("{:?}", val), val.value_type()))
++                        bail!(AlgebrizerErrorKind::InvalidLimit(format!("{:?}", val), val.value_type()))
+                     },
+                     None => {
+                         // We know that the limit variable is mentioned in `:in`.
+@@ -356,7 +357,7 @@ impl FindQuery {
+ 
+             for var in parsed.in_vars.into_iter() {
+                 if !set.insert(var.clone()) {
+-                    bail!(AlgebrizerError::DuplicateVariableError(var.name(), ":in"));
++                    bail!(AlgebrizerErrorKind::DuplicateVariableError(var.name(), ":in"));
+                 }
+             }
+ 
+@@ -368,7 +369,7 @@ impl FindQuery {
+ 
+             for var in parsed.with.into_iter() {
+                 if !set.insert(var.clone()) {
+-                    bail!(AlgebrizerError::DuplicateVariableError(var.name(), ":with"));
++                    bail!(AlgebrizerErrorKind::DuplicateVariableError(var.name(), ":with"));
+                 }
+             }
+ 
+@@ -378,7 +379,7 @@ impl FindQuery {
+         // Make sure that if we have `:limit ?x`, `?x` appears in `:in`.
+         if let Limit::Variable(ref v) = parsed.limit {
+             if !in_vars.contains(v) {
+-                bail!(AlgebrizerError::UnknownLimitVar(v.name()));
++                bail!(AlgebrizerErrorKind::UnknownLimitVar(v.name()));
+             }
+         }
+ 
+diff --git a/query-algebrizer/src/validate.rs b/query-algebrizer/src/validate.rs
+index 1dba97fbc..c9cce2071 100644
+--- a/query-algebrizer/src/validate.rs
++++ b/query-algebrizer/src/validate.rs
+@@ -19,7 +19,7 @@ use mentat_query::{
+ };
+ 
+ use errors::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     Result,
+ };
+ 
+@@ -56,7 +56,7 @@ pub(crate) fn validate_or_join(or_join: &OrJoin) -> Result<()> {
+                 let template = clauses.next().unwrap().collect_mentioned_variables();
+                 for clause in clauses {
+                     if template != clause.collect_mentioned_variables() {
+-                        bail!(AlgebrizerError::NonMatchingVariablesInOrClause)
++                        bail!(AlgebrizerErrorKind::NonMatchingVariablesInOrClause)
+                     }
+                 }
+                 Ok(())
+@@ -67,7 +67,7 @@ pub(crate) fn validate_or_join(or_join: &OrJoin) -> Result<()> {
+             let var_set: BTreeSet<Variable> = vars.iter().cloned().collect();
+             for clause in &or_join.clauses {
+                 if !var_set.is_subset(&clause.collect_mentioned_variables()) {
+-                    bail!(AlgebrizerError::NonMatchingVariablesInOrClause)
++                    bail!(AlgebrizerErrorKind::NonMatchingVariablesInOrClause)
+                 }
+             }
+             Ok(())
+@@ -85,7 +85,7 @@ pub(crate) fn validate_not_join(not_join: &NotJoin) -> Result<()> {
+             // The joined vars must each appear somewhere in the clause's mentioned variables.
+             let var_set: BTreeSet<Variable> = vars.iter().cloned().collect();
+             if !var_set.is_subset(&not_join.collect_mentioned_variables()) {
+-                bail!(AlgebrizerError::NonMatchingVariablesInNotClause)
++                bail!(AlgebrizerErrorKind::NonMatchingVariablesInNotClause)
+             }
+             Ok(())
+         },
+diff --git a/query-algebrizer/tests/ground.rs b/query-algebrizer/tests/ground.rs
+index a78c9a094..f51b3bdc0 100644
+--- a/query-algebrizer/tests/ground.rs
++++ b/query-algebrizer/tests/ground.rs
+@@ -30,7 +30,7 @@ use mentat_query::{
+ };
+ 
+ use mentat_query_algebrizer::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     BindingError,
+     ComputedTable,
+     Known,
+@@ -254,8 +254,8 @@ fn test_ground_coll_heterogeneous_types() {
+     let q = r#"[:find ?x :where [?x _ ?v] [(ground [false 8.5]) [?v ...]]]"#;
+     let schema = prepopulated_schema();
+     let known = Known::for_schema(&schema);
+-    assert_eq!(bails(known, &q),
+-               AlgebrizerError::InvalidGroundConstant);
++    assert_eq!(bails(known, &q).kind(),
++               &AlgebrizerErrorKind::InvalidGroundConstant);
+ }
+ 
+ #[test]
+@@ -263,8 +263,8 @@ fn test_ground_rel_heterogeneous_types() {
+     let q = r#"[:find ?x :where [?x _ ?v] [(ground [[false] [5]]) [[?v]]]]"#;
+     let schema = prepopulated_schema();
+     let known = Known::for_schema(&schema);
+-    assert_eq!(bails(known, &q),
+-               AlgebrizerError::InvalidGroundConstant);
++    assert_eq!(bails(known, &q).kind(),
++               &AlgebrizerErrorKind::InvalidGroundConstant);
+ }
+ 
+ #[test]
+@@ -272,8 +272,8 @@ fn test_ground_tuple_duplicate_vars() {
+     let q = r#"[:find ?x :where [?x :foo/age ?v] [(ground [8 10]) [?x ?x]]]"#;
+     let schema = prepopulated_schema();
+     let known = Known::for_schema(&schema);
+-    assert_eq!(bails(known, &q),
+-               AlgebrizerError::InvalidBinding(PlainSymbol::plain("ground"), BindingError::RepeatedBoundVariable));
++    assert_eq!(bails(known, &q).kind(),
++               &AlgebrizerErrorKind::InvalidBinding(PlainSymbol::plain("ground"), BindingError::RepeatedBoundVariable));
+ }
+ 
+ #[test]
+@@ -281,8 +281,8 @@ fn test_ground_rel_duplicate_vars() {
+     let q = r#"[:find ?x :where [?x :foo/age ?v] [(ground [[8 10]]) [[?x ?x]]]]"#;
+     let schema = prepopulated_schema();
+     let known = Known::for_schema(&schema);
+-    assert_eq!(bails(known, &q),
+-               AlgebrizerError::InvalidBinding(PlainSymbol::plain("ground"), BindingError::RepeatedBoundVariable));
++    assert_eq!(bails(known, &q).kind(),
++               &AlgebrizerErrorKind::InvalidBinding(PlainSymbol::plain("ground"), BindingError::RepeatedBoundVariable));
+ }
+ 
+ #[test]
+@@ -290,8 +290,8 @@ fn test_ground_nonexistent_variable_invalid() {
+     let q = r#"[:find ?x ?e :where [?e _ ?x] (not [(ground 17) ?v])]"#;
+     let schema = prepopulated_schema();
+     let known = Known::for_schema(&schema);
+-    assert_eq!(bails(known, &q),
+-               AlgebrizerError::UnboundVariable(PlainSymbol::plain("?v")));
++    assert_eq!(bails(known, &q).kind(),
++               &AlgebrizerErrorKind::UnboundVariable(PlainSymbol::plain("?v")));
+ }
+ 
+ #[test]
+@@ -307,6 +307,6 @@ fn test_unbound_input_variable_invalid() {
+ 
+     let i = QueryInputs::new(types, BTreeMap::default()).expect("valid QueryInputs");
+ 
+-    assert_eq!(bails_with_inputs(known, &q, i),
+-               AlgebrizerError::UnboundVariable(PlainSymbol::plain("?x")));
++    assert_eq!(bails_with_inputs(known, &q, i).kind(),
++               &AlgebrizerErrorKind::UnboundVariable(PlainSymbol::plain("?x")));
+ }
+diff --git a/query-algebrizer/tests/predicate.rs b/query-algebrizer/tests/predicate.rs
+index 8724b1453..07b3e9c1f 100644
+--- a/query-algebrizer/tests/predicate.rs
++++ b/query-algebrizer/tests/predicate.rs
+@@ -31,7 +31,7 @@ use mentat_query::{
+ };
+ 
+ use mentat_query_algebrizer::{
+-    AlgebrizerError,
++    AlgebrizerErrorKind,
+     EmptyBecause,
+     Known,
+     QueryInputs,
+@@ -78,8 +78,8 @@ fn test_instant_predicates_require_instants() {
+                     :where
+                     [?e :foo/date ?t]
+                     [(> ?t "2017-06-16T00:56:41.257Z")]]"#;
+-    assert_eq!(bails(known, query),
+-        AlgebrizerError::InvalidArgumentType(
++    assert_eq!(bails(known, query).kind(),
++        &AlgebrizerErrorKind::InvalidArgumentType(
+             PlainSymbol::plain(">"),
+             ValueTypeSet::of_numeric_and_instant_types(),
+             1));
+@@ -88,8 +88,8 @@ fn test_instant_predicates_require_instants() {
+                     :where
+                     [?e :foo/date ?t]
+                     [(> "2017-06-16T00:56:41.257Z", ?t)]]"#;
+-    assert_eq!(bails(known, query),
+-        AlgebrizerError::InvalidArgumentType(
++    assert_eq!(bails(known, query).kind(),
++        &AlgebrizerErrorKind::InvalidArgumentType(
+             PlainSymbol::plain(">"),
+             ValueTypeSet::of_numeric_and_instant_types(),
+             0)); // We get this right.
+diff --git a/query-projector/src/aggregates.rs b/query-projector/src/aggregates.rs
+index 8fde9b2a3..a8c6d0f63 100644
+--- a/query-projector/src/aggregates.rs
++++ b/query-projector/src/aggregates.rs
+@@ -33,7 +33,7 @@ use mentat_query_sql::{
+ };
+ 
+ use errors::{
+-    ProjectorError,
++    ProjectorErrorKind,
+     Result,
+ };
+ 
+@@ -79,7 +79,7 @@ impl SimpleAggregationOp {
+     pub(crate) fn is_applicable_to_types(&self, possibilities: ValueTypeSet) -> Result<ValueType> {
+         use self::SimpleAggregationOp::*;
+         if possibilities.is_empty() {
+-            bail!(ProjectorError::CannotProjectImpossibleBinding(*self))
++            bail!(ProjectorErrorKind::CannotProjectImpossibleBinding(*self))
+         }
+ 
+         match self {
+@@ -92,7 +92,7 @@ impl SimpleAggregationOp {
+                     // The mean of a set of numeric values will always, for our purposes, be a double.
+                     Ok(ValueType::Double)
+                 } else {
+-                    bail!(ProjectorError::CannotApplyAggregateOperationToTypes(*self, possibilities))
++                    bail!(ProjectorErrorKind::CannotApplyAggregateOperationToTypes(*self, possibilities))
+                 }
+             },
+             &Sum => {
+@@ -104,7 +104,7 @@ impl SimpleAggregationOp {
+                         Ok(ValueType::Long)
+                     }
+                 } else {
+-                    bail!(ProjectorError::CannotApplyAggregateOperationToTypes(*self, possibilities))
++                    bail!(ProjectorErrorKind::CannotApplyAggregateOperationToTypes(*self, possibilities))
+                 }
+             },
+ 
+@@ -124,7 +124,7 @@ impl SimpleAggregationOp {
+ 
+                         // These types are unordered.
+                         Keyword | Ref | Uuid => {
+-                            bail!(ProjectorError::CannotApplyAggregateOperationToTypes(*self, possibilities))
++                            bail!(ProjectorErrorKind::CannotApplyAggregateOperationToTypes(*self, possibilities))
+                         },
+                     }
+                 } else {
+@@ -139,7 +139,7 @@ impl SimpleAggregationOp {
+                             Ok(ValueType::Long)
+                         }
+                     } else {
+-                        bail!(ProjectorError::CannotApplyAggregateOperationToTypes(*self, possibilities))
++                        bail!(ProjectorErrorKind::CannotApplyAggregateOperationToTypes(*self, possibilities))
+                     }
+                 }
+             },
+diff --git a/query-projector/src/binding_tuple.rs b/query-projector/src/binding_tuple.rs
+index 5af2abd6e..10549a8d7 100644
+--- a/query-projector/src/binding_tuple.rs
++++ b/query-projector/src/binding_tuple.rs
+@@ -13,7 +13,7 @@ use mentat_core::{
+ };
+ 
+ use errors::{
+-    ProjectorError,
++    ProjectorErrorKind,
+     Result,
+ };
+ 
+@@ -32,7 +32,7 @@ impl BindingTuple for Vec<Binding> {
+             None => Ok(None),
+             Some(vec) => {
+                 if expected != vec.len() {
+-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
++                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(expected, vec.len()).into())
+                 } else {
+                     Ok(Some(vec))
+                 }
+@@ -45,13 +45,13 @@ impl BindingTuple for Vec<Binding> {
+ impl BindingTuple for (Binding,) {
+     fn from_binding_vec(expected: usize, vec: Option<Vec<Binding>>) -> Result<Option<Self>> {
+         if expected != 1 {
+-            return Err(ProjectorError::UnexpectedResultsTupleLength(1, expected));
++            return Err(ProjectorErrorKind::UnexpectedResultsTupleLength(1, expected).into());
+         }
+         match vec {
+             None => Ok(None),
+             Some(vec) => {
+                 if expected != vec.len() {
+-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
++                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(expected, vec.len()).into())
+                 } else {
+                     let mut iter = vec.into_iter();
+                     Ok(Some((iter.next().unwrap(),)))
+@@ -64,13 +64,13 @@ impl BindingTuple for (Binding,) {
+ impl BindingTuple for (Binding, Binding) {
+     fn from_binding_vec(expected: usize, vec: Option<Vec<Binding>>) -> Result<Option<Self>> {
+         if expected != 2 {
+-            return Err(ProjectorError::UnexpectedResultsTupleLength(2, expected));
++            return Err(ProjectorErrorKind::UnexpectedResultsTupleLength(2, expected).into());
+         }
+         match vec {
+             None => Ok(None),
+             Some(vec) => {
+                 if expected != vec.len() {
+-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
++                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(expected, vec.len()).into())
+                 } else {
+                     let mut iter = vec.into_iter();
+                     Ok(Some((iter.next().unwrap(), iter.next().unwrap())))
+@@ -83,13 +83,13 @@ impl BindingTuple for (Binding, Binding) {
+ impl BindingTuple for (Binding, Binding, Binding) {
+     fn from_binding_vec(expected: usize, vec: Option<Vec<Binding>>) -> Result<Option<Self>> {
+         if expected != 3 {
+-            return Err(ProjectorError::UnexpectedResultsTupleLength(3, expected));
++            return Err(ProjectorErrorKind::UnexpectedResultsTupleLength(3, expected).into());
+         }
+         match vec {
+             None => Ok(None),
+             Some(vec) => {
+                 if expected != vec.len() {
+-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
++                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(expected, vec.len()).into())
+                 } else {
+                     let mut iter = vec.into_iter();
+                     Ok(Some((iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap())))
+@@ -102,13 +102,13 @@ impl BindingTuple for (Binding, Binding, Binding) {
+ impl BindingTuple for (Binding, Binding, Binding, Binding) {
+     fn from_binding_vec(expected: usize, vec: Option<Vec<Binding>>) -> Result<Option<Self>> {
+         if expected != 4 {
+-            return Err(ProjectorError::UnexpectedResultsTupleLength(4, expected));
++            return Err(ProjectorErrorKind::UnexpectedResultsTupleLength(4, expected).into());
+         }
+         match vec {
+             None => Ok(None),
+             Some(vec) => {
+                 if expected != vec.len() {
+-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
++                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(expected, vec.len()).into())
+                 } else {
+                     let mut iter = vec.into_iter();
+                     Ok(Some((iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap())))
+@@ -121,13 +121,13 @@ impl BindingTuple for (Binding, Binding, Binding, Binding) {
+ impl BindingTuple for (Binding, Binding, Binding, Binding, Binding) {
+     fn from_binding_vec(expected: usize, vec: Option<Vec<Binding>>) -> Result<Option<Self>> {
+         if expected != 5 {
+-            return Err(ProjectorError::UnexpectedResultsTupleLength(5, expected));
++            return Err(ProjectorErrorKind::UnexpectedResultsTupleLength(5, expected).into());
+         }
+         match vec {
+             None => Ok(None),
+             Some(vec) => {
+                 if expected != vec.len() {
+-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
++                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(expected, vec.len()).into())
+                 } else {
+                     let mut iter = vec.into_iter();
+                     Ok(Some((iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap())))
+@@ -142,13 +142,13 @@ impl BindingTuple for (Binding, Binding, Binding, Binding, Binding) {
+ impl BindingTuple for (Binding, Binding, Binding, Binding, Binding, Binding) {
+     fn from_binding_vec(expected: usize, vec: Option<Vec<Binding>>) -> Result<Option<Self>> {
+         if expected != 6 {
+-            return Err(ProjectorError::UnexpectedResultsTupleLength(6, expected));
++            return Err(ProjectorErrorKind::UnexpectedResultsTupleLength(6, expected).into());
+         }
+         match vec {
+             None => Ok(None),
+             Some(vec) => {
+                 if expected != vec.len() {
+-                    Err(ProjectorError::UnexpectedResultsTupleLength(expected, vec.len()))
++                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(expected, vec.len()).into())
+                 } else {
+                     let mut iter = vec.into_iter();
+                     Ok(Some((iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap(), iter.next().unwrap())))
+diff --git a/query-projector/src/errors.rs b/query-projector/src/errors.rs
+index 040a6f634..14621d28f 100644
+--- a/query-projector/src/errors.rs
++++ b/query-projector/src/errors.rs
+@@ -20,6 +20,12 @@ use mentat_query::{
+     PlainSymbol,
+ };
+ use mentat_query_pull;
++use failure::{
++    Backtrace,
++    Context,
++    Fail,
++};
++use std::fmt;
+ 
+ use aggregates::{
+     SimpleAggregationOp,
+@@ -34,8 +40,52 @@ macro_rules! bail {
+ 
+ pub type Result<T> = std::result::Result<T, ProjectorError>;
+ 
++#[derive(Debug)]
++pub struct ProjectorError(Box<Context<ProjectorErrorKind>>);
++
++impl Fail for ProjectorError {
++    #[inline]
++    fn cause(&self) -> Option<&Fail> {
++        self.0.cause()
++    }
++
++    #[inline]
++    fn backtrace(&self) -> Option<&Backtrace> {
++        self.0.backtrace()
++    }
++}
++
++impl fmt::Display for ProjectorError {
++    #[inline]
++    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
++        fmt::Display::fmt(&*self.0, f)
++    }
++}
++
++impl ProjectorError {
++    #[inline]
++    pub fn kind(&self) -> &ProjectorErrorKind {
++        &*self.0.get_context()
++    }
++}
++
++impl From<ProjectorErrorKind> for ProjectorError {
++    #[inline]
++    fn from(kind: ProjectorErrorKind) -> ProjectorError {
++        ProjectorError(Box::new(Context::new(kind)))
++    }
++}
++
++impl From<Context<ProjectorErrorKind>> for ProjectorError {
++    #[inline]
++    fn from(inner: Context<ProjectorErrorKind>) -> ProjectorError {
++        ProjectorError(Box::new(inner))
++    }
++}
++
++
+ #[derive(Debug, Fail)]
+-pub enum ProjectorError {
++pub enum ProjectorErrorKind {
+     /// We're just not done yet.  Message that the feature is recognized but not yet
+     /// implemented.
+     #[fail(display = "not yet implemented: {}", _0)]
+@@ -77,20 +127,38 @@ pub enum ProjectorError {
+     PullError(#[cause] mentat_query_pull::PullError),
+ }
+ 
++impl From<rusqlite::Error> for ProjectorErrorKind {
++    fn from(error: rusqlite::Error) -> ProjectorErrorKind {
++        ProjectorErrorKind::RusqliteError(error.to_string())
++    }
++}
++
++impl From<mentat_db::DbError> for ProjectorErrorKind {
++    fn from(error: mentat_db::DbError) -> ProjectorErrorKind {
++        ProjectorErrorKind::DbError(error)
++    }
++}
++
++impl From<mentat_query_pull::PullError> for ProjectorErrorKind {
++    fn from(error: mentat_query_pull::PullError) -> ProjectorErrorKind {
++        ProjectorErrorKind::PullError(error)
++    }
++}
++
+ impl From<rusqlite::Error> for ProjectorError {
+     fn from(error: rusqlite::Error) -> ProjectorError {
+-        ProjectorError::RusqliteError(error.to_string())
++        ProjectorErrorKind::from(error).into()
+     }
+ }
+ 
+ impl From<mentat_db::DbError> for ProjectorError {
+     fn from(error: mentat_db::DbError) -> ProjectorError {
+-        ProjectorError::DbError(error)
++        ProjectorErrorKind::from(error).into()
+     }
+ }
+ 
+ impl From<mentat_query_pull::PullError> for ProjectorError {
+     fn from(error: mentat_query_pull::PullError) -> ProjectorError {
+-        ProjectorError::PullError(error)
++        ProjectorErrorKind::from(error).into()
+     }
+ }
+diff --git a/query-projector/src/lib.rs b/query-projector/src/lib.rs
+index 0e345fe7c..db7bbb961 100644
+--- a/query-projector/src/lib.rs
++++ b/query-projector/src/lib.rs
+@@ -117,6 +117,7 @@ pub use relresult::{
+ };
+ 
+ pub use errors::{
++    ProjectorErrorKind,
+     ProjectorError,
+     Result,
+ };
+@@ -311,35 +312,35 @@ impl QueryResults {
+     pub fn into_scalar(self) -> Result<Option<Binding>> {
+         match self {
+             QueryResults::Scalar(o) => Ok(o),
+-            QueryResults::Coll(_) => bail!(ProjectorError::UnexpectedResultsType("coll", "scalar")),
+-            QueryResults::Tuple(_) => bail!(ProjectorError::UnexpectedResultsType("tuple", "scalar")),
+-            QueryResults::Rel(_) => bail!(ProjectorError::UnexpectedResultsType("rel", "scalar")),
++            QueryResults::Coll(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("coll", "scalar")),
++            QueryResults::Tuple(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("tuple", "scalar")),
++            QueryResults::Rel(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("rel", "scalar")),
+         }
+     }
+ 
+     pub fn into_coll(self) -> Result<Vec<Binding>> {
+         match self {
+-            QueryResults::Scalar(_) => bail!(ProjectorError::UnexpectedResultsType("scalar", "coll")),
++            QueryResults::Scalar(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("scalar", "coll")),
+             QueryResults::Coll(c) => Ok(c),
+-            QueryResults::Tuple(_) => bail!(ProjectorError::UnexpectedResultsType("tuple", "coll")),
+-            QueryResults::Rel(_) => bail!(ProjectorError::UnexpectedResultsType("rel", "coll")),
++            QueryResults::Tuple(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("tuple", "coll")),
++            QueryResults::Rel(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("rel", "coll")),
+         }
+     }
+ 
+     pub fn into_tuple(self) -> Result<Option<Vec<Binding>>> {
+         match self {
+-            QueryResults::Scalar(_) => bail!(ProjectorError::UnexpectedResultsType("scalar", "tuple")),
+-            QueryResults::Coll(_) => bail!(ProjectorError::UnexpectedResultsType("coll", "tuple")),
++            QueryResults::Scalar(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("scalar", "tuple")),
++            QueryResults::Coll(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("coll", "tuple")),
+             QueryResults::Tuple(t) => Ok(t),
+-            QueryResults::Rel(_) => bail!(ProjectorError::UnexpectedResultsType("rel", "tuple")),
++            QueryResults::Rel(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("rel", "tuple")),
+         }
+     }
+ 
+     pub fn into_rel(self) -> Result<RelResult<Binding>> {
+         match self {
+-            QueryResults::Scalar(_) => bail!(ProjectorError::UnexpectedResultsType("scalar", "rel")),
+-            QueryResults::Coll(_) => bail!(ProjectorError::UnexpectedResultsType("coll", "rel")),
+-            QueryResults::Tuple(_) => bail!(ProjectorError::UnexpectedResultsType("tuple", "rel")),
++            QueryResults::Scalar(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("scalar", "rel")),
++            QueryResults::Coll(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("coll", "rel")),
++            QueryResults::Tuple(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("tuple", "rel")),
+             QueryResults::Rel(r) => Ok(r),
+         }
+     }
+@@ -541,8 +542,13 @@ fn test_into_tuple() {
+                      Binding::Scalar(TypedValue::Long(2)))));
+ 
+     match query_output.clone().into_tuple() {
+-        Err(ProjectorError::UnexpectedResultsTupleLength(expected, got)) => {
+-            assert_eq!((expected, got), (3, 2));
++        Err(e) => {
++            match e.kind() {
++                &ProjectorErrorKind::UnexpectedResultsTupleLength(ref expected, ref got) => {
++                    assert_eq!((*expected, *got), (3, 2));
++                }
++                err => panic!("unexpected error kind {:?}", err),
++            }
+         },
+         // This forces the result type.
+         Ok(Some((_, _, _))) | _ => panic!("expected error"),
+@@ -562,8 +568,13 @@ fn test_into_tuple() {
+     }
+ 
+     match query_output.clone().into_tuple() {
+-        Err(ProjectorError::UnexpectedResultsTupleLength(expected, got)) => {
+-            assert_eq!((expected, got), (3, 2));
++        Err(e) => {
++            match e.kind() {
++                &ProjectorErrorKind::UnexpectedResultsTupleLength(ref expected, ref got) => {
++                    assert_eq!((*expected, *got), (3, 2));
++                },
++                e => panic!("unexpected error kind {:?}", e),
++            }
+         },
+         // This forces the result type.
+         Ok(Some((_, _, _))) | _ => panic!("expected error"),
+diff --git a/query-projector/src/project.rs b/query-projector/src/project.rs
+index 92d43433b..3959b5584 100644
+--- a/query-projector/src/project.rs
++++ b/query-projector/src/project.rs
+@@ -55,7 +55,7 @@ use aggregates::{
+ };
+ 
+ use errors::{
+-    ProjectorError,
++    ProjectorErrorKind,
+     Result,
+ };
+ 
+@@ -127,14 +127,14 @@ fn candidate_type_column(cc: &ConjoiningClauses, var: &Variable) -> Result<(Colu
+           let type_name = VariableColumn::VariableTypeTag(var.clone()).column_name();
+           (ColumnOrExpression::Column(alias), type_name)
+       })
+-      .ok_or_else(|| ProjectorError::UnboundVariable(var.name()).into())
++      .ok_or_else(|| ProjectorErrorKind::UnboundVariable(var.name()).into())
+ }
+ 
+ fn cc_column(cc: &ConjoiningClauses, var: &Variable) -> Result<QualifiedAlias> {
+     cc.column_bindings
+       .get(var)
+       .and_then(|cols| cols.get(0).cloned())
+-      .ok_or_else(|| ProjectorError::UnboundVariable(var.name()).into())
++      .ok_or_else(|| ProjectorErrorKind::UnboundVariable(var.name()).into())
+ }
+ 
+ fn candidate_column(cc: &ConjoiningClauses, var: &Variable) -> Result<(ColumnOrExpression, Name)> {
+@@ -211,18 +211,18 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
+         match e {
+             &Element::Variable(ref var) => {
+                 if outer_variables.contains(var) {
+-                    bail!(ProjectorError::InvalidProjection(format!("Duplicate variable {} in query.", var)));
++                    bail!(ProjectorErrorKind::InvalidProjection(format!("Duplicate variable {} in query.", var)));
+                 }
+                 if corresponded_variables.contains(var) {
+-                    bail!(ProjectorError::InvalidProjection(format!("Can't project both {} and `(the {})` from a query.", var, var)));
++                    bail!(ProjectorErrorKind::InvalidProjection(format!("Can't project both {} and `(the {})` from a query.", var, var)));
+                 }
+             },
+             &Element::Corresponding(ref var) => {
+                 if outer_variables.contains(var) {
+-                    bail!(ProjectorError::InvalidProjection(format!("Can't project both {} and `(the {})` from a query.", var, var)));
++                    bail!(ProjectorErrorKind::InvalidProjection(format!("Can't project both {} and `(the {})` from a query.", var, var)));
+                 }
+                 if corresponded_variables.contains(var) {
+-                    bail!(ProjectorError::InvalidProjection(format!("`(the {})` appears twice in query.", var)));
++                    bail!(ProjectorErrorKind::InvalidProjection(format!("`(the {})` appears twice in query.", var)));
+                 }
+             },
+             &Element::Aggregate(_) => {
+@@ -346,7 +346,7 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
+                     i += 1;
+                 } else {
+                     // TODO: complex aggregates.
+-                    bail!(ProjectorError::NotYetImplemented("complex aggregates".into()));
++                    bail!(ProjectorErrorKind::NotYetImplemented("complex aggregates".into()));
+                 }
+             },
+         }
+@@ -355,13 +355,13 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
+     match (min_max_count, corresponded_variables.len()) {
+         (0, 0) | (_, 0) => {},
+         (0, _) => {
+-            bail!(ProjectorError::InvalidProjection("Warning: used `the` without `min` or `max`.".to_string()));
++            bail!(ProjectorErrorKind::InvalidProjection("Warning: used `the` without `min` or `max`.".to_string()));
+         },
+         (1, _) => {
+             // This is the success case!
+         },
+         (n, c) => {
+-            bail!(ProjectorError::AmbiguousAggregates(n, c));
++            bail!(ProjectorErrorKind::AmbiguousAggregates(n, c));
+         },
+     }
+ 
+@@ -465,7 +465,7 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
+                                     .extracted_types
+                                     .get(&var)
+                                     .cloned()
+-                                    .ok_or_else(|| ProjectorError::NoTypeAvailableForVariable(var.name().clone()))?;
++                                    .ok_or_else(|| ProjectorErrorKind::NoTypeAvailableForVariable(var.name().clone()))?;
+                 inner_projection.push(ProjectedColumn(ColumnOrExpression::Column(type_col), type_name.clone()));
+             }
+             if group {
+diff --git a/query-projector/tests/aggregates.rs b/query-projector/tests/aggregates.rs
+index d2d676ea6..93774b085 100644
+--- a/query-projector/tests/aggregates.rs
++++ b/query-projector/tests/aggregates.rs
+@@ -99,10 +99,10 @@ fn test_the_without_max_or_min() {
+     let projection = query_projection(&schema, &algebrized);
+     assert!(projection.is_err());
+     use ::mentat_query_projector::errors::{
+-        ProjectorError,
++        ProjectorErrorKind,
+     };
+-    match projection.err().expect("expected failure") {
+-        ProjectorError::InvalidProjection(s) => {
++    match projection.err().expect("expected failure").kind() {
++        &ProjectorErrorKind::InvalidProjection(ref s) => {
+                 assert_eq!(s.as_str(), "Warning: used `the` without `min` or `max`.");
+             },
+         _ => panic!(),
+diff --git a/query-pull/src/errors.rs b/query-pull/src/errors.rs
+index 4ec4f2215..bbd7539ea 100644
+--- a/query-pull/src/errors.rs
++++ b/query-pull/src/errors.rs
+@@ -13,15 +13,64 @@ use std; // To refer to std::result::Result.
+ use mentat_db::{
+     DbError,
+ };
++use failure::{
++    Backtrace,
++    Context,
++    Fail,
++};
+ 
+ use mentat_core::{
+     Entid,
+ };
++use std::fmt;
+ 
+ pub type Result<T> = std::result::Result<T, PullError>;
+ 
++#[derive(Debug)]
++pub struct PullError(Box<Context<PullErrorKind>>);
++
++impl Fail for PullError {
++    #[inline]
++    fn cause(&self) -> Option<&Fail> {
++        self.0.cause()
++    }
++
++    #[inline]
++    fn backtrace(&self) -> Option<&Backtrace> {
++        self.0.backtrace()
++    }
++}
++
++impl fmt::Display for PullError {
++    #[inline]
++    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
++        fmt::Display::fmt(&*self.0, f)
++    }
++}
++
++impl PullError {
++    #[inline]
++    pub fn kind(&self) -> &PullErrorKind {
++        &*self.0.get_context()
++    }
++}
++
++impl From<PullErrorKind> for PullError {
++    #[inline]
++    fn from(kind: PullErrorKind) -> PullError {
++        PullError(Box::new(Context::new(kind)))
++    }
++}
++
++impl From<Context<PullErrorKind>> for PullError {
++    #[inline]
++    fn from(inner: Context<PullErrorKind>) -> PullError {
++        PullError(Box::new(inner))
++    }
++}
++
+ #[derive(Debug, Fail)]
+-pub enum PullError {
++pub enum PullErrorKind {
+     #[fail(display = "attribute {:?} has no name", _0)]
+     UnnamedAttribute(Entid),
+ 
+@@ -32,8 +81,13 @@ pub enum PullError {
+     DbError(#[cause] DbError),
+ }
+ 
++impl From<DbError> for PullErrorKind {
++    fn from(error: DbError) -> PullErrorKind {
++        PullErrorKind::DbError(error)
++    }
++}
+ impl From<DbError> for PullError {
+     fn from(error: DbError) -> PullError {
+-        PullError::DbError(error)
++        PullErrorKind::from(error).into()
+     }
+ }
+diff --git a/query-pull/src/lib.rs b/query-pull/src/lib.rs
+index 39b6e9031..ccb9535f8 100644
+--- a/query-pull/src/lib.rs
++++ b/query-pull/src/lib.rs
+@@ -104,6 +104,7 @@ pub mod errors;
+ 
+ pub use errors::{
+     PullError,
++    PullErrorKind,
+     Result,
+ };
+ 
+@@ -165,7 +166,7 @@ impl Puller {
+             // In the unlikely event that we have an attribute with no name, we bail.
+             schema.get_ident(*i)
+                     .map(|ident| ValueRc::new(ident.clone()))
+-                    .ok_or_else(|| PullError::UnnamedAttribute(*i))
++                    .ok_or_else(|| PullError::from(PullErrorKind::UnnamedAttribute(*i)))
+         };
+ 
+         let mut names: BTreeMap<Entid, ValueRc<Keyword>> = Default::default();
+@@ -194,7 +195,7 @@ impl Puller {
+                         &PullConcreteAttribute::Ident(ref i) if i.as_ref() == db_id.as_ref() => {
+                             // We only allow :db/id once.
+                             if db_id_alias.is_some() {
+-                                Err(PullError::RepeatedDbId)?
++                                Err(PullErrorKind::RepeatedDbId)?
+                             }
+                             db_id_alias = Some(alias.unwrap_or_else(|| db_id.to_value_rc()));
+                         },
+diff --git a/query-translator/src/lib.rs b/query-translator/src/lib.rs
+index b91cc2588..cdd5431bc 100644
+--- a/query-translator/src/lib.rs
++++ b/query-translator/src/lib.rs
+@@ -31,4 +31,5 @@ pub use translate::{
+ 
+ // query-translator could be folded into query-projector; for now, just type alias the errors.
+ pub type TranslatorError = mentat_query_projector::ProjectorError;
+-pub type Result<T> = std::result::Result<T, TranslatorError>;
++pub type TranslatorErrorKind = mentat_query_projector::ProjectorError;
++pub type Result<T> = std::result::Result<T, TranslatorErrorKind>;
+diff --git a/sql/src/lib.rs b/sql/src/lib.rs
+index 8893c3417..840ccf523 100644
+--- a/sql/src/lib.rs
++++ b/sql/src/lib.rs
+@@ -16,7 +16,7 @@ extern crate rusqlite;
+ extern crate mentat_core;
+ 
+ use std::rc::Rc;
+-
++use std::fmt;
+ use std::collections::HashMap;
+ 
+ use ordered_float::OrderedFloat;
+@@ -27,10 +27,59 @@ use mentat_core::{
+     ValueRc,
+ };
+ 
++use failure::{
++    Backtrace,
++    Context,
++    Fail,
++};
++
+ pub use rusqlite::types::Value;
+ 
++#[derive(Debug)]
++pub struct SQLError(Box<Context<SQLErrorKind>>);
++
++impl Fail for SQLError {
++    #[inline]
++    fn cause(&self) -> Option<&Fail> {
++        self.0.cause()
++    }
++
++    #[inline]
++    fn backtrace(&self) -> Option<&Backtrace> {
++        self.0.backtrace()
++    }
++}
++
++impl fmt::Display for SQLError {
++    #[inline]
++    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
++        fmt::Display::fmt(&*self.0, f)
++    }
++}
++
++impl SQLError {
++    #[inline]
++    pub fn kind(&self) -> &SQLErrorKind {
++        &*self.0.get_context()
++    }
++}
++
++impl From<SQLErrorKind> for SQLError {
++    #[inline]
++    fn from(kind: SQLErrorKind) -> SQLError {
++        SQLError(Box::new(Context::new(kind)))
++    }
++}
++
++impl From<Context<SQLErrorKind>> for SQLError {
++    #[inline]
++    fn from(inner: Context<SQLErrorKind>) -> SQLError {
++        SQLError(Box::new(inner))
++    }
++}
++
+ #[derive(Debug, Fail)]
+-pub enum SQLError {
++pub enum SQLErrorKind {
+     #[fail(display = "invalid parameter name: {}", _0)]
+     InvalidParameterName(String),
+ 
+@@ -204,12 +253,12 @@ impl QueryBuilder for SQLiteQueryBuilder {
+         // Do some validation first.
+         // This is not free, but it's probably worth it for now.
+         if !name.chars().all(|c| char::is_alphanumeric(c) || c == '_') {
+-            return Err(SQLError::InvalidParameterName(name.to_string()))
++            return Err(SQLErrorKind::InvalidParameterName(name.to_string()).into())
+         }
+ 
+         if name.starts_with(self.arg_prefix.as_str()) &&
+            name.chars().skip(self.arg_prefix.len()).all(char::is_numeric) {
+-               return Err(SQLError::BindParamCouldBeGenerated(name.to_string()))
++               return Err(SQLErrorKind::BindParamCouldBeGenerated(name.to_string()).into())
+         }
+ 
+         self.push_sql("$");
+diff --git a/src/conn.rs b/src/conn.rs
+index 5a56e0f55..fd05c8d7c 100644
+--- a/src/conn.rs
++++ b/src/conn.rs
+@@ -96,7 +96,7 @@ use entity_builder::{
+ 
+ use errors::{
+     Result,
+-    MentatError,
++    MentatErrorKind,
+ };
+ 
+ use query::{
+@@ -483,7 +483,7 @@ impl<'a, 'c> InProgress<'a, 'c> {
+             // Retrying is tracked by https://github.com/mozilla/mentat/issues/357.
+             // This should not occur -- an attempt to take a competing IMMEDIATE transaction
+             // will fail with `SQLITE_BUSY`, causing this function to abort.
+-            bail!(MentatError::UnexpectedLostTransactRace);
++            bail!(MentatErrorKind::UnexpectedLostTransactRace);
+         }
+ 
+         // Commit the SQLite transaction while we hold the mutex.
+@@ -515,7 +515,7 @@ impl<'a, 'c> InProgress<'a, 'c> {
+                  cache_action: CacheAction) -> Result<()> {
+         let attribute_entid: Entid = self.schema
+                                          .attribute_for_ident(&attribute)
+-                                         .ok_or_else(|| MentatError::UnknownAttribute(attribute.to_string()))?.1.into();
++                                         .ok_or_else(|| MentatErrorKind::UnknownAttribute(attribute.to_string()))?.1.into();
+ 
+         match cache_action {
+             CacheAction::Register => {
+@@ -820,7 +820,7 @@ impl Conn {
+         {
+             attribute_entid = metadata.schema
+                                       .attribute_for_ident(&attribute)
+-                                      .ok_or_else(|| MentatError::UnknownAttribute(attribute.to_string()))?.1.into();
++                                      .ok_or_else(|| MentatErrorKind::UnknownAttribute(attribute.to_string()))?.1.into();
+         }
+ 
+         let cache = &mut metadata.attribute_cache;
+@@ -888,8 +888,15 @@ mod tests {
+         let t = format!("[[:db/add {} :db.schema/attribute \"tempid\"]]", next + 1);
+ 
+         match conn.transact(&mut sqlite, t.as_str()) {
+-            Err(MentatError::DbError(e)) => {
+-                assert_eq!(e.kind(), ::mentat_db::DbErrorKind::UnrecognizedEntid(next + 1));
++            Err(e) => {
++                match e.kind() {
++                    &MentatErrorKind::DbError(ref e) => {
++                        assert_eq!(e.kind(), ::mentat_db::DbErrorKind::UnrecognizedEntid(next + 1));
++                    }
++                    x => {
++                        panic!("expected db error, got {:?}", x);
++                    }
++                }
+             },
+             x => panic!("expected db error, got {:?}", x),
+         }
+@@ -915,9 +922,15 @@ mod tests {
+         let t = format!("[[:db/add {} :db.schema/attribute \"tempid\"]]", next);
+ 
+         match conn.transact(&mut sqlite, t.as_str()) {
+-            Err(MentatError::DbError(e)) => {
+-                // All this, despite this being the ID we were about to allocate!
+-                assert_eq!(e.kind(), ::mentat_db::DbErrorKind::UnrecognizedEntid(next));
++            Err(e) => {
++                match e.kind() {
++                    &MentatErrorKind::DbError(ref e) => {
++                        assert_eq!(e.kind(), ::mentat_db::DbErrorKind::UnrecognizedEntid(next));
++                    }
++                    x => {
++                        panic!("expected db error, got {:?}", x);
++                    }
++                }
+             },
+             x => panic!("expected db error, got {:?}", x),
+         }
+@@ -1075,8 +1088,8 @@ mod tests {
+ 
+         // Bad EDN: missing closing ']'.
+         let report = conn.transact(&mut sqlite, "[[:db/add \"t\" :db/ident :a/keyword]");
+-        match report.expect_err("expected transact to fail for bad edn") {
+-            MentatError::EdnParseError(_) => { },
++        match report.expect_err("expected transact to fail for bad edn").kind() {
++            &MentatErrorKind::EdnParseError(_) => { },
+             x => panic!("expected EDN parse error, got {:?}", x),
+         }
+ 
+@@ -1086,8 +1099,8 @@ mod tests {
+ 
+         // Bad transaction data: missing leading :db/add.
+         let report = conn.transact(&mut sqlite, "[[\"t\" :db/ident :b/keyword]]");
+-        match report.expect_err("expected transact error") {
+-            MentatError::EdnParseError(_) => { },
++        match report.expect_err("expected transact error").kind() {
++            &MentatErrorKind::EdnParseError(_) => { },
+             x => panic!("expected EDN parse error, got {:?}", x),
+         }
+ 
+@@ -1098,8 +1111,8 @@ mod tests {
+         // Bad transaction based on state of store: conflicting upsert.
+         let report = conn.transact(&mut sqlite, "[[:db/add \"u\" :db/ident :a/keyword]
+                                                   [:db/add \"u\" :db/ident :b/keyword]]");
+-        match report.expect_err("expected transact error") {
+-            MentatError::DbError(e) => {
++        match report.expect_err("expected transact error").kind() {
++            &MentatErrorKind::DbError(ref e) => {
+                 match e.kind() {
+                     ::mentat_db::DbErrorKind::SchemaConstraintViolation(_) => {},
+                     _ => panic!("expected SchemaConstraintViolation"),
+@@ -1122,8 +1135,8 @@ mod tests {
+         let kw = kw!(:foo/bat);
+         let schema = conn.current_schema();
+         let res = conn.cache(&mut sqlite, &schema, &kw, CacheDirection::Forward, CacheAction::Register);
+-        match res.expect_err("expected cache to fail") {
+-            MentatError::UnknownAttribute(msg) => assert_eq!(msg, ":foo/bat"),
++        match res.expect_err("expected cache to fail").kind() {
++            &MentatErrorKind::UnknownAttribute(ref msg) => assert_eq!(msg, ":foo/bat"),
+             x => panic!("expected UnknownAttribute error, got {:?}", x),
+         }
+     }
+diff --git a/src/entity_builder.rs b/src/entity_builder.rs
+index 9ad9d162f..64185f0fd 100644
+--- a/src/entity_builder.rs
++++ b/src/entity_builder.rs
+@@ -285,7 +285,7 @@ mod testing {
+         Entid,
+         HasSchema,
+         KnownEntid,
+-        MentatError,
++        MentatErrorKind,
+         Queryable,
+         TxReport,
+         TypedValue,
+@@ -321,8 +321,8 @@ mod testing {
+         let mut in_progress = conn.begin_transaction(&mut sqlite).expect("begun successfully");
+ 
+         // This should fail: unrecognized entid.
+-        match in_progress.transact_entities(terms).expect_err("expected transact to fail") {
+-            MentatError::DbError(e) => {
++        match in_progress.transact_entities(terms).expect_err("expected transact to fail").kind() {
++            MentatErrorKind::DbError(e) => {
+                 assert_eq!(e.kind(), mentat_db::DbErrorKind::UnrecognizedEntid(999));
+             },
+             _ => panic!("Should have rejected the entid."),
+diff --git a/src/errors.rs b/src/errors.rs
+index cffa3999a..762325844 100644
+--- a/src/errors.rs
++++ b/src/errors.rs
+@@ -15,7 +15,12 @@ use std; // To refer to std::result::Result.
+ use std::collections::BTreeSet;
+ 
+ use rusqlite;
+-
++use failure::{
++    Backtrace,
++    Context,
++    Fail,
++};
++use std::fmt;
+ use edn;
+ 
+ use mentat_core::{
+@@ -42,8 +47,51 @@ macro_rules! bail {
+     )
+ }
+ 
++#[derive(Debug)]
++pub struct MentatError(Box<Context<MentatErrorKind>>);
++
++impl Fail for MentatError {
++    #[inline]
++    fn cause(&self) -> Option<&Fail> {
++        self.0.cause()
++    }
++
++    #[inline]
++    fn backtrace(&self) -> Option<&Backtrace> {
++        self.0.backtrace()
++    }
++}
++
++impl fmt::Display for MentatError {
++    #[inline]
++    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
++        fmt::Display::fmt(&*self.0, f)
++    }
++}
++
++impl MentatError {
++    #[inline]
++    pub fn kind(&self) -> &MentatErrorKind {
++        &*self.0.get_context()
++    }
++}
++
++impl From<MentatErrorKind> for MentatError {
++    #[inline]
++    fn from(kind: MentatErrorKind) -> MentatError {
++        MentatError(Box::new(Context::new(kind)))
++    }
++}
++
++impl From<Context<MentatErrorKind>> for MentatError {
++    #[inline]
++    fn from(inner: Context<MentatErrorKind>) -> MentatError {
++        MentatError(Box::new(inner))
++    }
++}
++
+ #[derive(Debug, Fail)]
+-pub enum MentatError {
++pub enum MentatErrorKind {
+     #[fail(display = "bad uuid {}", _0)]
+     BadUuid(String),
+ 
+@@ -114,57 +162,114 @@ pub enum MentatError {
+     TolstoyError(#[cause] mentat_tolstoy::TolstoyError),
+ }
+ 
++impl From<std::io::Error> for MentatErrorKind {
++    fn from(error: std::io::Error) -> MentatErrorKind {
++        MentatErrorKind::IoError(error)
++    }
++}
++
++impl From<rusqlite::Error> for MentatErrorKind {
++    fn from(error: rusqlite::Error) -> MentatErrorKind {
++        MentatErrorKind::RusqliteError(error.to_string())
++    }
++}
++
++impl From<edn::ParseError> for MentatErrorKind {
++    fn from(error: edn::ParseError) -> MentatErrorKind {
++        MentatErrorKind::EdnParseError(error)
++    }
++}
++
++impl From<mentat_db::DbError> for MentatErrorKind {
++    fn from(error: mentat_db::DbError) -> MentatErrorKind {
++        MentatErrorKind::DbError(error)
++    }
++}
++
++impl From<mentat_query_algebrizer::AlgebrizerError> for MentatErrorKind {
++    fn from(error: mentat_query_algebrizer::AlgebrizerError) -> MentatErrorKind {
++        MentatErrorKind::AlgebrizerError(error)
++    }
++}
++
++impl From<mentat_query_projector::ProjectorError> for MentatErrorKind {
++    fn from(error: mentat_query_projector::ProjectorError) -> MentatErrorKind {
++        MentatErrorKind::ProjectorError(error)
++    }
++}
++
++impl From<mentat_query_pull::PullError> for MentatErrorKind {
++    fn from(error: mentat_query_pull::PullError) -> MentatErrorKind {
++        MentatErrorKind::PullError(error)
++    }
++}
++
++impl From<mentat_sql::SQLError> for MentatErrorKind {
++    fn from(error: mentat_sql::SQLError) -> MentatErrorKind {
++        MentatErrorKind::SQLError(error)
++    }
++}
++
++#[cfg(feature = "syncable")]
++impl From<mentat_tolstoy::TolstoyError> for MentatErrorKind {
++    fn from(error: mentat_tolstoy::TolstoyError) -> MentatErrorKind {
++        MentatErrorKind::TolstoyError(error)
++    }
++}
++
++// XXX reduce dupe if this isn't completely throwaway
++
+ impl From<std::io::Error> for MentatError {
+     fn from(error: std::io::Error) -> MentatError {
+-        MentatError::IoError(error)
++        MentatErrorKind::from(error).into()
+     }
+ }
+ 
+ impl From<rusqlite::Error> for MentatError {
+     fn from(error: rusqlite::Error) -> MentatError {
+-        MentatError::RusqliteError(error.to_string())
++        MentatErrorKind::from(error).into()
+     }
+ }
+ 
+ impl From<edn::ParseError> for MentatError {
+     fn from(error: edn::ParseError) -> MentatError {
+-        MentatError::EdnParseError(error)
++        MentatErrorKind::from(error).into()
+     }
+ }
+ 
+ impl From<mentat_db::DbError> for MentatError {
+     fn from(error: mentat_db::DbError) -> MentatError {
+-        MentatError::DbError(error)
++        MentatErrorKind::from(error).into()
+     }
+ }
+ 
+ impl From<mentat_query_algebrizer::AlgebrizerError> for MentatError {
+     fn from(error: mentat_query_algebrizer::AlgebrizerError) -> MentatError {
+-        MentatError::AlgebrizerError(error)
++        MentatErrorKind::from(error).into()
+     }
+ }
+ 
+ impl From<mentat_query_projector::ProjectorError> for MentatError {
+     fn from(error: mentat_query_projector::ProjectorError) -> MentatError {
+-        MentatError::ProjectorError(error)
++        MentatErrorKind::from(error).into()
+     }
+ }
+ 
+ impl From<mentat_query_pull::PullError> for MentatError {
+     fn from(error: mentat_query_pull::PullError) -> MentatError {
+-        MentatError::PullError(error)
++        MentatErrorKind::from(error).into()
+     }
+ }
+ 
+ impl From<mentat_sql::SQLError> for MentatError {
+     fn from(error: mentat_sql::SQLError) -> MentatError {
+-        MentatError::SQLError(error)
++        MentatErrorKind::from(error).into()
+     }
+ }
+ 
+ #[cfg(feature = "syncable")]
+ impl From<mentat_tolstoy::TolstoyError> for MentatError {
+     fn from(error: mentat_tolstoy::TolstoyError) -> MentatError {
+-        MentatError::TolstoyError(error)
++        MentatErrorKind::from(error).into()
+     }
+ }
+diff --git a/src/lib.rs b/src/lib.rs
+index 9e12f38a3..af538987f 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -124,6 +124,7 @@ macro_rules! kw {
+ pub mod errors;
+ pub use errors::{
+     MentatError,
++    MentatErrorKind,
+     Result,
+ };
+ 
+diff --git a/src/query.rs b/src/query.rs
+index a4f4a9799..e4269e263 100644
+--- a/src/query.rs
++++ b/src/query.rs
+@@ -74,7 +74,7 @@ pub use mentat_query_projector::{
+ };
+ 
+ use errors::{
+-    MentatError,
++    MentatErrorKind,
+     Result,
+ };
+ 
+@@ -178,7 +178,7 @@ fn algebrize_query<T>
+     // If they aren't, the user has made an error -- perhaps writing the wrong variable in `:in`, or
+     // not binding in the `QueryInput`.
+     if !unbound.is_empty() {
+-        bail!(MentatError::UnboundVariables(unbound.into_iter().map(|v| v.to_string()).collect()));
++        bail!(MentatErrorKind::UnboundVariables(unbound.into_iter().map(|v| v.to_string()).collect()));
+     }
+     Ok(algebrized)
+ }
+@@ -211,7 +211,7 @@ fn fetch_values<'sqlite>
+ 
+ fn lookup_attribute(schema: &Schema, attribute: &Keyword) -> Result<KnownEntid> {
+     schema.get_entid(attribute)
+-          .ok_or_else(|| MentatError::UnknownAttribute(attribute.name().into()).into())
++          .ok_or_else(|| MentatErrorKind::UnknownAttribute(attribute.name().into()).into())
+ }
+ 
+ /// Return a single value for the provided entity and attribute.
+@@ -398,7 +398,7 @@ pub fn q_prepare<'sqlite, 'schema, 'cache, 'query, T>
+     if !unbound.is_empty() {
+         // TODO: Allow binding variables at execution time, not just
+         // preparation time.
+-        bail!(MentatError::UnboundVariables(unbound.into_iter().map(|v| v.to_string()).collect()));
++        bail!(MentatErrorKind::UnboundVariables(unbound.into_iter().map(|v| v.to_string()).collect()));
+     }
+ 
+     if algebrized.is_known_empty() {
+diff --git a/src/query_builder.rs b/src/query_builder.rs
+index 6be1d2e01..a4d0afd14 100644
+--- a/src/query_builder.rs
++++ b/src/query_builder.rs
+@@ -34,6 +34,7 @@ use ::{
+ };
+ 
+ use errors::{
++    MentatErrorKind,
+     MentatError,
+     Result,
+ };
+@@ -56,7 +57,8 @@ impl<'a> QueryBuilder<'a> {
+     }
+ 
+     pub fn bind_ref_from_kw(&mut self, var: &str, value: Keyword) -> Result<&mut Self> {
+-        let entid = self.store.conn().current_schema().get_entid(&value).ok_or(MentatError::UnknownAttribute(value.to_string()))?;
++        let entid = self.store.conn().current_schema().get_entid(&value).ok_or_else(||
++            MentatError::from(MentatErrorKind::UnknownAttribute(value.to_string())))?;
+         self.values.insert(Variable::from_valid_name(var), TypedValue::Ref(entid.into()));
+         Ok(self)
+     }
+diff --git a/src/store.rs b/src/store.rs
+index de86f6da5..c8e79835d 100644
+--- a/src/store.rs
++++ b/src/store.rs
+@@ -85,7 +85,7 @@ impl Store {
+     pub fn open_empty(path: &str) -> Result<Store> {
+         if !path.is_empty() {
+             if Path::new(path).exists() {
+-                bail!(MentatError::PathAlreadyExists(path.to_string()));
++                bail!(MentatErrorKind::PathAlreadyExists(path.to_string()));
+             }
+         }
+ 
+@@ -125,7 +125,7 @@ impl Store {
+     pub fn open_empty_with_key(path: &str, encryption_key: &str) -> Result<Store> {
+         if !path.is_empty() {
+             if Path::new(path).exists() {
+-                bail!(MentatError::PathAlreadyExists(path.to_string()));
++                bail!(MentatErrorKind::PathAlreadyExists(path.to_string()));
+             }
+         }
+ 
+@@ -241,7 +241,7 @@ impl Pullable for Store {
+ #[cfg(feature = "syncable")]
+ impl Syncable for Store {
+     fn sync(&mut self, server_uri: &String, user_uuid: &String) -> Result<()> {
+-        let uuid = Uuid::parse_str(&user_uuid).map_err(|_| MentatError::BadUuid(user_uuid.clone()))?;
++        let uuid = Uuid::parse_str(&user_uuid).map_err(|_| MentatErrorKind::BadUuid(user_uuid.clone()))?;
+         Ok(Syncer::flow(&mut self.sqlite, server_uri, &uuid)?)
+     }
+ }
+diff --git a/src/vocabulary.rs b/src/vocabulary.rs
+index b3cb6f243..077a34370 100644
+--- a/src/vocabulary.rs
++++ b/src/vocabulary.rs
+@@ -121,7 +121,7 @@ use ::conn::{
+ };
+ 
+ use ::errors::{
+-    MentatError,
++    MentatErrorKind,
+     Result,
+ };
+ 
+@@ -375,17 +375,17 @@ trait HasCoreSchema {
+ impl<T> HasCoreSchema for T where T: HasSchema {
+     fn core_type(&self, t: ValueType) -> Result<KnownEntid> {
+         self.entid_for_type(t)
+-            .ok_or_else(|| MentatError::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()).into())
++            .ok_or_else(|| MentatErrorKind::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()).into())
+     }
+ 
+     fn core_entid(&self, ident: &Keyword) -> Result<KnownEntid> {
+         self.get_entid(ident)
+-            .ok_or_else(|| MentatError::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()).into())
++            .ok_or_else(|| MentatErrorKind::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()).into())
+     }
+ 
+     fn core_attribute(&self, ident: &Keyword) -> Result<KnownEntid> {
+         self.attribute_for_ident(ident)
+-            .ok_or_else(|| MentatError::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()).into())
++            .ok_or_else(|| MentatErrorKind::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()).into())
+             .map(|(_, e)| e)
+     }
+ }
+@@ -568,7 +568,7 @@ pub trait VersionedStore: HasVocabularies + HasSchema {
+                                 // We have two vocabularies with the same name, same version, and
+                                 // different definitions for an attribute. That's a coding error.
+                                 // We can't accept this vocabulary.
+-                                bail!(MentatError::ConflictingAttributeDefinitions(
++                                bail!(MentatErrorKind::ConflictingAttributeDefinitions(
+                                           definition.name.to_string(),
+                                           definition.version,
+                                           pair.0.to_string(),
+@@ -615,13 +615,13 @@ pub trait VersionedStore: HasVocabularies + HasSchema {
+     fn verify_core_schema(&self) -> Result<()> {
+         if let Some(core) = self.read_vocabulary_named(&DB_SCHEMA_CORE)? {
+             if core.version != CORE_SCHEMA_VERSION {
+-                bail!(MentatError::UnexpectedCoreSchema(CORE_SCHEMA_VERSION, Some(core.version)));
++                bail!(MentatErrorKind::UnexpectedCoreSchema(CORE_SCHEMA_VERSION, Some(core.version)));
+             }
+ 
+             // TODO: check things other than the version.
+         } else {
+             // This would be seriously messed up.
+-            bail!(MentatError::UnexpectedCoreSchema(CORE_SCHEMA_VERSION, None));
++            bail!(MentatErrorKind::UnexpectedCoreSchema(CORE_SCHEMA_VERSION, None));
+         }
+         Ok(())
+     }
+@@ -682,7 +682,7 @@ impl<'a, 'c> VersionedStore for InProgress<'a, 'c> {
+             VocabularyCheck::NotPresent => self.install_vocabulary(definition),
+             VocabularyCheck::PresentButNeedsUpdate { older_version } => self.upgrade_vocabulary(definition, older_version),
+             VocabularyCheck::PresentButMissingAttributes { attributes } => self.install_attributes_for(definition, attributes),
+-            VocabularyCheck::PresentButTooNew { newer_version } => Err(MentatError::ExistingVocabularyTooNew(definition.name.to_string(), newer_version.version, definition.version).into()),
++            VocabularyCheck::PresentButTooNew { newer_version } => Err(MentatErrorKind::ExistingVocabularyTooNew(definition.name.to_string(), newer_version.version, definition.version).into()),
+         }
+     }
+ 
+@@ -701,7 +701,7 @@ impl<'a, 'c> VersionedStore for InProgress<'a, 'c> {
+                     out.insert(definition.name.clone(), VocabularyOutcome::Existed);
+                 },
+                 VocabularyCheck::PresentButTooNew { newer_version } => {
+-                    bail!(MentatError::ExistingVocabularyTooNew(definition.name.to_string(), newer_version.version, definition.version));
++                    bail!(MentatErrorKind::ExistingVocabularyTooNew(definition.name.to_string(), newer_version.version, definition.version));
+                 },
+ 
+                 c @ VocabularyCheck::NotPresent |
+@@ -868,7 +868,7 @@ impl<T> HasVocabularies for T where T: HasSchema + Queryable {
+                             attributes: attributes,
+                         }))
+                     },
+-                Some(_) => bail!(MentatError::InvalidVocabularyVersion),
++                Some(_) => bail!(MentatErrorKind::InvalidVocabularyVersion),
+             }
+         } else {
+             Ok(None)
+diff --git a/tests/query.rs b/tests/query.rs
+index 6cbe188eb..6a5f7a56e 100644
+--- a/tests/query.rs
++++ b/tests/query.rs
+@@ -61,7 +61,7 @@ use mentat::query::q_uncached;
+ use mentat::conn::Conn;
+ 
+ use mentat::errors::{
+-    MentatError,
++    MentatErrorKind,
+ };
+ 
+ #[test]
+@@ -233,9 +233,9 @@ fn test_unbound_inputs() {
+     let results = q_uncached(&c, &db.schema,
+                              "[:find ?i . :in ?e :where [?e :db/ident ?i]]", inputs);
+ 
+-    match results.expect_err("expected unbound variables") {
+-        MentatError::UnboundVariables(vars) => {
+-            assert_eq!(vars, vec!["?e".to_string()].into_iter().collect());
++    match results.expect_err("expected unbound variables").kind() {
++        &MentatErrorKind::UnboundVariables(ref vars) => {
++            assert_eq!(vars, &vec!["?e".to_string()].into_iter().collect());
+         },
+         _ => panic!("Expected UnboundVariables variant."),
+     }
+@@ -411,11 +411,15 @@ fn test_fulltext() {
+                     [?a :foo/term ?term]
+                     ]"#;
+     let r = conn.q_once(&mut c, query, None);
+-    match r.expect_err("expected query to fail") {
+-        MentatError::AlgebrizerError(mentat_query_algebrizer::AlgebrizerError::InvalidArgument(PlainSymbol(s), ty, i)) => {
+-            assert_eq!(s, "fulltext");
+-            assert_eq!(ty, "string");
+-            assert_eq!(i, 2);
++    match r.expect_err("expected query to fail").kind() {
++        &MentatErrorKind::AlgebrizerError(ref e) => {
++            if let &mentat_query_algebrizer::AlgebrizerErrorKind::InvalidArgument(PlainSymbol(ref s), ref ty, ref i) = e.kind() {
++                assert_eq!(*s, "fulltext");
++                assert_eq!(*ty, "string");
++                assert_eq!(*i, 2);
++            } else {
++                panic!("Expected invalid argument");
++            }
+         },
+         _ => panic!("Expected query to fail."),
+     }
+@@ -426,11 +430,15 @@ fn test_fulltext() {
+                     [?a :foo/term ?term]
+                     [(fulltext $ :foo/fts ?a) [[?x ?val]]]]"#;
+     let r = conn.q_once(&mut c, query, None);
+-    match r.expect_err("expected query to fail") {
+-        MentatError::AlgebrizerError(mentat_query_algebrizer::AlgebrizerError::InvalidArgument(PlainSymbol(s), ty, i)) => {
+-            assert_eq!(s, "fulltext");
+-            assert_eq!(ty, "string");
+-            assert_eq!(i, 2);
++    match r.expect_err("expected query to fail").kind() {
++        &MentatErrorKind::AlgebrizerError(ref e) => {
++            if let &mentat_query_algebrizer::AlgebrizerErrorKind::InvalidArgument(PlainSymbol(ref s), ref ty, ref i) = e.kind() {
++                assert_eq!(*s, "fulltext");
++                assert_eq!(*ty, "string");
++                assert_eq!(*i, 2);
++            } else {
++                panic!("expected AlgebrizerError::InvalidArgument");
++            }
+         },
+         _ => panic!("Expected query to fail."),
+     }
+@@ -582,10 +590,15 @@ fn test_aggregates_type_handling() {
+     // No type limits => can't do it.
+     let r = store.q_once(r#"[:find (sum ?v) . :where [_ _ ?v]]"#, None);
+     let all_types = ValueTypeSet::any();
+-    match r.expect_err("expected query to fail") {
+-        MentatError::ProjectorError(::mentat_query_projector::errors::ProjectorError::CannotApplyAggregateOperationToTypes(
+-            SimpleAggregationOp::Sum, types)) => {
+-                assert_eq!(types, all_types);
++    use mentat_query_projector::errors::ProjectorErrorKind;
++    match r.expect_err("expected query to fail").kind() {
++        &MentatErrorKind::ProjectorError(ref e) => {
++            if let &ProjectorErrorKind::CannotApplyAggregateOperationToTypes(
++                        SimpleAggregationOp::Sum, ref types) = e.kind() {
++                assert_eq!(types, &all_types);
++            } else {
++                panic!("Unexpected error type {:?}", e);
++            }
+         },
+         e => panic!("Unexpected error type {:?}", e),
+     }
+@@ -594,11 +607,14 @@ fn test_aggregates_type_handling() {
+     let r = store.q_once(r#"[:find (sum ?v) .
+                              :where [_ _ ?v] [(type ?v :db.type/instant)]]"#,
+                          None);
+-    match r.expect_err("expected query to fail") {
+-        MentatError::ProjectorError(::mentat_query_projector::errors::ProjectorError::CannotApplyAggregateOperationToTypes(
+-            SimpleAggregationOp::Sum,
+-            types)) => {
+-                assert_eq!(types, ValueTypeSet::of_one(ValueType::Instant));
++    match r.expect_err("expected query to fail").kind() {
++        &MentatErrorKind::ProjectorError(ref e) => {
++            if let &ProjectorErrorKind::CannotApplyAggregateOperationToTypes(
++                        SimpleAggregationOp::Sum, ref types) = e.kind() {
++                assert_eq!(types, &ValueTypeSet::of_one(ValueType::Instant));
++            } else {
++                panic!("Unexpected error type {:?}", e);
++            }
+         },
+         e => panic!("Unexpected error type {:?}", e),
+     }
+@@ -1336,10 +1352,15 @@ fn test_aggregation_implicit_grouping() {
+                                [?person :foo/play ?game]
+                                [?person :foo/is-vegetarian true]
+                                [?person :foo/name ?name]]"#, None);
+-    match res.expect_err("expected query to fail") {
+-        MentatError::ProjectorError(::mentat_query_projector::errors::ProjectorError::AmbiguousAggregates(mmc, cc)) => {
+-            assert_eq!(mmc, 2);
+-            assert_eq!(cc, 1);
++    use mentat_query_projector::errors::ProjectorErrorKind;
++    match res.expect_err("expected query to fail").kind() {
++        &MentatErrorKind::ProjectorError(ref e) => {
++            if let &ProjectorErrorKind::AmbiguousAggregates(mmc, cc) = e.kind() {
++                assert_eq!(mmc, 2);
++                assert_eq!(cc, 1);
++            } else {
++                panic!("Unexpected error type {:?}.", e);
++            }
+         },
+         e => {
+             panic!("Unexpected error type {:?}.", e);
+diff --git a/tests/vocabulary.rs b/tests/vocabulary.rs
+index f5905a942..110b90e2f 100644
+--- a/tests/vocabulary.rs
++++ b/tests/vocabulary.rs
+@@ -59,7 +59,7 @@ use mentat::entity_builder::{
+     TermBuilder,
+ };
+ 
+-use mentat::errors::MentatError;
++use mentat::errors::MentatErrorKind;
+ 
+ lazy_static! {
+     static ref FOO_NAME: Keyword = {
+@@ -286,13 +286,13 @@ fn test_add_vocab() {
+     // Scoped borrow of `conn`.
+     {
+         let mut in_progress = conn.begin_transaction(&mut sqlite).expect("begun successfully");
+-        match in_progress.ensure_vocabulary(&foo_v1_malformed).expect_err("expected vocabulary to fail") {
+-            MentatError::ConflictingAttributeDefinitions(vocab, version, attr, theirs, ours) => {
++        match in_progress.ensure_vocabulary(&foo_v1_malformed).expect_err("expected vocabulary to fail").kind() {
++            &MentatErrorKind::ConflictingAttributeDefinitions(ref vocab, ref version, ref attr, ref theirs, ref ours) => {
+                 assert_eq!(vocab.as_str(), ":org.mozilla/foo");
+                 assert_eq!(attr.as_str(), ":foo/baz");
+-                assert_eq!(version, 1);
+-                assert_eq!(&theirs, &baz);
+-                assert_eq!(&ours, &malformed_baz);
++                assert_eq!(*version, 1);
++                assert_eq!(theirs, &baz);
++                assert_eq!(ours, &malformed_baz);
+             },
+             _ => panic!(),
+         }
+diff --git a/tools/cli/src/mentat_cli/repl.rs b/tools/cli/src/mentat_cli/repl.rs
+index 2a75440c2..acabef3db 100644
+--- a/tools/cli/src/mentat_cli/repl.rs
++++ b/tools/cli/src/mentat_cli/repl.rs
+@@ -421,7 +421,7 @@ impl Repl {
+         if self.path.is_empty() || path != self.path {
+             let next = match encryption_key {
+                 #[cfg(not(feature = "sqlcipher"))]
+-                Some(_) => return Err(::mentat::MentatError::RusqliteError(".open_encrypted and .empty_encrypted require the sqlcipher Mentat feature".into())),
++                Some(_) => return Err(::mentat::MentatErrorKind::RusqliteError(".open_encrypted and .empty_encrypted require the sqlcipher Mentat feature".into()).into()),
+ 
+                 #[cfg(feature = "sqlcipher")]
+                 Some(k) => {

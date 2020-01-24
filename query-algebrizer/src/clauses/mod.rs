@@ -24,7 +24,7 @@ use mentat_core::counter::RcCounter;
 
 use edn::query::{Element, FindSpec, Keyword, PatternNonValuePlace, Pull, Variable, WhereClause};
 
-use query_algebrizer_traits::errors::{AlgebrizerError, Result};
+use query_algebrizer_traits::errors::{AlgebrizerErrorKind, Result};
 
 use types::{
     Column, ColumnConstraint, ColumnIntersection, ComputedTable, DatomsColumn, DatomsTable,
@@ -1071,7 +1071,7 @@ impl ConjoiningClauses {
             let qa = self
                 .extracted_types
                 .get(&var)
-                .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()))?;
+                .ok_or_else(|| AlgebrizerErrorKind::UnboundVariable(var.name()))?;
             self.wheres.add_intersection(ColumnConstraint::HasTypes {
                 value: qa.0.clone(),
                 value_types: types,

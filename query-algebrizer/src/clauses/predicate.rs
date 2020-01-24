@@ -18,7 +18,7 @@ use clauses::ConjoiningClauses;
 
 use clauses::convert::ValueTypes;
 
-use query_algebrizer_traits::errors::{AlgebrizerError, Result};
+use query_algebrizer_traits::errors::{AlgebrizerErrorKind, Result};
 
 use types::{ColumnConstraint, EmptyBecause, Inequality, QueryValue};
 
@@ -38,7 +38,7 @@ impl ConjoiningClauses {
         if let Some(op) = Inequality::from_datalog_operator(predicate.operator.0.as_str()) {
             self.apply_inequality(known, op, predicate)
         } else {
-            bail!(AlgebrizerError::UnknownFunction(predicate.operator.clone()))
+            bail!(AlgebrizerErrorKind::UnknownFunction(predicate.operator.clone()))
         }
     }
 
@@ -56,7 +56,7 @@ impl ConjoiningClauses {
             Some(value_type) => {
                 self.add_type_requirement(anno.variable.clone(), ValueTypeSet::of_one(value_type))
             }
-            None => bail!(AlgebrizerError::InvalidArgumentType(
+            None => bail!(AlgebrizerErrorKind::InvalidArgumentType(
                 PlainSymbol::plain("type"),
                 ValueTypeSet::any(),
                 2
@@ -76,7 +76,7 @@ impl ConjoiningClauses {
         predicate: Predicate,
     ) -> Result<()> {
         if predicate.args.len() != 2 {
-            bail!(AlgebrizerError::InvalidNumberOfArguments(
+            bail!(AlgebrizerErrorKind::InvalidNumberOfArguments(
                 predicate.operator.clone(),
                 predicate.args.len(),
                 2
@@ -97,7 +97,7 @@ impl ConjoiningClauses {
             .potential_types(known.schema, &left)?
             .intersection(&supported_types);
         if left_types.is_empty() {
-            bail!(AlgebrizerError::InvalidArgumentType(
+            bail!(AlgebrizerErrorKind::InvalidArgumentType(
                 predicate.operator.clone(),
                 supported_types,
                 0
@@ -108,7 +108,7 @@ impl ConjoiningClauses {
             .potential_types(known.schema, &right)?
             .intersection(&supported_types);
         if right_types.is_empty() {
-            bail!(AlgebrizerError::InvalidArgumentType(
+            bail!(AlgebrizerErrorKind::InvalidArgumentType(
                 predicate.operator.clone(),
                 supported_types,
                 1
@@ -160,7 +160,7 @@ impl ConjoiningClauses {
             left_v = self.resolve_ref_argument(known.schema, &predicate.operator, 0, left)?;
             right_v = self.resolve_ref_argument(known.schema, &predicate.operator, 1, right)?;
         } else {
-            bail!(AlgebrizerError::InvalidArgumentType(
+            bail!(AlgebrizerErrorKind::InvalidArgumentType(
                 predicate.operator.clone(),
                 supported_types,
                 0

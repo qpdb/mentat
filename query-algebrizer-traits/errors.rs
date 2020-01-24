@@ -12,9 +12,59 @@ use std; // To refer to std::result::Result.
 
 use core_traits::{ValueType, ValueTypeSet};
 
-use edn::{query::PlainSymbol, ParseError};
+use std::fmt;
+use failure::{
+    Backtrace,
+    Context,
+    Fail,
+};
+
+use edn::{query::PlainSymbol, ParseErrorKind};
 
 pub type Result<T> = std::result::Result<T, AlgebrizerError>;
+
+#[derive(Debug)]
+pub struct AlgebrizerError(Box<Context<AlgebrizerErrorKind>>);
+
+impl Fail for AlgebrizerError {
+    #[inline]
+    fn cause(&self) -> Option<&dyn Fail> {
+        self.0.cause()
+    }
+
+    #[inline]
+    fn backtrace(&self) -> Option<&Backtrace> {
+        self.0.backtrace()
+    }
+}
+
+impl fmt::Display for AlgebrizerError {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&*self.0, f)
+    }
+}
+
+impl AlgebrizerError {
+    #[inline]
+    pub fn kind(&self) -> &AlgebrizerErrorKind {
+        &*self.0.get_context()
+    }
+}
+
+impl From<AlgebrizerErrorKind> for AlgebrizerError {
+    #[inline]
+    fn from(kind: AlgebrizerErrorKind) -> AlgebrizerError {
+        AlgebrizerError(Box::new(Context::new(kind)))
+    }
+}
+
+impl From<Context<AlgebrizerErrorKind>> for AlgebrizerError {
+    #[inline]
+    fn from(inner: Context<AlgebrizerErrorKind>) -> AlgebrizerError {
+        AlgebrizerError(Box::new(inner))
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BindingError {
@@ -40,7 +90,7 @@ pub enum BindingError {
 }
 
 #[derive(Clone, Debug, Eq, Fail, PartialEq)]
-pub enum AlgebrizerError {
+pub enum AlgebrizerErrorKind {
     #[fail(display = "{} var {} is duplicated", _0, _1)]
     DuplicateVariableError(PlainSymbol, &'static str),
 
@@ -107,11 +157,11 @@ pub enum AlgebrizerError {
     InvalidBinding(PlainSymbol, BindingError),
 
     #[fail(display = "{}", _0)]
-    EdnParseError(#[cause] ParseError),
+    EdnParseError(#[cause] ParseErrorKind),
 }
 
-impl From<ParseError> for AlgebrizerError {
-    fn from(error: ParseError) -> AlgebrizerError {
-        AlgebrizerError::EdnParseError(error)
+impl From<ParseErrorKind> for AlgebrizerError {
+    fn from(error: ParseErrorKind) -> AlgebrizerError {
+        AlgebrizerError::from(error).into()
     }
 }

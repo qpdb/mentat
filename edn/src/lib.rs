@@ -68,7 +68,7 @@ use query::FromValue;
 // TODO: Support tagged elements
 // TODO: Support discard
 
-pub type ParseError = peg::error::ParseError<peg::str::LineCol>;
+pub type ParseErrorKind = peg::error::ParseError<peg::str::LineCol>;
 
 peg::parser!(pub grammar parse() for str {
 

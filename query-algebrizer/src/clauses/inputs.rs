@@ -14,7 +14,7 @@ use core_traits::{TypedValue, ValueType};
 
 use edn::query::Variable;
 
-use query_algebrizer_traits::errors::{AlgebrizerError, Result};
+use query_algebrizer_traits::errors::{AlgebrizerErrorKind, Result};
 
 /// Define the inputs to a query. This is in two parts: a set of values known now, and a set of
 /// types known now.
@@ -69,7 +69,7 @@ impl QueryInputs {
             let old = types.insert(var.clone(), t);
             if let Some(old) = old {
                 if old != t {
-                    bail!(AlgebrizerError::InputTypeDisagreement(var.name(), old, t));
+                    bail!(AlgebrizerErrorKind::InputTypeDisagreement(var.name(), old, t));
                 }
             }
         }

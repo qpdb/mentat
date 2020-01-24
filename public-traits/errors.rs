@@ -16,6 +16,12 @@ use std::collections::BTreeSet;
 use std::error::Error;
 
 use rusqlite;
+use failure::{
+    Backtrace,
+    Context,
+    Fail,
+};
++use std::fmt;
 use uuid;
 
 use edn;
@@ -39,8 +45,51 @@ use serde_json;
 
 pub type Result<T> = std::result::Result<T, MentatError>;
 
+#[derive(Debug)]
+pub struct MentatError(Box<Context<MentatErrorKind>>);
+
+impl Fail for MentatError {
+    #[inline]
+    fn cause(&self) -> Option<&Fail> {
+        self.0.cause()
+    }
+
+    #[inline]
+    fn backtrace(&self) -> Option<&Backtrace> {
+        self.0.backtrace()
+    }
+}
+
+impl fmt::Display for MentatError {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&*self.0, f)
+    }
+}
+
+impl MentatError {
+    #[inline]
+    pub fn kind(&self) -> &MentatErrorKind {
+        &*self.0.get_context()
+    }
+}
+
+impl From<MentatErrorKind> for MentatError {
+    #[inline]
+    fn from(kind: MentatErrorKind) -> MentatError {
+        MentatError(Box::new(Context::new(kind)))
+    }
+}
+
+impl From<Context<MentatErrorKind>> for MentatError {
+    #[inline]
+    fn from(inner: Context<MentatErrorKind>) -> MentatError {
+        MentatError(Box::new(inner))
+    }
+}
+
 #[derive(Debug, Fail)]
-pub enum MentatError {
+pub enum MentatErrorKind {
     #[fail(display = "bad uuid {}", _0)]
     BadUuid(String),
 
@@ -140,9 +189,67 @@ pub enum MentatError {
     SerializationError(#[cause] serde_json::Error),
 }
 
+impl From<std::io::Error> for MentatErrorKind {
+    fn from(error: std::io::Error) -> MentatErrorKind {
+        MentatErrorKind::IoError(error)
+    }
+}
+
+impl From<rusqlite::Error> for MentatErrorKind {
+    fn from(error: rusqlite::Error) -> MentatErrorKind {
+        MentatErrorKind::RusqliteError(error.to_string())
+    }
+}
+
+impl From<edn::ParseError> for MentatErrorKind {
+    fn from(error: edn::ParseError) -> MentatErrorKind {
+        MentatErrorKind::EdnParseError(error)
+    }
+}
+
+impl From<mentat_db::DbError> for MentatErrorKind {
+    fn from(error: mentat_db::DbError) -> MentatErrorKind {
+        MentatErrorKind::DbError(error)
+    }
+}
+
+impl From<mentat_query_algebrizer::AlgebrizerError> for MentatErrorKind {
+    fn from(error: mentat_query_algebrizer::AlgebrizerError) -> MentatErrorKind {
+        MentatErrorKind::AlgebrizerError(error)
+    }
+}
+
+impl From<mentat_query_projector::ProjectorError> for MentatErrorKind {
+    fn from(error: mentat_query_projector::ProjectorError) -> MentatErrorKind {
+        MentatErrorKind::ProjectorError(error)
+    }
+}
+
+impl From<mentat_query_pull::PullError> for MentatErrorKind {
+    fn from(error: mentat_query_pull::PullError) -> MentatErrorKind {
+        MentatErrorKind::PullError(error)
+    }
+}
+
+impl From<mentat_sql::SQLError> for MentatErrorKind {
+    fn from(error: mentat_sql::SQLError) -> MentatErrorKind {
+        MentatErrorKind::SQLError(error)
+    }
+}
+
+#[cfg(feature = "syncable")]
+impl From<mentat_tolstoy::TolstoyError> for MentatErrorKind {
+    fn from(error: mentat_tolstoy::TolstoyError) -> MentatErrorKind {
+        MentatErrorKind::TolstoyError(error)
+    }
+}
+
+// XXX reduce dupe if this isn't completely throwaway
+
+
 impl From<std::io::Error> for MentatError {
     fn from(error: std::io::Error) -> Self {
-        MentatError::IoError(error)
+        MentatError::from(error).into()
     }
 }
 
@@ -152,76 +259,76 @@ impl From<rusqlite::Error> for MentatError {
             Some(e) => e.to_string(),
             None => "".to_string(),
         };
-        MentatError::RusqliteError(error.to_string(), cause)
+        MentatError::from(error).into()
     }
 }
 
 impl From<uuid::Error> for MentatError {
     fn from(error: uuid::Error) -> Self {
-        MentatError::UuidError(error)
+        MentatError::from(error).into()
     }
 }
 
 impl From<edn::ParseError> for MentatError {
     fn from(error: edn::ParseError) -> Self {
-        MentatError::EdnParseError(error)
+        MentatError:from(error).into()
     }
 }
 
 impl From<DbError> for MentatError {
     fn from(error: DbError) -> Self {
-        MentatError::DbError(error)
+        MentatError::from(error).into()
     }
 }
 
 impl From<AlgebrizerError> for MentatError {
     fn from(error: AlgebrizerError) -> Self {
-        MentatError::AlgebrizerError(error)
+        MentatError::from(error).into()
     }
 }
 
 impl From<ProjectorError> for MentatError {
     fn from(error: ProjectorError) -> Self {
-        MentatError::ProjectorError(error)
+        MentatError::from(error).into()
     }
 }
 
 impl From<PullError> for MentatError {
     fn from(error: PullError) -> Self {
-        MentatError::PullError(error)
+        MentatError::from(error).into()
     }
 }
 
 impl From<SQLError> for MentatError {
     fn from(error: SQLError) -> Self {
-        MentatError::SQLError(error)
+        MentatError::from(error).into()
     }
 }
 
 #[cfg(feature = "syncable")]
 impl From<TolstoyError> for MentatError {
     fn from(error: TolstoyError) -> Self {
-        MentatError::TolstoyError(error)
+        MentatError::from(error).into()
     }
 }
 
 #[cfg(feature = "syncable")]
 impl From<serde_json::Error> for MentatError {
     fn from(error: serde_json::Error) -> Self {
-        MentatError::SerializationError(error)
+        MentatError::from(error).into()
     }
 }
 
 #[cfg(feature = "syncable")]
 impl From<hyper::Error> for MentatError {
     fn from(error: hyper::Error) -> Self {
-        MentatError::NetworkError(error)
+        MentatError::from(error).into()
     }
 }
 
 #[cfg(feature = "syncable")]
 impl From<http::uri::InvalidUri> for MentatError {
     fn from(error: http::uri::InvalidUri) -> Self {
-        MentatError::UriError(error)
+        MentatError::from(error).into()
     }
 }

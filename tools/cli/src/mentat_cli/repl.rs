@@ -376,7 +376,7 @@ impl Repl {
             let next = match encryption_key {
                 #[cfg(not(feature = "sqlcipher"))]
                 Some(_) => {
-                    return Err(::mentat::MentatError::RusqliteError(
+                    return Err(::mentat::MentatErrorKind::RusqliteError(
                         ".open_encrypted requires the sqlcipher Mentat feature".into(),
                         "".into(),
                     ))

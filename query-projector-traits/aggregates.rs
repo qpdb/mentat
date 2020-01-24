@@ -16,7 +16,7 @@ use mentat_query_algebrizer::{ColumnName, ConjoiningClauses, VariableColumn};
 
 use mentat_query_sql::{ColumnOrExpression, Expression, Name, ProjectedColumn};
 
-use errors::{ProjectorError, Result};
+use errors::{ProjectorErrorKind, Result};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SimpleAggregationOp {
@@ -60,7 +60,7 @@ impl SimpleAggregationOp {
     pub fn is_applicable_to_types(&self, possibilities: ValueTypeSet) -> Result<ValueType> {
         use self::SimpleAggregationOp::*;
         if possibilities.is_empty() {
-            bail!(ProjectorError::CannotProjectImpossibleBinding(*self))
+            bail!(ProjectorErrorKind::CannotProjectImpossibleBinding(*self))
         }
 
         match self {
@@ -73,7 +73,7 @@ impl SimpleAggregationOp {
                     // The mean of a set of numeric values will always, for our purposes, be a double.
                     Ok(ValueType::Double)
                 } else {
-                    bail!(ProjectorError::CannotApplyAggregateOperationToTypes(
+                    bail!(ProjectorErrorKind::CannotApplyAggregateOperationToTypes(
                         *self,
                         possibilities
                     ))
@@ -88,7 +88,7 @@ impl SimpleAggregationOp {
                         Ok(ValueType::Long)
                     }
                 } else {
-                    bail!(ProjectorError::CannotApplyAggregateOperationToTypes(
+                    bail!(ProjectorErrorKind::CannotApplyAggregateOperationToTypes(
                         *self,
                         possibilities
                     ))
@@ -111,7 +111,7 @@ impl SimpleAggregationOp {
 
                         // These types are unordered.
                         Keyword | Ref | Uuid => {
-                            bail!(ProjectorError::CannotApplyAggregateOperationToTypes(
+                            bail!(ProjectorErrorKind::CannotApplyAggregateOperationToTypes(
                                 *self,
                                 possibilities
                             ))
@@ -129,7 +129,7 @@ impl SimpleAggregationOp {
                             Ok(ValueType::Long)
                         }
                     } else {
-                        bail!(ProjectorError::CannotApplyAggregateOperationToTypes(
+                        bail!(ProjectorErrorKind::CannotApplyAggregateOperationToTypes(
                             *self,
                             possibilities
                         ))

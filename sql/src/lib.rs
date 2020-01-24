@@ -18,14 +18,13 @@ extern crate mentat_core;
 extern crate sql_traits;
 
 use std::rc::Rc;
-
 use std::collections::HashMap;
 
 use ordered_float::OrderedFloat;
 
 use core_traits::TypedValue;
 
-use sql_traits::errors::{BuildQueryResult, SQLError};
+use sql_traits::errors::{BuildQueryResult, SQLErrorKind};
 
 use mentat_core::{ToMicros, ValueRc};
 
@@ -194,7 +193,7 @@ impl QueryBuilder for SQLiteQueryBuilder {
         // Do some validation first.
         // This is not free, but it's probably worth it for now.
         if !name.chars().all(|c| char::is_alphanumeric(c) || c == '_') {
-            return Err(SQLError::InvalidParameterName(name.to_string()));
+            return Err(SQLErrorKind::InvalidParameterName(name.to_string()));
         }
 
         if name.starts_with(self.arg_prefix.as_str())
@@ -203,7 +202,7 @@ impl QueryBuilder for SQLiteQueryBuilder {
                 .skip(self.arg_prefix.len())
                 .all(char::is_numeric)
         {
-            return Err(SQLError::BindParamCouldBeGenerated(name.to_string()));
+            return Err(SQLErrorKind::BindParamCouldBeGenerated(name.to_string()));
         }
 
         self.push_sql("$");

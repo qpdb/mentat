@@ -40,7 +40,7 @@ use mentat::{
 
 use mentat::entity_builder::{BuildTerms, TermBuilder};
 
-use mentat::errors::MentatError;
+use mentat::errors::MentatErrorKind;
 
 lazy_static! {
     static ref FOO_NAME: Keyword = { kw!(:foo/name) };
@@ -327,12 +327,12 @@ fn test_add_vocab() {
             .ensure_vocabulary(&foo_v1_malformed)
             .expect_err("expected vocabulary to fail")
         {
-            MentatError::ConflictingAttributeDefinitions(vocab, version, attr, theirs, ours) => {
+            &MentatErrorKind::ConflictingAttributeDefinitions(vocab, version, attr, theirs, ours) => {
                 assert_eq!(vocab.as_str(), ":org.mozilla/foo");
                 assert_eq!(attr.as_str(), ":foo/baz");
-                assert_eq!(version, 1);
-                assert_eq!(&theirs, &baz);
-                assert_eq!(&ours, &malformed_baz);
+                assert_eq!(*version, 1);
+                assert_eq!(theirs, &baz);
+                assert_eq!(ours, &malformed_baz);
             }
             _ => panic!(),
         }

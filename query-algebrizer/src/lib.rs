@@ -32,7 +32,7 @@ use mentat_core::counter::RcCounter;
 
 use edn::query::{Element, FindSpec, Limit, Order, ParsedQuery, SrcVar, Variable, WhereClause};
 
-use query_algebrizer_traits::errors::{AlgebrizerError, Result};
+use query_algebrizer_traits::errors::{AlgebrizerErrorKind, Result};
 
 pub use clauses::{QueryInputs, VariableBindings};
 
@@ -229,7 +229,7 @@ fn validate_and_simplify_order(
 
                 // Fail if the var isn't bound by the query.
                 if !cc.column_bindings.contains_key(&var) {
-                    bail!(AlgebrizerError::UnboundVariable(var.name()))
+                    bail!(AlgebrizerErrorKind::UnboundVariable(var.name()))
                 }
 
                 // Otherwise, determine if we also need to order by type…
@@ -263,7 +263,7 @@ fn simplify_limit(mut query: AlgebraicQuery) -> Result<AlgebraicQuery> {
                 Some(TypedValue::Long(n)) => {
                     if n <= 0 {
                         // User-specified limits should always be natural numbers (> 0).
-                        bail!(AlgebrizerError::InvalidLimit(
+                        bail!(AlgebrizerErrorKind::InvalidLimit(
                             n.to_string(),
                             ValueType::Long
                         ))
@@ -273,7 +273,7 @@ fn simplify_limit(mut query: AlgebraicQuery) -> Result<AlgebraicQuery> {
                 }
                 Some(val) => {
                     // Same.
-                    bail!(AlgebrizerError::InvalidLimit(
+                    bail!(AlgebrizerErrorKind::InvalidLimit(
                         format!("{:?}", val),
                         val.value_type()
                     ))
@@ -375,7 +375,7 @@ impl FindQuery {
 
             for var in parsed.in_vars.into_iter() {
                 if !set.insert(var.clone()) {
-                    bail!(AlgebrizerError::DuplicateVariableError(var.name(), ":in"));
+                    bail!(AlgebrizerErrorKind::DuplicateVariableError(var.name(), ":in"));
                 }
             }
 
@@ -387,7 +387,7 @@ impl FindQuery {
 
             for var in parsed.with.into_iter() {
                 if !set.insert(var.clone()) {
-                    bail!(AlgebrizerError::DuplicateVariableError(var.name(), ":with"));
+                    bail!(AlgebrizerErrorKind::DuplicateVariableError(var.name(), ":with"));
                 }
             }
 
@@ -397,7 +397,7 @@ impl FindQuery {
         // Make sure that if we have `:limit ?x`, `?x` appears in `:in`.
         if let Limit::Variable(ref v) = parsed.limit {
             if !in_vars.contains(v) {
-                bail!(AlgebrizerError::UnknownLimitVar(v.name()));
+                bail!(AlgebrizerErrorKind::UnknownLimitVar(v.name()));
             }
         }
 

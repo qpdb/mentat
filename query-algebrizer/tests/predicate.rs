@@ -22,7 +22,7 @@ use mentat_core::{DateTime, Schema, Utc};
 
 use edn::query::{Keyword, PlainSymbol, Variable};
 
-use query_algebrizer_traits::errors::AlgebrizerError;
+use query_algebrizer_traits::errors::AlgebrizerErrorKind;
 
 use mentat_query_algebrizer::{EmptyBecause, Known, QueryInputs};
 
@@ -75,7 +75,7 @@ fn test_instant_predicates_require_instants() {
                     [(> ?t "2017-06-16T00:56:41.257Z")]]"#;
     assert_eq!(
         bails(known, query),
-        AlgebrizerError::InvalidArgumentType(
+        AlgebrizerErrorKind::InvalidArgumentType(
             PlainSymbol::plain(">"),
             ValueTypeSet::of_numeric_and_instant_types(),
             1
@@ -88,7 +88,7 @@ fn test_instant_predicates_require_instants() {
                     [(> "2017-06-16T00:56:41.257Z", ?t)]]"#;
     assert_eq!(
         bails(known, query),
-        AlgebrizerError::InvalidArgumentType(
+        AlgebrizerErrorKind::InvalidArgumentType(
             PlainSymbol::plain(">"),
             ValueTypeSet::of_numeric_and_instant_types(),
             0

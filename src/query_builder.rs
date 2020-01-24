@@ -17,7 +17,7 @@ use mentat_core::{DateTime, Keyword, Utc};
 
 use super::{HasSchema, QueryInputs, QueryOutput, Queryable, RelResult, Store, Variable};
 
-use public_traits::errors::{MentatError, Result};
+use public_traits::errors::{MentatErrorKind, Result};
 
 pub struct QueryBuilder<'a> {
     query: String,
@@ -49,12 +49,8 @@ impl<'a> QueryBuilder<'a> {
     }
 
     pub fn bind_ref_from_kw(&mut self, var: &str, value: Keyword) -> Result<&mut Self> {
-        let entid = self
-            .store
-            .conn()
-            .current_schema()
-            .get_entid(&value)
-            .ok_or(MentatError::UnknownAttribute(value.to_string()))?;
+        let entid = self.store.conn().current_schema().get_entid(&value).ok_or_else(||
+            MentatError::from(MentatErrorKind::UnknownAttribute(value.to_string())))?;
         self.values.insert(
             Variable::from_valid_name(var),
             TypedValue::Ref(entid.into()),

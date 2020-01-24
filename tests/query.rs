@@ -37,7 +37,7 @@ use mentat::query::q_uncached;
 
 use mentat::conn::Conn;
 
-use public_traits::errors::MentatError;
+use public_traits::errors::MentatErrorKind;
 
 #[test]
 fn test_rel() {
@@ -243,10 +243,9 @@ fn test_unbound_inputs() {
         inputs,
     );
 
-    match results.expect_err("expected unbound variables") {
-        MentatError::UnboundVariables(vars) => {
-            assert_eq!(vars, vec!["?e".to_string()].into_iter().collect());
-        }
+    match results.expect_err("expected unbound variables").kind() {
+        &MentatErrorKind::UnboundVariables(ref vars) => {
+            assert_eq!(vars, &vec!["?e".to_string()].into_iter().collect());
         _ => panic!("Expected UnboundVariables variant."),
     }
 }
@@ -495,17 +494,15 @@ fn test_fulltext() {
                     [?a :foo/term ?term]
                     ]"#;
     let r = conn.q_once(&mut c, query, None);
-    match r.expect_err("expected query to fail") {
-        MentatError::AlgebrizerError(
-            query_algebrizer_traits::errors::AlgebrizerError::InvalidArgument(
-                PlainSymbol(s),
-                ty,
-                i,
-            ),
-        ) => {
-            assert_eq!(s, "fulltext");
-            assert_eq!(ty, "string");
-            assert_eq!(i, 2);
+    match r.expect_err("expected query to fail").kind() {
+        &MentatErrorKind::AlgebrizerError(ref e) => {
+            if let &mentat_query_algebrizer::AlgebrizerErrorKind::InvalidArgument(PlainSymbol(ref s), ref ty, ref i) = e.kind() {
+                assert_eq!(*s, "fulltext");
+                assert_eq!(*ty, "string");
+                assert_eq!(*i, 2);
+            } else {
+                panic!("Expected invalid argument");
+            }
         }
         _ => panic!("Expected query to fail."),
     }
@@ -516,17 +513,15 @@ fn test_fulltext() {
                     [?a :foo/term ?term]
                     [(fulltext $ :foo/fts ?a) [[?x ?val]]]]"#;
     let r = conn.q_once(&mut c, query, None);
-    match r.expect_err("expected query to fail") {
-        MentatError::AlgebrizerError(
-            query_algebrizer_traits::errors::AlgebrizerError::InvalidArgument(
-                PlainSymbol(s),
-                ty,
-                i,
-            ),
-        ) => {
-            assert_eq!(s, "fulltext");
-            assert_eq!(ty, "string");
-            assert_eq!(i, 2);
+    match r.expect_err("expected query to fail").kind() {
+        &MentatErrorKind::AlgebrizerError(ref e) => {
+            if let &mentat_query_algebrizer::AlgebrizerErrorKind::InvalidArgument(PlainSymbol(ref s), ref ty, ref i) = e.kind() {
+                assert_eq!(*s, "fulltext");
+                assert_eq!(*ty, "string");
+                assert_eq!(*i, 2);
+            } else {
+                panic!("expected AlgebrizerError::InvalidArgument");
+            }
         }
         _ => panic!("Expected query to fail."),
     }
@@ -732,14 +727,15 @@ fn test_aggregates_type_handling() {
     // No type limits => can't do it.
     let r = store.q_once(r#"[:find (sum ?v) . :where [_ _ ?v]]"#, None);
     let all_types = ValueTypeSet::any();
-    match r.expect_err("expected query to fail") {
-        MentatError::ProjectorError(
-            ::query_projector_traits::errors::ProjectorError::CannotApplyAggregateOperationToTypes(
-                SimpleAggregationOp::Sum,
-                types,
-            ),
-        ) => {
-            assert_eq!(types, all_types);
+    use mentat_query_projector::errors::ProjectorErrorKind;
+    match r.expect_err("expected query to fail").kind() {
+        &MentatErrorKind::ProjectorError(ref e) => {
+            if let &ProjectorErrorKind::CannotApplyAggregateOperationToTypes(
+                        SimpleAggregationOp::Sum, ref types) = e.kind() {
+                assert_eq!(types, &all_types);
+            } else {
+                panic!("Unexpected error type {:?}", e);
+            }
         }
         e => panic!("Unexpected error type {:?}", e),
     }
@@ -750,14 +746,14 @@ fn test_aggregates_type_handling() {
                              :where [_ _ ?v] [(type ?v :db.type/instant)]]"#,
         None,
     );
-    match r.expect_err("expected query to fail") {
-        MentatError::ProjectorError(
-            ::query_projector_traits::errors::ProjectorError::CannotApplyAggregateOperationToTypes(
-                SimpleAggregationOp::Sum,
-                types,
-            ),
-        ) => {
-            assert_eq!(types, ValueTypeSet::of_one(ValueType::Instant));
+    match r.expect_err("expected query to fail").kind() {
+        &MentatErrorKind::ProjectorError(ref e) => {
+            if let &ProjectorErrorKind::CannotApplyAggregateOperationToTypes(
+                        SimpleAggregationOp::Sum, ref types) = e.kind() {
+                assert_eq!(types, &ValueTypeSet::of_one(ValueType::Instant));
+            } else {
+                panic!("Unexpected error type {:?}", e);
+            }
         }
         e => panic!("Unexpected error type {:?}", e),
     }
@@ -1705,12 +1701,15 @@ fn test_aggregation_implicit_grouping() {
                                [?person :foo/name ?name]]"#,
         None,
     );
-    match res.expect_err("expected query to fail") {
-        MentatError::ProjectorError(
-            ::query_projector_traits::errors::ProjectorError::AmbiguousAggregates(mmc, cc),
-        ) => {
-            assert_eq!(mmc, 2);
-            assert_eq!(cc, 1);
+    use mentat_query_projector::errors::ProjectorErrorKind;
+    match res.expect_err("expected query to fail").kind() {
+        &MentatErrorKind::ProjectorError(ref e) => {
+            if let &ProjectorErrorKind::AmbiguousAggregates(mmc, cc) = e.kind() {
+                assert_eq!(mmc, 2);
+                assert_eq!(cc, 1);
+            } else {
+                panic!("Unexpected error type {:?}.", e);
+            }
         }
         e => {
             panic!("Unexpected error type {:?}.", e);

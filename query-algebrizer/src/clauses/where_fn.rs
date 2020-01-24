@@ -12,7 +12,7 @@ use edn::query::WhereFn;
 
 use clauses::ConjoiningClauses;
 
-use query_algebrizer_traits::errors::{AlgebrizerError, Result};
+use query_algebrizer_traits::errors::{AlgebrizerErrorKind, Result};
 
 use Known;
 
@@ -32,7 +32,7 @@ impl ConjoiningClauses {
             "ground" => self.apply_ground(known, where_fn),
             "tx-data" => self.apply_tx_data(known, where_fn),
             "tx-ids" => self.apply_tx_ids(known, where_fn),
-            _ => bail!(AlgebrizerError::UnknownFunction(where_fn.operator.clone())),
+            _ => bail!(AlgebrizerErrorKind::UnknownFunction(where_fn.operator.clone())),
         }
     }
 }

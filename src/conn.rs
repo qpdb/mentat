@@ -36,7 +36,7 @@ use mentat_query_pull::{pull_attributes_for_entities, pull_attributes_for_entity
 
 use mentat_transaction::{CacheAction, CacheDirection, InProgress, InProgressRead, Metadata};
 
-use public_traits::errors::{MentatError, Result};
+use public_traits::errors::{MentatErrorKind, Result};
 
 use mentat_transaction::query::{
     lookup_value_for_attribute, lookup_values_for_attribute, q_explain, q_once, q_prepare,
@@ -340,7 +340,7 @@ impl Conn {
             attribute_entid = metadata
                 .schema
                 .attribute_for_ident(&attribute)
-                .ok_or_else(|| MentatError::UnknownAttribute(attribute.to_string()))?
+                .ok_or_else(|| MentatErrorKind::UnknownAttribute(attribute.to_string()))?
                 .1
                 .into();
         }
@@ -404,12 +404,16 @@ mod tests {
         let t = format!("[[:db/add {} :db.schema/attribute \"tempid\"]]", next + 1);
 
         match conn.transact(&mut sqlite, t.as_str()) {
-            Err(MentatError::DbError(e)) => {
-                assert_eq!(
-                    e.kind(),
-                    ::db_traits::errors::DbErrorKind::UnallocatedEntid(next + 1)
-                );
-            }
+            Err(e) => {
+                match e.kind() {
+                    &MentatErrorKind::DbError(ref e) => {
+                        assert_eq!(e.kind(), ::mentat_db::DbErrorKind::UnallocatedEntid(next + 1));
+                    }
+                    x => {
+                        panic!("expected db error, got {:?}", x);
+                    }
+                }
+            },
             x => panic!("expected db error, got {:?}", x),
         }
 
@@ -434,12 +438,15 @@ mod tests {
         let t = format!("[[:db/add {} :db.schema/attribute \"tempid\"]]", next);
 
         match conn.transact(&mut sqlite, t.as_str()) {
-            Err(MentatError::DbError(e)) => {
-                // All this, despite this being the ID we were about to allocate!
-                assert_eq!(
-                    e.kind(),
-                    ::db_traits::errors::DbErrorKind::UnallocatedEntid(next)
-                );
+            Err(e) => {
+                match e.kind() {
+                    &MentatErrorKind::DbError(ref e) => {
+                        assert_eq!(e.kind(), ::mentat_db::DbErrorKind::UnallocatedEntid(next + 1));
+                    }
+                    x => {
+                        panic!("expected db error, got {:?}", x);
+                    }
+                }
             }
             x => panic!("expected db error, got {:?}", x),
         }
@@ -642,8 +649,8 @@ mod tests {
 
         // Bad EDN: missing closing ']'.
         let report = conn.transact(&mut sqlite, "[[:db/add \"t\" :db/ident :a/keyword]");
-        match report.expect_err("expected transact to fail for bad edn") {
-            MentatError::EdnParseError(_) => {}
+        match report.expect_err("expected transact to fail for bad edn").kind() {
+            &MentatErrorKind::EdnParseError(_) => { }
             x => panic!("expected EDN parse error, got {:?}", x),
         }
 
@@ -655,8 +662,8 @@ mod tests {
 
         // Bad transaction data: missing leading :db/add.
         let report = conn.transact(&mut sqlite, "[[\"t\" :db/ident :b/keyword]]");
-        match report.expect_err("expected transact error") {
-            MentatError::EdnParseError(_) => {}
+        match report.expect_err("expected transact error").kind() {
+            &MentatErrorKind::EdnParseError(_) => { }
             x => panic!("expected EDN parse error, got {:?}", x),
         }
 
@@ -668,12 +675,10 @@ mod tests {
 
         // Bad transaction based on state of store: conflicting upsert.
         let report = conn.transact(
-            &mut sqlite,
-            "[[:db/add \"u\" :db/ident :a/keyword]
-                                                  [:db/add \"u\" :db/ident :b/keyword]]",
-        );
-        match report.expect_err("expected transact error") {
-            MentatError::DbError(e) => match e.kind() {
+            &mut sqlite, "[[:db/add \"u\" :db/ident :a/keyword]
+                           [:db/add \"u\" :db/ident :b/keyword]]");
+        match report.expect_err("expected transact error").kind() {
+            &MentatErrorKind::DbError(ref e) => {
                 ::db_traits::errors::DbErrorKind::SchemaConstraintViolation(_) => {}
                 _ => panic!("expected SchemaConstraintViolation"),
             },
@@ -705,8 +710,8 @@ mod tests {
             CacheDirection::Forward,
             CacheAction::Register,
         );
-        match res.expect_err("expected cache to fail") {
-            MentatError::UnknownAttribute(msg) => assert_eq!(msg, ":foo/bat"),
+        match res.expect_err("expected cache to fail").kind() {
+            &MentatErrorKind::UnknownAttribute(ref msg) => assert_eq!(msg, ":foo/bat")
             x => panic!("expected UnknownAttribute error, got {:?}", x),
         }
     }

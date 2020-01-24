@@ -10,7 +10,7 @@
 
 use core_traits::Binding;
 
-use query_projector_traits::errors::{ProjectorError, Result};
+use query_projector_traits::errors::{ProjectorErrorKind, Result};
 
 /// A `BindingTuple` is any type that can accommodate a Mentat tuple query result of fixed length.
 ///
@@ -27,7 +27,7 @@ impl BindingTuple for Vec<Binding> {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(
                         expected,
                         vec.len(),
                     ))
@@ -43,13 +43,13 @@ impl BindingTuple for Vec<Binding> {
 impl BindingTuple for (Binding,) {
     fn from_binding_vec(expected: usize, vec: Option<Vec<Binding>>) -> Result<Option<Self>> {
         if expected != 1 {
-            return Err(ProjectorError::UnexpectedResultsTupleLength(1, expected));
+            return Err(ProjectorErrorKind::UnexpectedResultsTupleLength(1, expected));
         }
         match vec {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(
                         expected,
                         vec.len(),
                     ))
@@ -65,13 +65,13 @@ impl BindingTuple for (Binding,) {
 impl BindingTuple for (Binding, Binding) {
     fn from_binding_vec(expected: usize, vec: Option<Vec<Binding>>) -> Result<Option<Self>> {
         if expected != 2 {
-            return Err(ProjectorError::UnexpectedResultsTupleLength(2, expected));
+            return Err(ProjectorErrorKind::UnexpectedResultsTupleLength(2, expected));
         }
         match vec {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(
                         expected,
                         vec.len(),
                     ))
@@ -87,13 +87,13 @@ impl BindingTuple for (Binding, Binding) {
 impl BindingTuple for (Binding, Binding, Binding) {
     fn from_binding_vec(expected: usize, vec: Option<Vec<Binding>>) -> Result<Option<Self>> {
         if expected != 3 {
-            return Err(ProjectorError::UnexpectedResultsTupleLength(3, expected));
+            return Err(ProjectorErrorKind::UnexpectedResultsTupleLength(3, expected));
         }
         match vec {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(
                         expected,
                         vec.len(),
                     ))
@@ -113,13 +113,13 @@ impl BindingTuple for (Binding, Binding, Binding) {
 impl BindingTuple for (Binding, Binding, Binding, Binding) {
     fn from_binding_vec(expected: usize, vec: Option<Vec<Binding>>) -> Result<Option<Self>> {
         if expected != 4 {
-            return Err(ProjectorError::UnexpectedResultsTupleLength(4, expected));
+            return Err(ProjectorErrorKind::UnexpectedResultsTupleLength(4, expected));
         }
         match vec {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(
                         expected,
                         vec.len(),
                     ))
@@ -140,13 +140,13 @@ impl BindingTuple for (Binding, Binding, Binding, Binding) {
 impl BindingTuple for (Binding, Binding, Binding, Binding, Binding) {
     fn from_binding_vec(expected: usize, vec: Option<Vec<Binding>>) -> Result<Option<Self>> {
         if expected != 5 {
-            return Err(ProjectorError::UnexpectedResultsTupleLength(5, expected));
+            return Err(ProjectorErrorKind::UnexpectedResultsTupleLength(5, expected));
         }
         match vec {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(
                         expected,
                         vec.len(),
                     ))
@@ -170,13 +170,13 @@ impl BindingTuple for (Binding, Binding, Binding, Binding, Binding) {
 impl BindingTuple for (Binding, Binding, Binding, Binding, Binding, Binding) {
     fn from_binding_vec(expected: usize, vec: Option<Vec<Binding>>) -> Result<Option<Self>> {
         if expected != 6 {
-            return Err(ProjectorError::UnexpectedResultsTupleLength(6, expected));
+            return Err(ProjectorErrorKind::UnexpectedResultsTupleLength(6, expected));
         }
         match vec {
             None => Ok(None),
             Some(vec) => {
                 if expected != vec.len() {
-                    Err(ProjectorError::UnexpectedResultsTupleLength(
+                    Err(ProjectorErrorKind::UnexpectedResultsTupleLength(
                         expected,
                         vec.len(),
                     ))

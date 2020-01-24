@@ -26,7 +26,7 @@ use chrono::{TimeZone, Utc};
 use edn::{
     parse, symbols,
     types::{Span, SpannedValue, Value, ValueAndSpan},
-    utils, ParseError,
+    utils, ParseErrorKind,
 };
 
 // Helper for making wrapped keywords with a namespace.

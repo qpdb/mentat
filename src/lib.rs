@@ -82,7 +82,7 @@ macro_rules! kw {
 }
 
 pub use public_traits::errors;
-pub use public_traits::errors::{MentatError, Result};
+pub use public_traits::errors::{MentatErrorKind, Result};
 
 pub use edn::{FromMicros, FromMillis, ParseError, ToMicros, ToMillis};
 pub use mentat_query_projector::BindingTuple;

@@ -24,7 +24,7 @@ use mentat_core::Schema;
 
 use edn::query::{Keyword, PlainSymbol, Variable};
 
-use query_algebrizer_traits::errors::{AlgebrizerError, BindingError};
+use query_algebrizer_traits::errors::{AlgebrizerErrorKind, BindingError};
 
 use mentat_query_algebrizer::{ComputedTable, Known, QueryInputs};
 
@@ -297,7 +297,7 @@ fn test_ground_coll_heterogeneous_types() {
     let q = r#"[:find ?x :where [?x _ ?v] [(ground [false 8.5]) [?v ...]]]"#;
     let schema = prepopulated_schema();
     let known = Known::for_schema(&schema);
-    assert_eq!(bails(known, &q), AlgebrizerError::InvalidGroundConstant);
+    assert_eq!(bails(known, &q), AlgebrizerErrorKind::InvalidGroundConstant);
 }
 
 #[test]
@@ -305,7 +305,7 @@ fn test_ground_rel_heterogeneous_types() {
     let q = r#"[:find ?x :where [?x _ ?v] [(ground [[false] [5]]) [[?v]]]]"#;
     let schema = prepopulated_schema();
     let known = Known::for_schema(&schema);
-    assert_eq!(bails(known, &q), AlgebrizerError::InvalidGroundConstant);
+    assert_eq!(bails(known, &q), AlgebrizerErrorKind::InvalidGroundConstant);
 }
 
 #[test]
@@ -315,7 +315,7 @@ fn test_ground_tuple_duplicate_vars() {
     let known = Known::for_schema(&schema);
     assert_eq!(
         bails(known, &q),
-        AlgebrizerError::InvalidBinding(
+        AlgebrizerErrorKind::InvalidBinding(
             PlainSymbol::plain("ground"),
             BindingError::RepeatedBoundVariable
         )
@@ -329,7 +329,7 @@ fn test_ground_rel_duplicate_vars() {
     let known = Known::for_schema(&schema);
     assert_eq!(
         bails(known, &q),
-        AlgebrizerError::InvalidBinding(
+        AlgebrizerErrorKind::InvalidBinding(
             PlainSymbol::plain("ground"),
             BindingError::RepeatedBoundVariable
         )
@@ -343,7 +343,7 @@ fn test_ground_nonexistent_variable_invalid() {
     let known = Known::for_schema(&schema);
     assert_eq!(
         bails(known, &q),
-        AlgebrizerError::UnboundVariable(PlainSymbol::plain("?v"))
+        AlgebrizerErrorKind::UnboundVariable(PlainSymbol::plain("?v"))
     );
 }
 
@@ -362,6 +362,6 @@ fn test_unbound_input_variable_invalid() {
 
     assert_eq!(
         bails_with_inputs(known, &q, i),
-        AlgebrizerError::UnboundVariable(PlainSymbol::plain("?x"))
+        AlgebrizerErrorKind::UnboundVariable(PlainSymbol::plain("?x"))
     );
 }

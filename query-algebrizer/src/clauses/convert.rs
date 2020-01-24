@@ -16,7 +16,7 @@ use edn::query::{FnArg, NonIntegerConstant, Variable};
 
 use clauses::ConjoiningClauses;
 
-use query_algebrizer_traits::errors::{AlgebrizerError, Result};
+use query_algebrizer_traits::errors::{AlgebrizerErrorKind, Result};
 
 use types::EmptyBecause;
 
@@ -62,11 +62,11 @@ impl ValueTypes for FnArg {
 
             &FnArg::Constant(NonIntegerConstant::BigInteger(_)) => {
                 // Not yet implemented.
-                bail!(AlgebrizerError::UnsupportedArgument)
+                bail!(AlgebrizerErrorKind::UnsupportedArgument)
             }
 
             // These don't make sense here. TODO: split FnArg into scalar and non-scalar…
-            &FnArg::Vector(_) | &FnArg::SrcVar(_) => bail!(AlgebrizerError::UnsupportedArgument),
+            &FnArg::Vector(_) | &FnArg::SrcVar(_) => bail!(AlgebrizerErrorKind::UnsupportedArgument),
 
             // These are all straightforward.
             &FnArg::Constant(NonIntegerConstant::Boolean(_)) => {
@@ -191,7 +191,7 @@ impl ConjoiningClauses {
             FnArg::Variable(in_var) => {
                 // TODO: technically you could ground an existing variable inside the query….
                 if !self.input_variables.contains(&in_var) {
-                    bail!(AlgebrizerError::UnboundVariable((*in_var.0).clone()))
+                    bail!(AlgebrizerErrorKind::UnboundVariable((*in_var.0).clone()))
                 }
                 match self.bound_value(&in_var) {
                     // The type is already known if it's a bound variable….
@@ -200,7 +200,7 @@ impl ConjoiningClauses {
                         // The variable is present in `:in`, but it hasn't yet been provided.
                         // This is a restriction we will eventually relax: we don't yet have a way
                         // to collect variables as part of a computed table or substitution.
-                        bail!(AlgebrizerError::UnboundVariable((*in_var.0).clone()))
+                        bail!(AlgebrizerErrorKind::UnboundVariable((*in_var.0).clone()))
                     }
                 }
             }
@@ -209,7 +209,7 @@ impl ConjoiningClauses {
             FnArg::Constant(NonIntegerConstant::BigInteger(_)) => unimplemented!(),
 
             // These don't make sense here.
-            FnArg::Vector(_) | FnArg::SrcVar(_) => bail!(AlgebrizerError::InvalidGroundConstant),
+            FnArg::Vector(_) | FnArg::SrcVar(_) => bail!(AlgebrizerErrorKind::InvalidGroundConstant),
 
             // These are all straightforward.
             FnArg::Constant(NonIntegerConstant::Boolean(x)) => {

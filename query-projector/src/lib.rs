@@ -69,7 +69,7 @@ use projectors::{
 
 pub use relresult::{RelResult, StructuredRelResult};
 
-use query_projector_traits::errors::{ProjectorError, Result};
+use query_projector_traits::errors::{ProjectorErrorKind, Result};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QueryOutput {
@@ -275,43 +275,43 @@ impl QueryResults {
     pub fn into_scalar(self) -> Result<Option<Binding>> {
         match self {
             QueryResults::Scalar(o) => Ok(o),
-            QueryResults::Coll(_) => bail!(ProjectorError::UnexpectedResultsType("coll", "scalar")),
+            QueryResults::Coll(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("coll", "scalar")),
             QueryResults::Tuple(_) => {
-                bail!(ProjectorError::UnexpectedResultsType("tuple", "scalar"))
+                bail!(ProjectorErrorKind::UnexpectedResultsType("tuple", "scalar"))
             }
-            QueryResults::Rel(_) => bail!(ProjectorError::UnexpectedResultsType("rel", "scalar")),
+            QueryResults::Rel(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("rel", "scalar")),
         }
     }
 
     pub fn into_coll(self) -> Result<Vec<Binding>> {
         match self {
             QueryResults::Scalar(_) => {
-                bail!(ProjectorError::UnexpectedResultsType("scalar", "coll"))
+                bail!(ProjectorErrorKind::UnexpectedResultsType("scalar", "coll"))
             }
             QueryResults::Coll(c) => Ok(c),
-            QueryResults::Tuple(_) => bail!(ProjectorError::UnexpectedResultsType("tuple", "coll")),
-            QueryResults::Rel(_) => bail!(ProjectorError::UnexpectedResultsType("rel", "coll")),
+            QueryResults::Tuple(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("tuple", "coll")),
+            QueryResults::Rel(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("rel", "coll")),
         }
     }
 
     pub fn into_tuple(self) -> Result<Option<Vec<Binding>>> {
         match self {
             QueryResults::Scalar(_) => {
-                bail!(ProjectorError::UnexpectedResultsType("scalar", "tuple"))
+                bail!(ProjectorErrorKind::UnexpectedResultsType("scalar", "tuple"))
             }
-            QueryResults::Coll(_) => bail!(ProjectorError::UnexpectedResultsType("coll", "tuple")),
+            QueryResults::Coll(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("coll", "tuple")),
             QueryResults::Tuple(t) => Ok(t),
-            QueryResults::Rel(_) => bail!(ProjectorError::UnexpectedResultsType("rel", "tuple")),
+            QueryResults::Rel(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("rel", "tuple")),
         }
     }
 
     pub fn into_rel(self) -> Result<RelResult<Binding>> {
         match self {
             QueryResults::Scalar(_) => {
-                bail!(ProjectorError::UnexpectedResultsType("scalar", "rel"))
+                bail!(ProjectorErrorKind::UnexpectedResultsType("scalar", "rel"))
             }
-            QueryResults::Coll(_) => bail!(ProjectorError::UnexpectedResultsType("coll", "rel")),
-            QueryResults::Tuple(_) => bail!(ProjectorError::UnexpectedResultsType("tuple", "rel")),
+            QueryResults::Coll(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("coll", "rel")),
+            QueryResults::Tuple(_) => bail!(ProjectorErrorKind::UnexpectedResultsType("tuple", "rel")),
             QueryResults::Rel(r) => Ok(r),
         }
     }
@@ -526,7 +526,7 @@ fn test_into_tuple() {
     );
 
     match query_output.clone().into_tuple() {
-        Err(ProjectorError::UnexpectedResultsTupleLength(expected, got)) => {
+        Err(ProjectorErrorKind::UnexpectedResultsTupleLength(expected, got)) => {
             assert_eq!((expected, got), (3, 2));
         }
         // This forces the result type.
@@ -548,7 +548,7 @@ fn test_into_tuple() {
     }
 
     match query_output.clone().into_tuple() {
-        Err(ProjectorError::UnexpectedResultsTupleLength(expected, got)) => {
+        Err(ProjectorErrorKind::UnexpectedResultsTupleLength(expected, got)) => {
             assert_eq!((expected, got), (3, 2));
         }
         // This forces the result type.

@@ -8,8 +8,54 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
+use failure::{ Backtrace, Context, Fail, };
+use std::fmt;
+
+#[derive(Debug)]
+pub struct SQLError(Box<Context<SQLErrorKind>>);
+
+impl Fail for SQLError {
+    #[inline]
+    fn cause(&self) -> Option<&dyn Fail> {
+        self.0.cause()
+    }
+
+    #[inline]
+    fn backtrace(&self) -> Option<&Backtrace> {
+        self.0.backtrace()
+    }
+}
+
+impl fmt::Display for SQLError {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&*self.0, f)
+    }
+}
+
+impl SQLError {
+    #[inline]
+    pub fn kind(&self) -> &SQLErrorKind {
+        &*self.0.get_context()
+    }
+}
+
+impl From<SQLErrorKind> for SQLError {
+    #[inline]
+    fn from(kind: SQLErrorKind) -> SQLError {
+        SQLError(Box::new(Context::new(kind)))
+    }
+}
+
+impl From<Context<SQLErrorKind>> for SQLError {
+    #[inline]
+    fn from(inner: Context<SQLErrorKind>) -> SQLError {
+        SQLError(Box::new(inner))
+    }
+}
+
 #[derive(Debug, Fail)]
-pub enum SQLError {
+pub enum SQLErrorKind {
     #[fail(display = "invalid parameter name: {}", _0)]
     InvalidParameterName(String),
 
