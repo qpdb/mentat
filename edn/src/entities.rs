@@ -49,8 +49,8 @@ impl TempId {
 impl fmt::Display for TempId {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            &TempId::External(ref s) => write!(f, "{}", s),
-            &TempId::Internal(x) => write!(f, "<tempid {}>", x),
+            TempId::External(ref s) => write!(f, "{}", s),
+            TempId::Internal(x) => write!(f, "<tempid {}>", x),
         }
     }
 }
@@ -76,8 +76,8 @@ impl From<Keyword> for EntidOrIdent {
 impl EntidOrIdent {
     pub fn unreversed(&self) -> Option<EntidOrIdent> {
         match self {
-            &EntidOrIdent::Entid(_) => None,
-            &EntidOrIdent::Ident(ref a) => a.unreversed().map(EntidOrIdent::Ident),
+            EntidOrIdent::Entid(_) => None,
+            EntidOrIdent::Ident(ref a) => a.unreversed().map(EntidOrIdent::Ident),
         }
     }
 }

@@ -27,7 +27,7 @@ use types::{Partition, PartitionMap};
 /// The first transaction ID applied to the knowledge base.
 ///
 /// This is the start of the :db.part/tx partition.
-pub const TX0: i64 = 0x10000000;
+pub const TX0: i64 = 0x1000_0000;
 
 /// This is the start of the :db.part/user partition.
 pub const USER0: i64 = 0x10000;
@@ -206,14 +206,14 @@ lazy_static! {
 /// Convert (ident, entid) pairs into [:db/add IDENT :db/ident IDENT] `Value` instances.
 fn idents_to_assertions(idents: &[(symbols::Keyword, i64)]) -> Vec<Value> {
     idents
-        .into_iter()
+        .iter()
         .map(|&(ref ident, _)| {
             let value = Value::Keyword(ident.clone());
             Value::Vector(vec![
                 values::DB_ADD.clone(),
                 value.clone(),
                 values::DB_IDENT.clone(),
-                value.clone(),
+                value,
             ])
         })
         .collect()
@@ -225,7 +225,7 @@ fn schema_attrs_to_assertions(version: u32, idents: &[symbols::Keyword]) -> Vec<
     let schema_attr = Value::Keyword(ns_keyword!("db.schema", "attribute"));
     let schema_version = Value::Keyword(ns_keyword!("db.schema", "version"));
     idents
-        .into_iter()
+        .iter()
         .map(|ident| {
             let value = Value::Keyword(ident.clone());
             Value::Vector(vec![
@@ -260,7 +260,7 @@ fn symbolic_schema_to_triples(
         Value::Map(ref m) => {
             for (ident, mp) in m {
                 let ident = match ident {
-                    &Value::Keyword(ref ident) => ident,
+                    Value::Keyword(ref ident) => ident,
                     _ => bail!(DbErrorKind::BadBootstrapDefinition(format!(
                         "Expected namespaced keyword for ident but got '{:?}'",
                         ident
@@ -270,7 +270,7 @@ fn symbolic_schema_to_triples(
                     Value::Map(ref mpp) => {
                         for (attr, value) in mpp {
                             let attr = match attr {
-                                &Value::Keyword(ref attr) => attr,
+                                Value::Keyword(ref attr) => attr,
                                 _ => bail!(DbErrorKind::BadBootstrapDefinition(format!(
                                     "Expected namespaced keyword for attr but got '{:?}'",
                                     attr
@@ -289,7 +289,7 @@ fn symbolic_schema_to_triples(
                                 Some(TypedValue::Keyword(ref k)) => ident_map
                                     .get(k)
                                     .map(|entid| TypedValue::Ref(*entid))
-                                    .ok_or(DbErrorKind::UnrecognizedIdent(k.to_string()))?,
+                                    .ok_or_else(|| DbErrorKind::UnrecognizedIdent(k.to_string()))?,
                                 Some(v) => v,
                                 _ => bail!(DbErrorKind::BadBootstrapDefinition(format!(
                                     "Expected Mentat typed value for value but got '{:?}'",
@@ -377,8 +377,6 @@ pub(crate) fn bootstrap_entities() -> Vec<Entity<edn::ValueAndSpan>> {
     );
 
     // Failure here is a coding error (since the inputs are fixed), not a runtime error.
-    // TODO: represent these bootstrap data errors rather than just panicing.
-    let bootstrap_entities: Vec<Entity<edn::ValueAndSpan>> =
-        edn::parse::entities(&bootstrap_assertions.to_string()).expect("bootstrap assertions");
-    return bootstrap_entities;
+    // TODO: represent these bootstrap entity data errors rather than just panicing.
+    edn::parse::entities(&bootstrap_assertions.to_string()).expect("bootstrap assertions")
 }

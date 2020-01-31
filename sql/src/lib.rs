@@ -73,6 +73,7 @@ impl QueryFragment for () {
 }
 
 /// A QueryBuilder that implements SQLite's specific escaping rules.
+#[derive(Default)]
 pub struct SQLiteQueryBuilder {
     pub sql: String,
 
@@ -107,7 +108,7 @@ impl SQLiteQueryBuilder {
 
     fn next_argument_name(&mut self) -> String {
         let arg = format!("{}{}", self.arg_prefix, self.arg_counter);
-        self.arg_counter = self.arg_counter + 1;
+        self.arg_counter += 1;
         arg
     }
 
@@ -138,10 +139,10 @@ impl QueryBuilder for SQLiteQueryBuilder {
     fn push_typed_value(&mut self, value: &TypedValue) -> BuildQueryResult {
         use TypedValue::*;
         match value {
-            &Ref(entid) => self.push_sql(entid.to_string().as_str()),
-            &Boolean(v) => self.push_sql(if v { "1" } else { "0" }),
-            &Long(v) => self.push_sql(v.to_string().as_str()),
-            &Double(OrderedFloat(v)) => {
+            Ref(entid) => self.push_sql(entid.to_string().as_str()),
+            Boolean(v) => self.push_sql(if *v { "1" } else { "0" }),
+            Long(v) => self.push_sql(v.to_string().as_str()),
+            Double(OrderedFloat(v)) => {
                 // Rust's floats print without a trailing '.' in some cases.
                 // https://github.com/rust-lang/rust/issues/30967
                 // We format with 'e' -- scientific notation -- so that SQLite treats them as
@@ -149,10 +150,10 @@ impl QueryBuilder for SQLiteQueryBuilder {
                 // will currently (2017-06) always be 0, and need to round-trip as doubles.
                 self.push_sql(format!("{:e}", v).as_str());
             }
-            &Instant(dt) => {
+            Instant(dt) => {
                 self.push_sql(format!("{}", dt.to_micros()).as_str()); // TODO: argument instead?
             }
-            &Uuid(ref u) => {
+            Uuid(ref u) => {
                 let bytes = u.as_bytes();
                 if let Some(arg) = self.byte_args.get(bytes.as_ref()).cloned() {
                     // Why, borrow checker, why?!
@@ -166,7 +167,7 @@ impl QueryBuilder for SQLiteQueryBuilder {
             // These are both `Rc`. Unfortunately, we can't use that fact when
             // turning these into rusqlite Values.
             // However, we can check to see whether there's an existing var that matches…
-            &String(ref s) => {
+            String(ref s) => {
                 if let Some(arg) = self.string_args.get(s).cloned() {
                     self.push_named_arg(arg.as_str());
                 } else {
@@ -175,7 +176,7 @@ impl QueryBuilder for SQLiteQueryBuilder {
                     self.string_args.insert(s.clone(), arg);
                 }
             }
-            &Keyword(ref s) => {
+            Keyword(ref s) => {
                 // TODO: intern.
                 let v = Rc::new(rusqlite::types::Value::Text(s.as_ref().to_string()));
                 self.push_static_arg(v);
@@ -233,7 +234,7 @@ impl QueryBuilder for SQLiteQueryBuilder {
         args.sort_by(|&(ref k1, _), &(ref k2, _)| k1.cmp(k2));
         SQLQuery {
             sql: self.sql,
-            args: args,
+            args,
         }
     }
 }

@@ -127,8 +127,8 @@ pub struct DB {
 impl DB {
     pub fn new(partition_map: PartitionMap, schema: Schema) -> DB {
         DB {
-            partition_map: partition_map,
-            schema: schema,
+            partition_map,
+            schema,
         }
     }
 }

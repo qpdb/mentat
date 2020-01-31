@@ -69,7 +69,7 @@ impl ::std::fmt::Display for SchemaConstraintViolation {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         use self::SchemaConstraintViolation::*;
         match self {
-            &ConflictingUpserts {
+            ConflictingUpserts {
                 ref conflicting_upserts,
             } => {
                 writeln!(f, "conflicting upserts:")?;
@@ -78,7 +78,7 @@ impl ::std::fmt::Display for SchemaConstraintViolation {
                 }
                 Ok(())
             }
-            &TypeDisagreements {
+            TypeDisagreements {
                 ref conflicting_datoms,
             } => {
                 writeln!(f, "type disagreements:")?;
@@ -91,9 +91,9 @@ impl ::std::fmt::Display for SchemaConstraintViolation {
                 }
                 Ok(())
             }
-            &CardinalityConflicts { ref conflicts } => {
+            CardinalityConflicts { ref conflicts } => {
                 writeln!(f, "cardinality conflicts:")?;
-                for ref conflict in conflicts {
+                for conflict in conflicts {
                     writeln!(f, "  {:?}", conflict)?;
                 }
                 Ok(())
@@ -116,10 +116,10 @@ impl ::std::fmt::Display for InputError {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         use self::InputError::*;
         match self {
-            &BadDbId => {
+            BadDbId => {
                 writeln!(f, ":db/id in map notation must either not be present or be an entid, an ident, or a tempid")
             },
-            &BadEntityPlace => {
+            BadEntityPlace => {
                 writeln!(f, "cannot convert value place into entity place")
             },
         }
@@ -163,7 +163,7 @@ impl From<DbErrorKind> for DbError {
 
 impl From<Context<DbErrorKind>> for DbError {
     fn from(inner: Context<DbErrorKind>) -> Self {
-        DbError { inner: inner }
+        DbError { inner }
     }
 }
 

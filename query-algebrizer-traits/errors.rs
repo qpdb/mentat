@@ -12,7 +12,7 @@ use std; // To refer to std::result::Result.
 
 use core_traits::{ValueType, ValueTypeSet};
 
-use edn::{ ParseError, query::PlainSymbol };
+use edn::{query::PlainSymbol, ParseError};
 
 pub type Result<T> = std::result::Result<T, AlgebrizerError>;
 

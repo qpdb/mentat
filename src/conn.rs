@@ -240,7 +240,7 @@ impl Conn {
         let tx = sqlite.transaction_with_behavior(behavior)?;
         let (current_generation, current_partition_map, current_schema, cache_cow) = {
             // The mutex is taken during this block.
-            let ref current: Metadata = *self.metadata.lock().unwrap();
+            let current: &Metadata = &(*self.metadata.lock().unwrap());
             (
                 current.generation,
                 // Expensive, but the partition map is updated after every committed transaction.
@@ -367,7 +367,7 @@ impl Conn {
             .register(key, observer);
     }
 
-    pub fn unregister_observer(&mut self, key: &String) {
+    pub fn unregister_observer(&mut self, key: &str) {
         self.tx_observer_service.lock().unwrap().deregister(key);
     }
 }

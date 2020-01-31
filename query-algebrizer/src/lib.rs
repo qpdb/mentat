@@ -312,7 +312,7 @@ pub fn algebrize_with_inputs(
     cc.derive_types_from_find_spec(&parsed.find_spec);
 
     // Do we have a variable limit? If so, tell the CC that the var must be numeric.
-    if let &Limit::Variable(ref var) = &parsed.limit {
+    if let Limit::Variable(ref var) = parsed.limit {
         cc.constrain_var_to_long(var.clone());
     }
 
@@ -338,9 +338,9 @@ pub fn algebrize_with_inputs(
         has_aggregates: false, // TODO: we don't parse them yet.
         with: parsed.with,
         named_projection: extra_vars,
-        order: order,
-        limit: limit,
-        cc: cc,
+        order,
+        limit,
+        cc,
     };
 
     // Substitute in any fixed values and fail if they're out of range.
@@ -364,7 +364,7 @@ impl FindQuery {
             in_vars: BTreeSet::default(),
             in_sources: BTreeSet::default(),
             limit: Limit::None,
-            where_clauses: where_clauses,
+            where_clauses,
             order: None,
         }
     }
@@ -417,5 +417,5 @@ impl FindQuery {
 pub fn parse_find_string(string: &str) -> Result<FindQuery> {
     parse_query(string)
         .map_err(|e| e.into())
-        .and_then(|parsed| FindQuery::from_parsed_query(parsed))
+        .and_then(FindQuery::from_parsed_query)
 }

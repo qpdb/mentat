@@ -44,7 +44,7 @@ impl ConjoiningClauses {
 
     fn potential_types(&self, schema: &Schema, fn_arg: &FnArg) -> Result<ValueTypeSet> {
         match fn_arg {
-            &FnArg::Variable(ref v) => Ok(self.known_type_set(v)),
+            FnArg::Variable(ref v) => Ok(self.known_type_set(v)),
             _ => fn_arg.potential_types(schema),
         }
     }
@@ -95,7 +95,7 @@ impl ConjoiningClauses {
         let supported_types = comparison.supported_types();
         let mut left_types = self
             .potential_types(known.schema, &left)?
-            .intersection(&supported_types);
+            .intersection(supported_types);
         if left_types.is_empty() {
             bail!(AlgebrizerError::InvalidArgumentType(
                 predicate.operator.clone(),
@@ -106,7 +106,7 @@ impl ConjoiningClauses {
 
         let mut right_types = self
             .potential_types(known.schema, &right)?
-            .intersection(&supported_types);
+            .intersection(supported_types);
         if right_types.is_empty() {
             bail!(AlgebrizerError::InvalidArgumentType(
                 predicate.operator.clone(),
@@ -125,7 +125,7 @@ impl ConjoiningClauses {
             left_types.insert(ValueType::Double);
         }
 
-        let shared_types = left_types.intersection(&right_types);
+        let shared_types = left_types.intersection(right_types);
         if shared_types.is_empty() {
             // In isolation these are both valid inputs to the operator, but the query cannot
             // succeed because the types don't match.
@@ -176,8 +176,8 @@ impl ConjoiningClauses {
 }
 
 impl Inequality {
-    fn to_constraint(&self, left: QueryValue, right: QueryValue) -> ColumnConstraint {
-        match *self {
+    fn to_constraint(self, left: QueryValue, right: QueryValue) -> ColumnConstraint {
+        match self {
             Inequality::TxAfter | Inequality::TxBefore => {
                 // TODO: both ends of the range must be inside the tx partition!
                 // If we know the partition map -- and at this point we do, it's just
@@ -188,9 +188,9 @@ impl Inequality {
         }
 
         ColumnConstraint::Inequality {
-            operator: *self,
-            left: left,
-            right: right,
+            operator: self,
+            left,
+            right,
         }
     }
 }

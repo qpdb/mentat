@@ -130,7 +130,7 @@ impl NamespacedSymbol {
     }
 
     #[inline]
-    pub fn components<'a>(&'a self) -> (&'a str, &'a str) {
+    pub fn components(&self) -> (&str, &str) {
         self.0.components()
     }
 }
@@ -180,7 +180,7 @@ impl Keyword {
     }
 
     #[inline]
-    pub fn components<'a>(&'a self) -> (&'a str, &'a str) {
+    pub fn components(&self) -> (&str, &str) {
         self.0.components()
     }
 

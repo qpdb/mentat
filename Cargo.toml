@@ -28,6 +28,13 @@ members = ["tools/cli", "ffi"]
 [build-dependencies]
 rustc_version = "0.2"
 
+[dev-dependencies.cargo-husky]
+version = "1"
+default-features = false # Disable features which are enabled by default
+features = ["run-for-all", "precommit-hook", "run-cargo-fmt", "run-cargo-test", "run-cargo-check", "run-cargo-clippy"]
+# cargo audit
+# cargo outdated
+
 [dependencies]
 chrono = "0.4"
 failure = "0.1.6"

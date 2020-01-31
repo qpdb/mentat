@@ -41,14 +41,14 @@ impl ConjoiningClauses {
                     if v.value_type().is_numeric() {
                         Ok(QueryValue::TypedValue(v))
                     } else {
-                        bail!(AlgebrizerError::InputTypeDisagreement(var.name().clone(), ValueType::Long, v.value_type()))
+                        bail!(AlgebrizerError::InputTypeDisagreement(var.name(), ValueType::Long, v.value_type()))
                     }
                 } else {
                     self.constrain_var_to_numeric(var.clone());
                     self.column_bindings
                         .get(&var)
                         .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
-                        .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into())
+                        .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()))
                 }
             },
             // Can't be an entid.
@@ -80,7 +80,7 @@ impl ConjoiningClauses {
             FnArg::Variable(var) => match self.bound_value(&var) {
                 Some(TypedValue::Instant(v)) => Ok(QueryValue::TypedValue(TypedValue::Instant(v))),
                 Some(v) => bail!(AlgebrizerError::InputTypeDisagreement(
-                    var.name().clone(),
+                    var.name(),
                     ValueType::Instant,
                     v.value_type()
                 )),
@@ -89,7 +89,7 @@ impl ConjoiningClauses {
                     self.column_bindings
                         .get(&var)
                         .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
-                        .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into())
+                        .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()))
                 }
             },
             Constant(NonIntegerConstant::Instant(v)) => {
@@ -136,14 +136,14 @@ impl ConjoiningClauses {
                     self.column_bindings
                         .get(&var)
                         .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
-                        .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into())
+                        .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()))
                 }
             }
             EntidOrInteger(i) => Ok(QueryValue::TypedValue(TypedValue::Ref(i))),
             IdentOrKeyword(i) => schema
                 .get_entid(&i)
                 .map(|known_entid| QueryValue::Entid(known_entid.into()))
-                .ok_or_else(|| AlgebrizerError::UnrecognizedIdent(i.to_string()).into()),
+                .ok_or_else(|| AlgebrizerError::UnrecognizedIdent(i.to_string())),
             Constant(NonIntegerConstant::Boolean(_))
             | Constant(NonIntegerConstant::Float(_))
             | Constant(NonIntegerConstant::Text(_))
@@ -188,7 +188,7 @@ impl ConjoiningClauses {
                     .column_bindings
                     .get(&var)
                     .and_then(|cols| cols.first().map(|col| QueryValue::Column(col.clone())))
-                    .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name()).into()),
+                    .ok_or_else(|| AlgebrizerError::UnboundVariable(var.name())),
             },
             EntidOrInteger(i) => Ok(QueryValue::PrimitiveLong(i)),
             IdentOrKeyword(_) => unimplemented!(), // TODO

@@ -12,8 +12,8 @@ extern crate chrono;
 extern crate itertools;
 extern crate num;
 extern crate ordered_float;
-extern crate pretty;
 extern crate peg;
+extern crate pretty;
 extern crate uuid;
 
 #[cfg(feature = "serde_support")]
@@ -50,13 +50,11 @@ pub use types::{
 
 pub use symbols::{Keyword, NamespacedSymbol, PlainSymbol};
 
-use std::collections::{BTreeSet, BTreeMap, LinkedList};
+use std::collections::{BTreeMap, BTreeSet, LinkedList};
+use std::f64::{INFINITY, NAN, NEG_INFINITY};
 use std::iter::FromIterator;
-use std::f64::{NAN, INFINITY, NEG_INFINITY};
 
-use chrono::{
-    TimeZone,
-};
+use chrono::TimeZone;
 
 use entities::*;
 use query::FromValue;
@@ -126,7 +124,7 @@ peg::parser!(pub grammar parse() for str {
     //      result = r#""foo\\bar""#
     // For the typical case, string_normal_chars will match multiple, leading to a single-element vec.
     pub rule raw_text() -> String = "\"" t:((string_special_char() / string_normal_chars())*) "\""
-        {  t.join(&"").to_string() }
+        {  t.join(&"") }
 
     pub rule text() -> SpannedValue
         = v:raw_text() { SpannedValue::Text(v) }
@@ -150,8 +148,8 @@ peg::parser!(pub grammar parse() for str {
     rule inst_micros() -> DateTime<Utc> =
         "#instmicros" whitespace()+ d:$( digit()+ ) {
             let micros = d.parse::<i64>().unwrap();
-            let seconds: i64 = micros / 1000000;
-            let nanos: u32 = ((micros % 1000000).abs() as u32) * 1000;
+            let seconds: i64 = micros / 1_000_000;
+            let nanos: u32 = ((micros % 1_000_000).abs() as u32) * 1000;
             Utc.timestamp(seconds, nanos)
         }
 
@@ -159,7 +157,7 @@ peg::parser!(pub grammar parse() for str {
         "#instmillis" whitespace()+ d:$( digit()+ ) {
             let millis = d.parse::<i64>().unwrap();
             let seconds: i64 = millis / 1000;
-            let nanos: u32 = ((millis % 1000).abs() as u32) * 1000000;
+            let nanos: u32 = ((millis % 1000).abs() as u32) * 1_000_000;
             Utc.timestamp(seconds, nanos)
         }
 
@@ -351,7 +349,7 @@ peg::parser!(pub grammar parse() for str {
         = __ "*" __ { query::PullAttributeSpec::Wildcard }
         / __ k:raw_forward_namespaced_keyword() __ alias:(":as" __ alias:raw_forward_keyword() __ { alias })? {
             let attribute = query::PullConcreteAttribute::Ident(::std::rc::Rc::new(k));
-            let alias = alias.map(|alias| ::std::rc::Rc::new(alias));
+            let alias = alias.map(::std::rc::Rc::new);
             query::PullAttributeSpec::Attribute(
                 query::NamedPullAttribute {
                     attribute,
@@ -525,4 +523,3 @@ peg::parser!(pub grammar parse() for str {
         / v:variable() { query::Binding::BindScalar(v) }
 
 });
-

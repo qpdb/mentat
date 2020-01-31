@@ -55,7 +55,7 @@ impl QueryInputs {
                 .iter()
                 .map(|(var, val)| (var.clone(), val.value_type()))
                 .collect(),
-            values: values,
+            values,
         }
     }
 
@@ -73,9 +73,6 @@ impl QueryInputs {
                 }
             }
         }
-        Ok(QueryInputs {
-            types: types,
-            values: values,
-        })
+        Ok(QueryInputs { types, values })
     }
 }

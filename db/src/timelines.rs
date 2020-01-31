@@ -58,7 +58,7 @@ fn collect_ordered_txs_to_move(
         None => bail!(DbErrorKind::TimelinesInvalidRange),
     };
 
-    while let Some(t) = rows.next() {
+    for t in rows {
         let t = t?;
         txs.push(t.0);
         if t.1 != timeline {
@@ -108,12 +108,13 @@ fn reversed_terms_for(
     tx_id: Entid,
 ) -> Result<Vec<TermWithoutTempIds>> {
     let mut stmt = conn.prepare("SELECT e, a, v, value_type_tag, tx, added FROM timelined_transactions WHERE tx = ? AND timeline = ? ORDER BY tx DESC")?;
-    let mut rows = stmt.query_and_then(
+    let rows = stmt.query_and_then(
         &[&tx_id, &::TIMELINE_MAIN],
         |row| -> Result<TermWithoutTempIds> {
-            let op = match row.get(5)? {
-                true => OpType::Retract,
-                false => OpType::Add,
+            let op = if row.get(5)? {
+                OpType::Retract
+            } else {
+                OpType::Add
             };
             Ok(Term::AddOrRetract(
                 op,
@@ -126,7 +127,7 @@ fn reversed_terms_for(
 
     let mut terms = vec![];
 
-    while let Some(row) = rows.next() {
+    for row in rows {
         terms.push(row?);
     }
     Ok(terms)
@@ -141,9 +142,9 @@ pub fn move_from_main_timeline(
     new_timeline: Entid,
 ) -> Result<(Option<Schema>, PartitionMap)> {
     if new_timeline == ::TIMELINE_MAIN {
-        bail!(DbErrorKind::NotYetImplemented(format!(
-            "Can't move transactions to main timeline"
-        )));
+        bail!(DbErrorKind::NotYetImplemented(
+            "Can't move transactions to main timeline".to_string()
+        ));
     }
 
     // We don't currently ensure that moving transactions onto a non-empty timeline

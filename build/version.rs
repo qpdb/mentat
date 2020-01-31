@@ -14,7 +14,7 @@ use std::process::exit;
 
 /// MIN_VERSION should be changed when there's a new minimum version of rustc required
 /// to build the project.
-static MIN_VERSION: &'static str = "1.41.0";
+static MIN_VERSION: &str = "1.40.0";
 
 fn main() {
     let ver = version().unwrap();

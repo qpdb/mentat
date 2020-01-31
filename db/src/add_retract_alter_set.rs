@@ -48,12 +48,10 @@ where
             } else {
                 self.asserted.insert(key, value);
             }
+        } else if let Some(asserted_value) = self.asserted.remove(&key) {
+            self.altered.insert(key, (value, asserted_value));
         } else {
-            if let Some(asserted_value) = self.asserted.remove(&key) {
-                self.altered.insert(key, (value, asserted_value));
-            } else {
-                self.retracted.insert(key, value);
-            }
+            self.retracted.insert(key, value);
         }
     }
 }

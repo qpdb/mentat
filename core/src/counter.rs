@@ -11,7 +11,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct RcCounter {
     c: Rc<Cell<usize>>,
 }

@@ -82,17 +82,18 @@ impl TxCommand {
 
 impl Command for TxCommand {
     fn execute(&mut self) {
-        self.observers.upgrade().map(|observers| {
+        if let Some(observers) = self.observers.upgrade() {
             for (key, observer) in observers.iter() {
                 let applicable_reports = observer.applicable_reports(&self.reports);
                 if !applicable_reports.is_empty() {
                     observer.notify(&key, applicable_reports);
                 }
             }
-        });
+        }
     }
 }
 
+#[derive(Default)]
 pub struct TxObservationService {
     observers: Arc<IndexMap<String, Arc<TxObserver>>>,
     executor: Option<Sender<Box<dyn Command + Send>>>,
@@ -107,7 +108,7 @@ impl TxObservationService {
     }
 
     // For testing purposes
-    pub fn is_registered(&self, key: &String) -> bool {
+    pub fn is_registered(&self, key: &str) -> bool {
         self.observers.contains_key(key)
     }
 
@@ -115,7 +116,7 @@ impl TxObservationService {
         Arc::make_mut(&mut self.observers).insert(key, observer);
     }
 
-    pub fn deregister(&mut self, key: &String) {
+    pub fn deregister(&mut self, key: &str) {
         Arc::make_mut(&mut self.observers).remove(key);
     }
 
@@ -154,6 +155,7 @@ impl Drop for TxObservationService {
     }
 }
 
+#[derive(Default)]
 pub struct InProgressObserverTransactWatcher {
     collected_attributes: AttributeSet,
     pub txes: IndexMap<Entid, AttributeSet>,
@@ -174,8 +176,7 @@ impl TransactWatcher for InProgressObserverTransactWatcher {
     }
 
     fn done(&mut self, t: &Entid, _schema: &Schema) -> Result<()> {
-        let collected_attributes =
-            ::std::mem::replace(&mut self.collected_attributes, Default::default());
+        let collected_attributes = ::std::mem::take(&mut self.collected_attributes);
         self.txes.insert(*t, collected_attributes);
         Ok(())
     }

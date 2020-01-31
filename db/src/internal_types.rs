@@ -86,7 +86,7 @@ impl TransactableValue for ValueAndSpan {
             .as_text()
             .cloned()
             .map(TempId::External)
-            .map(|v| v.into())
+            .map(|v| v)
     }
 }
 
@@ -117,7 +117,7 @@ impl TransactableValue for TypedValue {
 
     fn as_tempid(&self) -> Option<TempId> {
         match self {
-            &TypedValue::String(ref s) => Some(TempId::External((**s).clone()).into()),
+            TypedValue::String(ref s) => Some(TempId::External((**s).clone())),
             _ => None,
         }
     }

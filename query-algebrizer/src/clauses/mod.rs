@@ -147,8 +147,8 @@ pub struct ConjoiningClauses {
     /// A map from var to qualified columns. Used to project.
     pub column_bindings: BTreeMap<Variable, Vec<QualifiedAlias>>,
 
-    /// A list of variables mentioned in the enclosing query's :in clause. These must all be bound
-    /// before the query can be executed. TODO: clarify what this means for nested CCs.
+    /// A list of variables mentioned in the enclosing query's `:in` clause all of which must be
+    /// bound before the query can be executed. TODO: clarify what this means for nested CCs.
     pub input_variables: BTreeSet<Variable>,
 
     /// In some situations -- e.g., when a query is being run only once -- we know in advance the
@@ -279,7 +279,7 @@ impl ConjoiningClauses {
                 values.keep_intersected_keys(&in_variables);
 
                 let mut cc = ConjoiningClauses {
-                    alias_counter: alias_counter,
+                    alias_counter,
                     input_variables: in_variables,
                     value_bindings: values,
                     ..Default::default()
@@ -301,14 +301,8 @@ impl ConjoiningClauses {
 impl ConjoiningClauses {
     pub(crate) fn derive_types_from_find_spec(&mut self, find_spec: &FindSpec) {
         for spec in find_spec.columns() {
-            match spec {
-                &Element::Pull(Pull {
-                    ref var,
-                    patterns: _,
-                }) => {
-                    self.constrain_var_to_type(var.clone(), ValueType::Ref);
-                }
-                _ => {}
+            if let Element::Pull(Pull { ref var, .. }) = spec {
+                self.constrain_var_to_type(var.clone(), ValueType::Ref);
             }
         }
     }
@@ -410,7 +404,7 @@ impl ConjoiningClauses {
         self.known_types
             .get(var)
             .cloned()
-            .unwrap_or(ValueTypeSet::any())
+            .unwrap_or_else(ValueTypeSet::any)
     }
 
     pub(crate) fn bind_column_to_var<C: Into<Column>>(
@@ -514,7 +508,7 @@ impl ConjoiningClauses {
 
         self.column_bindings
             .entry(var)
-            .or_insert(vec![])
+            .or_insert_with(|| vec![])
             .push(alias);
     }
 
@@ -585,10 +579,10 @@ impl ConjoiningClauses {
         these_types: ValueTypeSet,
     ) -> Option<EmptyBecause> {
         if let Some(existing) = self.known_types.get(var) {
-            if existing.intersection(&these_types).is_empty() {
+            if existing.intersection(these_types).is_empty() {
                 return Some(EmptyBecause::TypeMismatch {
                     var: var.clone(),
-                    existing: existing.clone(),
+                    existing: *existing,
                     desired: these_types,
                 });
             }
@@ -640,7 +634,7 @@ impl ConjoiningClauses {
                 // We have an existing requirement. The new requirement will be
                 // the intersection, but we'll `mark_known_empty` if that's empty.
                 let existing = *entry.get();
-                let intersection = types.intersection(&existing);
+                let intersection = types.intersection(existing);
                 entry.insert(intersection);
 
                 if !intersection.is_empty() {
@@ -648,8 +642,8 @@ impl ConjoiningClauses {
                 }
 
                 EmptyBecause::TypeMismatch {
-                    var: var,
-                    existing: existing,
+                    var,
+                    existing,
                     desired: types,
                 }
             }
@@ -684,7 +678,7 @@ impl ConjoiningClauses {
                             panic!("Uh oh: we failed this pattern, probably because {:?} couldn't match, but now we're broadening its type.",
                                    e.key());
                         }
-                        new = existing_types.union(&new_types);
+                        new = existing_types.union(new_types);
                     }
                     e.insert(new);
                 }
@@ -710,11 +704,11 @@ impl ConjoiningClauses {
                 e.insert(types);
             }
             Entry::Occupied(mut e) => {
-                let intersected: ValueTypeSet = types.intersection(e.get());
+                let intersected: ValueTypeSet = types.intersection(*e.get());
                 if intersected.is_empty() {
                     let reason = EmptyBecause::TypeMismatch {
                         var: e.key().clone(),
-                        existing: e.get().clone(),
+                        existing: *e.get(),
                         desired: types,
                     };
                     empty_because = Some(reason);
@@ -751,7 +745,7 @@ impl ConjoiningClauses {
         // If it's a variable, record that it has the right type.
         // Ident or attribute resolution errors (the only other check we need to do) will be done
         // by the caller.
-        if let &EvolvedNonValuePlace::Variable(ref v) = value {
+        if let EvolvedNonValuePlace::Variable(ref v) = value {
             self.constrain_var_to_type(v.clone(), ValueType::Ref)
         }
     }
@@ -784,12 +778,12 @@ impl ConjoiningClauses {
     ) -> ::std::result::Result<DatomsTable, EmptyBecause> {
         if attribute.fulltext {
             match value {
-                &EvolvedValuePlace::Placeholder => Ok(DatomsTable::Datoms), // We don't need the value.
+                EvolvedValuePlace::Placeholder => Ok(DatomsTable::Datoms), // We don't need the value.
 
                 // TODO: an existing non-string binding can cause this pattern to fail.
-                &EvolvedValuePlace::Variable(_) => Ok(DatomsTable::FulltextDatoms),
+                EvolvedValuePlace::Variable(_) => Ok(DatomsTable::FulltextDatoms),
 
-                &EvolvedValuePlace::Value(TypedValue::String(_)) => Ok(DatomsTable::FulltextDatoms),
+                EvolvedValuePlace::Value(TypedValue::String(_)) => Ok(DatomsTable::FulltextDatoms),
 
                 _ => {
                     // We can't succeed if there's a non-string constant value for a fulltext
@@ -802,9 +796,9 @@ impl ConjoiningClauses {
         }
     }
 
-    fn table_for_unknown_attribute<'s, 'a>(
+    fn table_for_unknown_attribute(
         &self,
-        value: &'a EvolvedValuePlace,
+        value: &EvolvedValuePlace,
     ) -> ::std::result::Result<DatomsTable, EmptyBecause> {
         // If the value is known to be non-textual, we can simply use the regular datoms
         // table (TODO: and exclude on `index_fulltext`!).
@@ -817,7 +811,7 @@ impl ConjoiningClauses {
         Ok(match value {
             // TODO: see if the variable is projected, aggregated, or compared elsewhere in
             // the query. If it's not, we don't need to use all_datoms here.
-            &EvolvedValuePlace::Variable(ref v) => {
+            EvolvedValuePlace::Variable(ref v) => {
                 // If `required_types` and `known_types` don't exclude strings,
                 // we need to query `all_datoms`.
                 if self
@@ -834,7 +828,7 @@ impl ConjoiningClauses {
                     DatomsTable::Datoms
                 }
             }
-            &EvolvedValuePlace::Value(TypedValue::String(_)) => DatomsTable::AllDatoms,
+            EvolvedValuePlace::Value(TypedValue::String(_)) => DatomsTable::AllDatoms,
             _ => DatomsTable::Datoms,
         })
     }
@@ -850,14 +844,14 @@ impl ConjoiningClauses {
         value: &'a EvolvedValuePlace,
     ) -> ::std::result::Result<DatomsTable, EmptyBecause> {
         match attribute {
-            &EvolvedNonValuePlace::Entid(id) => schema
-                .attribute_for_entid(id)
-                .ok_or_else(|| EmptyBecause::InvalidAttributeEntid(id))
+            EvolvedNonValuePlace::Entid(id) => schema
+                .attribute_for_entid(*id)
+                .ok_or_else(|| EmptyBecause::InvalidAttributeEntid(*id))
                 .and_then(|attribute| self.table_for_attribute_and_value(attribute, value)),
             // TODO: In a prepared context, defer this decision until a second algebrizing phase.
             // #278.
-            &EvolvedNonValuePlace::Placeholder => self.table_for_unknown_attribute(value),
-            &EvolvedNonValuePlace::Variable(ref v) => {
+            EvolvedNonValuePlace::Placeholder => self.table_for_unknown_attribute(value),
+            EvolvedNonValuePlace::Variable(ref v) => {
                 // See if we have a binding for the variable.
                 match self.bound_value(v) {
                     // TODO: In a prepared context, defer this decision until a second algebrizing phase.
@@ -883,7 +877,7 @@ impl ConjoiningClauses {
                         // attribute place.
                         Err(EmptyBecause::InvalidBinding(
                             Column::Fixed(DatomsColumn::Attribute),
-                            v.clone(),
+                            v,
                         ))
                     }
                 }
@@ -922,8 +916,8 @@ impl ConjoiningClauses {
     ) -> Option<&'s Attribute> {
         match value {
             // We know this one is known if the attribute lookup succeeds…
-            &TypedValue::Ref(id) => schema.attribute_for_entid(id),
-            &TypedValue::Keyword(ref kw) => schema.attribute_for_ident(kw).map(|(a, _id)| a),
+            TypedValue::Ref(id) => schema.attribute_for_entid(*id),
+            TypedValue::Keyword(ref kw) => schema.attribute_for_ident(kw).map(|(a, _id)| a),
             _ => None,
         }
     }
@@ -981,7 +975,7 @@ impl ConjoiningClauses {
     pub(crate) fn expand_column_bindings(&mut self) {
         for cols in self.column_bindings.values() {
             if cols.len() > 1 {
-                let ref primary = cols[0];
+                let primary = &cols[0];
                 let secondaries = cols.iter().skip(1);
                 for secondary in secondaries {
                     // TODO: if both primary and secondary are .v, should we make sure
@@ -1029,18 +1023,18 @@ impl ConjoiningClauses {
         let mut empty_because: Option<EmptyBecause> = None;
         for (var, types) in self.required_types.clone().into_iter() {
             if let Some(already_known) = self.known_types.get(&var) {
-                if already_known.is_disjoint(&types) {
+                if already_known.is_disjoint(types) {
                     // If we know the constraint can't be one of the types
                     // the variable could take, then we know we're empty.
                     empty_because = Some(EmptyBecause::TypeMismatch {
-                        var: var,
+                        var,
                         existing: *already_known,
                         desired: types,
                     });
                     break;
                 }
 
-                if already_known.is_subset(&types) {
+                if already_known.is_subset(types) {
                     // TODO: I'm not convinced that we can do nothing here.
                     //
                     // Consider `[:find ?x ?v :where [_ _ ?v] [(> ?v 10)] [?x :foo/long ?v]]`.
@@ -1129,7 +1123,7 @@ impl ConjoiningClauses {
     }
 
     fn mark_as_ref(&mut self, pos: &PatternNonValuePlace) {
-        if let &PatternNonValuePlace::Variable(ref var) = pos {
+        if let PatternNonValuePlace::Variable(ref var) = pos {
             self.constrain_var_to_type(var.clone(), ValueType::Ref)
         }
     }
@@ -1142,13 +1136,13 @@ impl ConjoiningClauses {
         // We apply (top level) type predicates first as an optimization.
         for clause in where_clauses.iter() {
             match clause {
-                &WhereClause::TypeAnnotation(ref anno) => {
+                WhereClause::TypeAnnotation(ref anno) => {
                     self.apply_type_anno(anno)?;
                 }
 
                 // Patterns are common, so let's grab as much type information from
                 // them as we can.
-                &WhereClause::Pattern(ref p) => {
+                WhereClause::Pattern(ref p) => {
                     self.mark_as_ref(&p.entity);
                     self.mark_as_ref(&p.attribute);
                     self.mark_as_ref(&p.tx);
@@ -1167,7 +1161,7 @@ impl ConjoiningClauses {
         let mut patterns: VecDeque<EvolvedPattern> = VecDeque::with_capacity(remaining);
         for clause in where_clauses {
             remaining -= 1;
-            if let &WhereClause::TypeAnnotation(_) = &clause {
+            if let WhereClause::TypeAnnotation(_) = &clause {
                 continue;
             }
             match clause {

@@ -92,53 +92,53 @@ impl ValueTypeSet {
         self.0.insert(vt)
     }
 
-    pub fn len(&self) -> usize {
+    pub fn len(self) -> usize {
         self.0.len()
     }
 
     /// Returns a set containing all the types in this set and `other`.
-    pub fn union(&self, other: &ValueTypeSet) -> ValueTypeSet {
+    pub fn union(self, other: ValueTypeSet) -> ValueTypeSet {
         ValueTypeSet(self.0.union(other.0))
     }
 
-    pub fn intersection(&self, other: &ValueTypeSet) -> ValueTypeSet {
+    pub fn intersection(self, other: ValueTypeSet) -> ValueTypeSet {
         ValueTypeSet(self.0.intersection(other.0))
     }
 
     /// Returns the set difference between `self` and `other`, which is the
     /// set of items in `self` that are not in `other`.
-    pub fn difference(&self, other: &ValueTypeSet) -> ValueTypeSet {
+    pub fn difference(self, other: ValueTypeSet) -> ValueTypeSet {
         ValueTypeSet(self.0 - other.0)
     }
 
     /// Return an arbitrary type that's part of this set.
     /// For a set containing a single type, this will be that type.
-    pub fn exemplar(&self) -> Option<ValueType> {
+    pub fn exemplar(self) -> Option<ValueType> {
         self.0.iter().next()
     }
 
-    pub fn is_subset(&self, other: &ValueTypeSet) -> bool {
+    pub fn is_subset(self, other: ValueTypeSet) -> bool {
         self.0.is_subset(&other.0)
     }
 
     /// Returns true if `self` and `other` contain no items in common.
-    pub fn is_disjoint(&self, other: &ValueTypeSet) -> bool {
+    pub fn is_disjoint(self, other: ValueTypeSet) -> bool {
         self.0.is_disjoint(&other.0)
     }
 
-    pub fn contains(&self, vt: ValueType) -> bool {
+    pub fn contains(self, vt: ValueType) -> bool {
         self.0.contains(&vt)
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub fn is_empty(self) -> bool {
         self.0.is_empty()
     }
 
-    pub fn is_unit(&self) -> bool {
+    pub fn is_unit(self) -> bool {
         self.0.len() == 1
     }
 
-    pub fn iter(&self) -> ::enum_set::Iter<ValueType> {
+    pub fn iter(self) -> ::enum_set::Iter<ValueType> {
         self.0.iter()
     }
 }
@@ -150,8 +150,8 @@ impl From<ValueType> for ValueTypeSet {
 }
 
 impl ValueTypeSet {
-    pub fn is_only_numeric(&self) -> bool {
-        self.is_subset(&ValueTypeSet::of_numeric_types())
+    pub fn is_only_numeric(self) -> bool {
+        self.is_subset(ValueTypeSet::of_numeric_types())
     }
 }
 

@@ -122,7 +122,7 @@ impl ConjoiningClauses {
             known.schema,
             transactions.clone(),
             TransactionsColumn::Tx,
-            tx_var.clone(),
+            tx_var,
         );
 
         let after_constraint = ColumnConstraint::Inequality {
@@ -138,7 +138,7 @@ impl ConjoiningClauses {
         let before_constraint = ColumnConstraint::Inequality {
             operator: Inequality::LessThan,
             left: QueryValue::Column(QualifiedAlias(
-                transactions.clone(),
+                transactions,
                 Column::Transactions(TransactionsColumn::Tx),
             )),
             right: tx2,
@@ -306,7 +306,7 @@ impl ConjoiningClauses {
 
             self.bind_column_to_var(
                 known.schema,
-                transactions.clone(),
+                transactions,
                 TransactionsColumn::Added,
                 var.clone(),
             );

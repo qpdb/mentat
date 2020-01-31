@@ -1,17 +1,13 @@
 # Project Mentat
-[![Build Status](https://travis-ci.org/mozilla/mentat.svg?branch=master)](https://travis-ci.org/mozilla/mentat)
-
-**Project Mentat is [no longer being developed or actively maintained by Mozilla](https://mail.mozilla.org/pipermail/firefox-dev/2018-September/006780.html).**  This repository will be marked read-only in the near future.  You are, of course, welcome to fork the repository and use the existing code.
+[![Build Status](https://travis-ci.org/qpdb/mentat.svg?branch=master)](https://travis-ci.org/qpdb/mentat)
 
 Project Mentat is a persistent, embedded knowledge base. It draws heavily on [DataScript](https://github.com/tonsky/datascript) and [Datomic](http://datomic.com).
 
-Mentat is implemented in Rust.
+This project was started by Mozilla, but [is no longer being developed or actively maintained by them](https://mail.mozilla.org/pipermail/firefox-dev/2018-September/006780.html).  [Their repository](https://github.com/mozilla/mentat) was marked read-only, [this fork](https://github.com/qpdb/mentat) is an attempt to revive and continue that interesting work.  We owe the team at Mozilla more than words can express for inspiring us all and for this project in particular.
 
-The first version of Project Mentat, named Datomish, [was written in ClojureScript](https://github.com/mozilla/mentat/tree/clojure), targeting both Node (on top of `promise_sqlite`) and Firefox (on top of `Sqlite.jsm`). It also worked in pure Clojure on the JVM on top of `jdbc-sqlite`. The name was changed to avoid confusion with [Datomic](http://datomic.com).
+*Thank you*.
 
-The Rust implementation gives us a smaller compiled output, better performance, more type safety, better tooling, and easier deployment into Firefox and mobile platforms.
-
-[Documentation](https://mozilla.github.io/mentat)
+[Documentation](https://docs.rs/mentat)
 
 ---
 
@@ -77,9 +73,11 @@ We've observed that data storage is a particular area of difficulty for software
 
 DataScript asks the question: "What if creating a database were as cheap as creating a Hashmap?"
 
-Mentat is not interested in that. Instead, it's strongly interested in persistence and performance, with very little interest in immutable databases/databases as values or throwaway use.
+Mentat is not interested in that. Instead, it's focused on persistence and performance, with very little interest in immutable databases/databases as values or throwaway use.
 
-One might say that Mentat's question is: "What if an SQLite database could store arbitrary relations, for arbitrary consumers, without them having to coordinate an up-front storage-level schema?"
+One might say that Mentat's question is: "What if a database could store arbitrary relations, for arbitrary consumers, without them having to coordinate an up-front storage-level schema?"
+
+Consider this a practical approach to facts, to knowledge its storage and access, much like SQLite is a practical RDBMS.
 
 (Note that [domain-level schemas are very valuable](http://martinfowler.com/articles/schemaless/).)
 
@@ -89,7 +87,7 @@ Some thought has been given to how databases as values — long-term references 
 
 Just like DataScript, Mentat speaks Datalog for querying and takes additions and retractions as input to a transaction.
 
-Unlike DataScript, Mentat exposes free-text indexing, thanks to SQLite.
+Unlike DataScript, Mentat exposes free-text indexing, thanks to SQLite/FTS.
 
 
 ## Comparison to Datomic
@@ -97,8 +95,6 @@ Unlike DataScript, Mentat exposes free-text indexing, thanks to SQLite.
 Datomic is a server-side, enterprise-grade data storage system. Datomic has a beautiful conceptual model. It's intended to be backed by a storage cluster, in which it keeps index chunks forever. Index chunks are replicated to peers, allowing it to run queries at the edges. Writes are serialized through a transactor.
 
 Many of these design decisions are inapplicable to deployed desktop software; indeed, the use of multiple JVM processes makes Datomic's use in a small desktop app, or a mobile device, prohibitive.
-
-Mentat was designed for embedding, initially in an experimental Electron app ([Tofino](https://github.com/mozilla/tofino)). It is less concerned with exposing consistent database states outside transaction boundaries, because that's less important here, and dropping some of these requirements allows us to leverage SQLite itself.
 
 
 ## Comparison to SQLite

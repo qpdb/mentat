@@ -227,7 +227,7 @@ impl Generation {
     }
 
     // Collect id->[a v] pairs that might upsert at this evolutionary step.
-    pub(crate) fn temp_id_avs<'a>(&'a self) -> Vec<(TempIdHandle, AVPair)> {
+    pub(crate) fn temp_id_avs(&self) -> Vec<(TempIdHandle, AVPair)> {
         let mut temp_id_avs: Vec<(TempIdHandle, AVPair)> = vec![];
         // TODO: map/collect.
         for &UpsertE(ref t, ref a, ref v) in &self.upserts_e {
@@ -269,32 +269,32 @@ impl Generation {
 
         for term in self.allocations.iter() {
             match term {
-                &Term::AddOrRetract(OpType::Add, Right(ref t1), a, Right(ref t2)) => {
+                Term::AddOrRetract(OpType::Add, Right(ref t1), a, Right(ref t2)) => {
                     temp_ids.insert(t1.clone());
                     temp_ids.insert(t2.clone());
-                    let attribute: &Attribute = schema.require_attribute_for_entid(a)?;
+                    let attribute: &Attribute = schema.require_attribute_for_entid(*a)?;
                     if attribute.unique == Some(attribute::Unique::Identity) {
                         tempid_avs
-                            .entry((a, Right(t2.clone())))
-                            .or_insert(vec![])
+                            .entry((*a, Right(t2.clone())))
+                            .or_insert_with(|| vec![])
                             .push(t1.clone());
                     }
                 }
-                &Term::AddOrRetract(OpType::Add, Right(ref t), a, ref x @ Left(_)) => {
+                Term::AddOrRetract(OpType::Add, Right(ref t), a, ref x @ Left(_)) => {
                     temp_ids.insert(t.clone());
-                    let attribute: &Attribute = schema.require_attribute_for_entid(a)?;
+                    let attribute: &Attribute = schema.require_attribute_for_entid(*a)?;
                     if attribute.unique == Some(attribute::Unique::Identity) {
                         tempid_avs
-                            .entry((a, x.clone()))
-                            .or_insert(vec![])
+                            .entry((*a, x.clone()))
+                            .or_insert_with(|| vec![])
                             .push(t.clone());
                     }
                 }
-                &Term::AddOrRetract(OpType::Add, Left(_), _, Right(ref t)) => {
+                Term::AddOrRetract(OpType::Add, Left(_), _, Right(ref t)) => {
                     temp_ids.insert(t.clone());
                 }
-                &Term::AddOrRetract(OpType::Add, Left(_), _, Left(_)) => unreachable!(),
-                &Term::AddOrRetract(OpType::Retract, _, _, _) => {
+                Term::AddOrRetract(OpType::Add, Left(_), _, Left(_)) => unreachable!(),
+                Term::AddOrRetract(OpType::Retract, _, _, _) => {
                     // [:db/retract ...] entities never allocate entids; they have to resolve due to
                     // other upserts (or they fail the transaction).
                 }
@@ -319,13 +319,11 @@ impl Generation {
         );
 
         for vs in tempid_avs.values() {
-            vs.first()
-                .and_then(|first| temp_ids.get(first))
-                .map(|&first_index| {
-                    for tempid in vs {
-                        temp_ids.get(tempid).map(|&i| uf.union(first_index, i));
-                    }
-                });
+            if let Some(&first_index) = vs.first().and_then(|first| temp_ids.get(first)) {
+                for tempid in vs {
+                    temp_ids.get(tempid).map(|&i| uf.union(first_index, i));
+                }
+            }
         }
 
         debug!("union-find aggregation {:?}", uf.clone().into_labeling());
