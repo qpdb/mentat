@@ -1,7 +1,7 @@
 language: rust
 cache: cargo # cache cargo-audit once installed
 before_script:
-  - cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy
+#  - cargo install --force clippy
   - cargo install --force cargo-audit
   - cargo generate-lockfile
 script:
@@ -19,7 +19,6 @@ rust:
 matrix:
   allow_failures:
     - rust: stable
-    - rust: beta
     - rust: nightly
   fast_finish: true
 jobs:
@@ -32,7 +31,7 @@ jobs:
       script: ./scripts/cargo-doc.sh
 script:
   - cargo build --verbose --all
-  - cargo clippy --all-targets --all-features -- -D warnings # Check tests and non-default crate features.
+#  - cargo clippy --all-targets --all-features -- -D warnings # Check tests and non-default crate features.
   - cargo test --verbose --all
   - cargo test --features edn/serde_support --verbose --all
   # We can't pick individual features out with `cargo test --all` (At the time of this writing, this
