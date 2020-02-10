@@ -177,8 +177,7 @@ impl From<rusqlite::Error> for DbError {
 
 #[derive(Clone, PartialEq, Debug, Fail)]
 pub enum DbErrorKind {
-    /// We're just not done yet.  Message that the feature is recognized but not yet
-    /// implemented.
+    /// We're just not done yet.  Recognized a feature that is not yet implemented.
     #[fail(display = "not yet implemented: {}", _0)]
     NotYetImplemented(String),
 
