@@ -298,7 +298,7 @@ fn table_for_computed(computed: ComputedTable, alias: TableAlias) -> TableOrSubq
                                         //        datoms03.value_type_tag AS `?x_value_type_tag`
                                         let extract = cc.extracted_types
                                                         .get(var)
-                                                        .expect("Expected variable to have a known type or an extracted type");
+                                                        .expect("Expected variable to have a known type, or an extracted type");
                                         ColumnOrExpression::Column(extract.clone())
                                     };
                                 let type_column = VariableColumn::VariableTypeTag(var.clone());
@@ -315,7 +315,7 @@ fn table_for_computed(computed: ComputedTable, alias: TableAlias) -> TableOrSubq
                 alias)
         }
         ComputedTable::Subquery(subquery) => {
-            TableOrSubquery::Subquery(Box::new(cc_to_exists(subquery)))
+            TableOrSubquery::Subquery(Box::new(cc_to_exists(*subquery)))
         }
         ComputedTable::NamedValues { names, values } => {
             // We assume column homogeneity, so we won't have any type tag columns.

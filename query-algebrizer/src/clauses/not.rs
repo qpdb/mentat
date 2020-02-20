@@ -66,7 +66,7 @@ impl ConjoiningClauses {
             return Ok(());
         }
 
-        let subquery = ComputedTable::Subquery(template);
+        let subquery = ComputedTable::Subquery(Box::new(template));
 
         self.wheres
             .add_intersection(ColumnConstraint::NotExists(subquery));
@@ -256,7 +256,7 @@ mod testing {
                     john
                 )),
                 ColumnConstraintOrAlternation::Constraint(ColumnConstraint::NotExists(
-                    ComputedTable::Subquery(subquery)
+                    ComputedTable::Subquery(Box::new(subquery))
                 )),
             ])
         );
@@ -355,7 +355,7 @@ mod testing {
             )),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d2v.clone(), john)),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::NotExists(
-                ComputedTable::Subquery(subquery),
+                ComputedTable::Subquery(Box::new(subquery)),
             )),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
                 d0e.clone(),
@@ -467,7 +467,7 @@ mod testing {
                     right: QueryValue::TypedValue(TypedValue::Long(30)),
                 }),
                 ColumnConstraintOrAlternation::Constraint(ColumnConstraint::NotExists(
-                    ComputedTable::Subquery(subquery)
+                    ComputedTable::Subquery(Box::new(subquery))
                 )),
             ])
         );
@@ -578,7 +578,7 @@ mod testing {
                     bill
                 )),
                 ColumnConstraintOrAlternation::Constraint(ColumnConstraint::NotExists(
-                    ComputedTable::Subquery(subquery)
+                    ComputedTable::Subquery(Box::new(subquery))
                 )),
             ])
         );
@@ -662,7 +662,7 @@ mod testing {
                     bill
                 )),
                 ColumnConstraintOrAlternation::Constraint(ColumnConstraint::NotExists(
-                    ComputedTable::Subquery(subquery)
+                    ComputedTable::Subquery(Box::new(subquery))
                 )),
             ])
         );

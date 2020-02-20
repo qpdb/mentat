@@ -209,9 +209,12 @@ macro_rules! def_from_option {
 macro_rules! def_is {
     ($name: ident, $pat: pat) => {
         pub fn $name(&self) -> bool {
-            match *self { $pat => true, _ => false }
+            match *self {
+                $pat => true,
+                _ => false,
+            }
         }
-    }
+    };
 }
 
 /// Creates `as_$TYPE` helper functions for Value or SpannedValue, like
@@ -231,9 +234,12 @@ macro_rules! def_as {
 macro_rules! def_as_ref {
     ($name: ident, $kind: path, $t: ty) => {
         pub fn $name(&self) -> Option<&$t> {
-            match *self { $kind(ref v) => Some(v), _ => None }
+            match *self {
+                $kind(ref v) => Some(v),
+                _ => None,
+            }
         }
-    }
+    };
 }
 
 /// Creates `into_$TYPE` helper functions for Value or SpannedValue, like
