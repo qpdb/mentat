@@ -233,7 +233,7 @@ impl ToConstraint for ColumnConstraint {
 pub enum ProjectedSelect {
     Constant(ConstantProjector),
     Query {
-        query: SelectQuery,
+        query: Box<SelectQuery>,
         projector: Box<dyn Projector>,
     },
 }
@@ -499,16 +499,16 @@ pub fn query_to_select(schema: &Schema, query: AlgebraicQuery) -> Result<Project
                             query.order,
                             query.limit,
                         );
-                        re_project(inner, sql_projection) // outer
+                        Box::new(re_project(inner, sql_projection)) // outer
                     }
-                    None => cc_to_select_query(
+                    None => Box::new(cc_to_select_query(
                         sql_projection,
                         query.cc,
                         distinct,
                         group_by_cols,
                         query.order,
                         query.limit,
-                    ),
+                    )),
                 },
                 projector: datalog_projector,
             }
