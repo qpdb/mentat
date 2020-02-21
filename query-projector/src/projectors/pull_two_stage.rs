@@ -42,8 +42,8 @@ impl ScalarTwoStagePullProjector {
         pull: PullOperation,
     ) -> Result<ScalarTwoStagePullProjector> {
         Ok(ScalarTwoStagePullProjector {
-            spec: spec,
-            puller: Puller::prepare(schema, pull.0.clone())?,
+            spec,
+            puller: Puller::prepare(schema, pull.0)?,
         })
     }
 
@@ -86,7 +86,7 @@ impl Projector for ScalarTwoStagePullProjector {
 
         Ok(QueryOutput {
             spec: self.spec.clone(),
-            results: results,
+            results,
         })
     }
 
@@ -111,10 +111,10 @@ impl TupleTwoStagePullProjector {
         pulls: Vec<PullTemplate>,
     ) -> TupleTwoStagePullProjector {
         TupleTwoStagePullProjector {
-            spec: spec,
-            len: len,
-            templates: templates,
-            pulls: pulls,
+            spec,
+            len,
+            templates,
+            pulls,
         }
     }
 
@@ -187,7 +187,7 @@ impl Projector for TupleTwoStagePullProjector {
         };
         Ok(QueryOutput {
             spec: self.spec.clone(),
-            results: results,
+            results,
         })
     }
 
@@ -215,10 +215,10 @@ impl RelTwoStagePullProjector {
         pulls: Vec<PullTemplate>,
     ) -> RelTwoStagePullProjector {
         RelTwoStagePullProjector {
-            spec: spec,
-            len: len,
-            templates: templates,
-            pulls: pulls,
+            spec,
+            len,
+            templates,
+            pulls,
         }
     }
 
@@ -320,10 +320,7 @@ pub(crate) struct CollTwoStagePullProjector {
 
 impl CollTwoStagePullProjector {
     fn with_pull(spec: Rc<FindSpec>, pull: PullOperation) -> CollTwoStagePullProjector {
-        CollTwoStagePullProjector {
-            spec: spec,
-            pull: pull,
-        }
+        CollTwoStagePullProjector { spec, pull }
     }
 
     pub(crate) fn combine(

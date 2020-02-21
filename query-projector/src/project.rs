@@ -67,7 +67,7 @@ impl ProjectedElements {
             sql_projection: self.sql_projection,
             pre_aggregate_projection: self.pre_aggregate_projection,
             datalog_projector: projector,
-            distinct: distinct,
+            distinct,
             group_by_cols: self.group_by,
         })
     }
@@ -98,14 +98,14 @@ fn candidate_type_column(
             let type_name = VariableColumn::VariableTypeTag(var.clone()).column_name();
             (ColumnOrExpression::Column(alias), type_name)
         })
-        .ok_or_else(|| ProjectorError::UnboundVariable(var.name()).into())
+        .ok_or_else(|| ProjectorError::UnboundVariable(var.name()))
 }
 
 fn cc_column(cc: &ConjoiningClauses, var: &Variable) -> Result<QualifiedAlias> {
     cc.column_bindings
         .get(var)
         .and_then(|cols| cols.get(0).cloned())
-        .ok_or_else(|| ProjectorError::UnboundVariable(var.name()).into())
+        .ok_or_else(|| ProjectorError::UnboundVariable(var.name()))
 }
 
 fn candidate_column(cc: &ConjoiningClauses, var: &Variable) -> Result<(ColumnOrExpression, Name)> {
@@ -130,7 +130,7 @@ pub fn projected_column_for_var(
         let tag = value.value_type();
         let name = VariableColumn::Variable(var.clone()).column_name();
         Ok((
-            ProjectedColumn(ColumnOrExpression::Value(value.clone()), name),
+            ProjectedColumn(ColumnOrExpression::Value(value), name),
             ValueTypeSet::of_one(tag),
         ))
     } else {
@@ -184,8 +184,8 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
 
     for e in elements {
         // Check for and reject duplicates.
-        match e {
-            &Element::Variable(ref var) => {
+        match *e {
+            Element::Variable(ref var) => {
                 if outer_variables.contains(var) {
                     bail!(ProjectorError::InvalidProjection(format!(
                         "Duplicate variable {} in query.",
@@ -199,7 +199,7 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
                     )));
                 }
             }
-            &Element::Corresponding(ref var) => {
+            Element::Corresponding(ref var) => {
                 if outer_variables.contains(var) {
                     bail!(ProjectorError::InvalidProjection(format!(
                         "Can't project both {} and `(the {})` from a query.",
@@ -213,38 +213,35 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
                     )));
                 }
             }
-            &Element::Aggregate(_) => {}
-            &Element::Pull(_) => {}
+            Element::Aggregate(_) => {}
+            Element::Pull(_) => {}
         };
 
         // Record variables -- `(the ?x)` and `?x` are different in this regard, because we don't want
         // to group on variables that are corresponding-projected.
-        match e {
-            &Element::Variable(ref var) => {
+        match *e {
+            Element::Variable(ref var) => {
                 outer_variables.insert(var.clone());
             }
-            &Element::Corresponding(ref var) => {
+            Element::Corresponding(ref var) => {
                 // We will project these later; don't put them in `outer_variables`
                 // so we know not to group them.
                 corresponded_variables.insert(var.clone());
             }
-            &Element::Pull(Pull {
-                ref var,
-                patterns: _,
-            }) => {
+            Element::Pull(Pull { ref var, .. }) => {
                 // We treat `pull` as an ordinary variable extraction,
                 // and we expand it later.
                 outer_variables.insert(var.clone());
             }
-            &Element::Aggregate(_) => {}
+            Element::Aggregate(_) => {}
         };
 
         // Now do the main processing of each element.
-        match e {
+        match *e {
             // Each time we come across a variable, we push a SQL column
             // into the SQL projection, aliased to the name of the variable,
             // and we push an annotated index into the projector.
-            &Element::Variable(ref var) | &Element::Corresponding(ref var) => {
+            Element::Variable(ref var) | Element::Corresponding(ref var) => {
                 inner_variables.insert(var.clone());
 
                 let (projected_column, type_set) = projected_column_for_var(&var, &query.cc)?;
@@ -264,7 +261,7 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
                     outer_projection.push(Either::Left(type_name));
                 }
             }
-            &Element::Pull(Pull {
+            Element::Pull(Pull {
                 ref var,
                 ref patterns,
             }) => {
@@ -296,7 +293,7 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
                     unreachable!();
                 }
             }
-            &Element::Aggregate(ref a) => {
+            Element::Aggregate(ref a) => {
                 if let Some(simple) = a.to_simple() {
                     aggregates = true;
 
@@ -343,7 +340,7 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
                     templates.push(TypedIndex::Known(i, return_type.value_type_tag()));
                     i += 1;
                 } else {
-                    // TODO: complex aggregates.
+                    // TODO(gburd): complex aggregates.
                     bail!(ProjectorError::NotYetImplemented(
                         "complex aggregates".into()
                     ));
@@ -465,9 +462,12 @@ pub(crate) fn project_elements<'a, I: IntoIterator<Item = &'a Element>>(
         if needs_type_projection {
             let type_name = VariableColumn::VariableTypeTag(var.clone()).column_name();
             if !already_inner {
-                let type_col = query.cc.extracted_types.get(&var).cloned().ok_or_else(|| {
-                    ProjectorError::NoTypeAvailableForVariable(var.name().clone())
-                })?;
+                let type_col = query
+                    .cc
+                    .extracted_types
+                    .get(&var)
+                    .cloned()
+                    .ok_or_else(|| ProjectorError::NoTypeAvailableForVariable(var.name()))?;
                 inner_projection.push(ProjectedColumn(
                     ColumnOrExpression::Column(type_col),
                     type_name.clone(),

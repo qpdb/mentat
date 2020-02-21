@@ -39,7 +39,7 @@ pub type StructuredRelResult = RelResult<Binding>;
 impl<T> RelResult<T> {
     pub fn empty(width: usize) -> RelResult<T> {
         RelResult {
-            width: width,
+            width,
             values: Vec::new(),
         }
     }
@@ -53,7 +53,7 @@ impl<T> RelResult<T> {
     }
 
     pub fn rows(&self) -> ::std::slice::Chunks<T> {
-        // TODO: Nightly-only API `exact_chunks`. #47115.
+        // TODO(gburd): Nightly-only API `exact_chunks`. #47115.
         self.values.chunks(self.width)
     }
 
@@ -142,7 +142,7 @@ impl From<Vec<Vec<TypedValue>>> for RelResult<Binding> {
         } else {
             let width = src.get(0).map(|r| r.len()).unwrap_or(0);
             RelResult {
-                width: width,
+                width,
                 values: src
                     .into_iter()
                     .flat_map(|r| r.into_iter().map(|v| v.into()))

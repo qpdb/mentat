@@ -94,11 +94,11 @@ impl From<QueryOutput> for QueryResults {
 impl QueryOutput {
     pub fn empty_factory(spec: &FindSpec) -> Box<dyn Fn() -> QueryResults> {
         use self::FindSpec::*;
-        match spec {
-            &FindScalar(_) => Box::new(|| QueryResults::Scalar(None)),
-            &FindTuple(_) => Box::new(|| QueryResults::Tuple(None)),
-            &FindColl(_) => Box::new(|| QueryResults::Coll(vec![])),
-            &FindRel(ref es) => {
+        match *spec {
+            FindScalar(_) => Box::new(|| QueryResults::Scalar(None)),
+            FindTuple(_) => Box::new(|| QueryResults::Tuple(None)),
+            FindColl(_) => Box::new(|| QueryResults::Coll(vec![])),
+            FindRel(ref es) => {
                 let width = es.len();
                 Box::new(move || QueryResults::Rel(RelResult::empty(width)))
             }
@@ -115,48 +115,48 @@ impl QueryOutput {
 
     pub fn empty(spec: &Rc<FindSpec>) -> QueryOutput {
         use self::FindSpec::*;
-        let results = match &**spec {
-            &FindScalar(_) => QueryResults::Scalar(None),
-            &FindTuple(_) => QueryResults::Tuple(None),
-            &FindColl(_) => QueryResults::Coll(vec![]),
-            &FindRel(ref es) => QueryResults::Rel(RelResult::empty(es.len())),
+        let results = match **spec {
+            FindScalar(_) => QueryResults::Scalar(None),
+            FindTuple(_) => QueryResults::Tuple(None),
+            FindColl(_) => QueryResults::Coll(vec![]),
+            FindRel(ref es) => QueryResults::Rel(RelResult::empty(es.len())),
         };
         QueryOutput {
             spec: spec.clone(),
-            results: results,
+            results,
         }
     }
 
     pub fn from_constants(spec: &Rc<FindSpec>, bindings: VariableBindings) -> QueryResults {
         use self::FindSpec::*;
-        match &**spec {
-            &FindScalar(Element::Variable(ref var))
-            | &FindScalar(Element::Corresponding(ref var)) => {
+        match **spec {
+            FindScalar(Element::Variable(ref var))
+            | FindScalar(Element::Corresponding(ref var)) => {
                 let val = bindings.get(var).cloned().map(|v| v.into());
                 QueryResults::Scalar(val)
             }
-            &FindScalar(Element::Aggregate(ref _agg)) => {
+            FindScalar(Element::Aggregate(ref _agg)) => {
                 // TODO: static aggregates.
                 unimplemented!();
             }
-            &FindScalar(Element::Pull(ref _pull)) => {
+            FindScalar(Element::Pull(ref _pull)) => {
                 // TODO: static pull.
                 unimplemented!();
             }
-            &FindTuple(ref elements) => {
+            FindTuple(ref elements) => {
                 let values = elements
                     .iter()
-                    .map(|e| match e {
-                        &Element::Variable(ref var) | &Element::Corresponding(ref var) => bindings
+                    .map(|e| match *e {
+                        Element::Variable(ref var) | Element::Corresponding(ref var) => bindings
                             .get(var)
                             .cloned()
                             .expect("every var to have a binding")
                             .into(),
-                        &Element::Pull(ref _pull) => {
+                        Element::Pull(ref _pull) => {
                             // TODO: static pull.
                             unreachable!();
                         }
-                        &Element::Aggregate(ref _agg) => {
+                        Element::Aggregate(ref _agg) => {
                             // TODO: static computation of aggregates, then
                             // implement the condition in `is_fully_bound`.
                             unreachable!();
@@ -165,7 +165,7 @@ impl QueryOutput {
                     .collect();
                 QueryResults::Tuple(Some(values))
             }
-            &FindColl(Element::Variable(ref var)) | &FindColl(Element::Corresponding(ref var)) => {
+            FindColl(Element::Variable(ref var)) | FindColl(Element::Corresponding(ref var)) => {
                 let val = bindings
                     .get(var)
                     .cloned()
@@ -173,32 +173,32 @@ impl QueryOutput {
                     .into();
                 QueryResults::Coll(vec![val])
             }
-            &FindColl(Element::Pull(ref _pull)) => {
+            FindColl(Element::Pull(ref _pull)) => {
                 // TODO: static pull.
                 unimplemented!();
             }
-            &FindColl(Element::Aggregate(ref _agg)) => {
+            FindColl(Element::Aggregate(ref _agg)) => {
                 // Does it even make sense to write
                 // [:find [(max ?x) ...] :where [_ :foo/bar ?x]]
                 // ?
                 // TODO
                 unimplemented!();
             }
-            &FindRel(ref elements) => {
+            FindRel(ref elements) => {
                 let width = elements.len();
                 let values = elements
                     .iter()
-                    .map(|e| match e {
-                        &Element::Variable(ref var) | &Element::Corresponding(ref var) => bindings
+                    .map(|e| match *e {
+                        Element::Variable(ref var) | Element::Corresponding(ref var) => bindings
                             .get(var)
                             .cloned()
                             .expect("every var to have a binding")
                             .into(),
-                        &Element::Pull(ref _pull) => {
+                        Element::Pull(ref _pull) => {
                             // TODO: static pull.
                             unreachable!();
                         }
-                        &Element::Aggregate(ref _agg) => {
+                        Element::Aggregate(ref _agg) => {
                             // TODO: static computation of aggregates, then
                             // implement the condition in `is_fully_bound`.
                             unreachable!();
@@ -242,33 +242,33 @@ impl QueryOutput {
 impl QueryResults {
     pub fn len(&self) -> usize {
         use QueryResults::*;
-        match self {
-            &Scalar(ref o) => {
+        match *self {
+            Scalar(ref o) => {
                 if o.is_some() {
                     1
                 } else {
                     0
                 }
             }
-            &Tuple(ref o) => {
+            Tuple(ref o) => {
                 if o.is_some() {
                     1
                 } else {
                     0
                 }
             }
-            &Coll(ref v) => v.len(),
-            &Rel(ref r) => r.row_count(),
+            Coll(ref v) => v.len(),
+            Rel(ref r) => r.row_count(),
         }
     }
 
     pub fn is_empty(&self) -> bool {
         use QueryResults::*;
-        match self {
-            &Scalar(ref o) => o.is_none(),
-            &Tuple(ref o) => o.is_none(),
-            &Coll(ref v) => v.is_empty(),
-            &Rel(ref r) => r.is_empty(),
+        match *self {
+            Scalar(ref o) => o.is_none(),
+            Tuple(ref o) => o.is_none(),
+            Coll(ref v) => v.is_empty(),
+            Rel(ref r) => r.is_empty(),
         }
     }
 
@@ -341,14 +341,14 @@ impl TypedIndex {
     fn lookup<'a>(&self, row: &Row<'a>) -> Result<Binding> {
         use TypedIndex::*;
 
-        match self {
-            &Known(value_index, value_type) => {
+        match *self {
+            Known(value_index, value_type) => {
                 let v: rusqlite::types::Value = row.get(value_index).unwrap();
                 TypedValue::from_sql_value_pair(v, value_type)
                     .map(|v| v.into())
                     .map_err(|e| e.into())
             }
-            &Unknown(value_index, type_index) => {
+            Unknown(value_index, type_index) => {
                 let v: rusqlite::types::Value = row.get(value_index).unwrap();
                 let value_type_tag: i32 = row.get(type_index).unwrap();
                 TypedValue::from_sql_value_pair(v, value_type_tag)
@@ -403,8 +403,8 @@ trait IsPull {
 
 impl IsPull for Element {
     fn is_pull(&self) -> bool {
-        match self {
-            &Element::Pull(_) => true,
+        match *self {
+            Element::Pull(_) => true,
             _ => false,
         }
     }
@@ -430,16 +430,16 @@ pub fn query_projection(
 
         let variables: BTreeSet<Variable> = spec
             .columns()
-            .map(|e| match e {
-                &Element::Variable(ref var) | &Element::Corresponding(ref var) => var.clone(),
+            .map(|e| match *e {
+                Element::Variable(ref var) | Element::Corresponding(ref var) => var.clone(),
 
                 // Pull expressions can never be fully bound.
                 // TODO: but the interior can be, in which case we
                 // can handle this and simply project.
-                &Element::Pull(_) => {
+                Element::Pull(_) => {
                     unreachable!();
                 }
-                &Element::Aggregate(ref _agg) => {
+                Element::Aggregate(ref _agg) => {
                     // TODO: static computation of aggregates, then
                     // implement the condition in `is_fully_bound`.
                     unreachable!();

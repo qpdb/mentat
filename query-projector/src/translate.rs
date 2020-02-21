@@ -224,7 +224,7 @@ impl ToConstraint for ColumnConstraint {
 
             NotExists(computed_table) => {
                 let subquery = table_for_computed(computed_table, TableAlias::new());
-                Constraint::NotExists { subquery: subquery }
+                Constraint::NotExists { subquery }
             }
         }
     }
@@ -246,7 +246,7 @@ struct ConsumableVec<T> {
 impl<T> From<Vec<T>> for ConsumableVec<T> {
     fn from(vec: Vec<T>) -> ConsumableVec<T> {
         ConsumableVec {
-            inner: vec.into_iter().map(|x| Some(x)).collect(),
+            inner: vec.into_iter().map(Some).collect(),
         }
     }
 }
@@ -369,20 +369,20 @@ fn cc_to_select_query(
         FromClause::TableList(TableList(tables.collect()))
     };
 
-    let order = order.map_or(vec![], |vec| vec.into_iter().map(|o| o.into()).collect());
+    let order = order.map_or(vec![], |vec| vec.into_iter().map(|o| o).collect());
     let limit = if cc.empty_because.is_some() {
         Limit::Fixed(0)
     } else {
         limit
     };
     SelectQuery {
-        distinct: distinct,
-        projection: projection,
-        from: from,
-        group_by: group_by,
+        distinct,
+        projection,
+        from,
+        group_by,
         constraints: cc.wheres.into_iter().map(|c| c.to_constraint()).collect(),
-        order: order,
-        limit: limit,
+        order,
+        limit,
     }
 }
 
@@ -412,11 +412,11 @@ fn re_project(mut inner: SelectQuery, projection: Projection) -> SelectQuery {
 
     use self::Projection::*;
 
-    let nullable = match &projection {
-        &Columns(ref columns) => columns
+    let nullable = match projection {
+        Columns(ref columns) => columns
             .iter()
-            .filter_map(|pc| match pc {
-                &ProjectedColumn(ColumnOrExpression::NullableAggregate(_, _), ref name) => {
+            .filter_map(|pc| match *pc {
+                ProjectedColumn(ColumnOrExpression::NullableAggregate(_, _), ref name) => {
                     Some(Constraint::IsNotNull {
                         value: ColumnOrExpression::ExistingColumn(name.clone()),
                     })
@@ -424,21 +424,21 @@ fn re_project(mut inner: SelectQuery, projection: Projection) -> SelectQuery {
                 _ => None,
             })
             .collect(),
-        &Star => vec![],
-        &One => vec![],
+        Star => vec![],
+        One => vec![],
     };
 
     if nullable.is_empty() {
         return SelectQuery {
             distinct: outer_distinct,
-            projection: projection,
+            projection,
             from: FromClause::TableList(TableList(vec![TableOrSubquery::Subquery(Box::new(
                 inner,
             ))])),
             constraints: vec![],
-            group_by: group_by,
+            group_by,
             order: order_by,
-            limit: limit,
+            limit,
         };
     }
 
@@ -449,10 +449,10 @@ fn re_project(mut inner: SelectQuery, projection: Projection) -> SelectQuery {
     // if there is.
     let subselect = SelectQuery {
         distinct: outer_distinct,
-        projection: projection,
+        projection,
         from: FromClause::TableList(TableList(vec![TableOrSubquery::Subquery(Box::new(inner))])),
         constraints: vec![],
-        group_by: group_by,
+        group_by,
         order: match &limit {
             &Limit::None => vec![],
             &Limit::Fixed(_) | &Limit::Variable(_) => order_by.clone(),
@@ -499,8 +499,7 @@ pub fn query_to_select(schema: &Schema, query: AlgebraicQuery) -> Result<Project
                             query.order,
                             query.limit,
                         );
-                        let outer = re_project(inner, sql_projection);
-                        outer
+                        re_project(inner, sql_projection) // outer
                     }
                     None => cc_to_select_query(
                         sql_projection,

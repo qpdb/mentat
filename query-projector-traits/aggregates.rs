@@ -28,14 +28,14 @@ pub enum SimpleAggregationOp {
 }
 
 impl SimpleAggregationOp {
-    pub fn to_sql(&self) -> &'static str {
+    pub fn to_sql(self) -> &'static str {
         use self::SimpleAggregationOp::*;
         match self {
-            &Avg => "avg",
-            &Count => "count",
-            &Max => "max",
-            &Min => "min",
-            &Sum => "sum",
+            Avg => "avg",
+            Count => "count",
+            Max => "max",
+            Min => "min",
+            Sum => "sum",
         }
     }
 
@@ -57,29 +57,29 @@ impl SimpleAggregationOp {
     /// but invalid to take `Max` of `{Uuid, String}`.
     ///
     /// The returned type is the type of the result of the aggregation.
-    pub fn is_applicable_to_types(&self, possibilities: ValueTypeSet) -> Result<ValueType> {
+    pub fn is_applicable_to_types(self, possibilities: ValueTypeSet) -> Result<ValueType> {
         use self::SimpleAggregationOp::*;
         if possibilities.is_empty() {
-            bail!(ProjectorError::CannotProjectImpossibleBinding(*self))
+            bail!(ProjectorError::CannotProjectImpossibleBinding(self))
         }
 
         match self {
             // One can always count results.
-            &Count => Ok(ValueType::Long),
+            Count => Ok(ValueType::Long),
 
             // Only numeric types can be averaged or summed.
-            &Avg => {
+            Avg => {
                 if possibilities.is_only_numeric() {
                     // The mean of a set of numeric values will always, for our purposes, be a double.
                     Ok(ValueType::Double)
                 } else {
                     bail!(ProjectorError::CannotApplyAggregateOperationToTypes(
-                        *self,
+                        self,
                         possibilities
                     ))
                 }
             }
-            &Sum => {
+            Sum => {
                 if possibilities.is_only_numeric() {
                     if possibilities.contains(ValueType::Double) {
                         Ok(ValueType::Double)
@@ -89,18 +89,18 @@ impl SimpleAggregationOp {
                     }
                 } else {
                     bail!(ProjectorError::CannotApplyAggregateOperationToTypes(
-                        *self,
+                        self,
                         possibilities
                     ))
                 }
             }
 
-            &Max | &Min => {
+            Max | Min => {
                 if possibilities.is_unit() {
                     use self::ValueType::*;
                     let the_type = possibilities.exemplar().expect("a type");
                     match the_type {
-                        // These types are numerically ordered.
+                        // Numerically ordered types.
                         Double | Long | Instant => Ok(the_type),
 
                         // Boolean: false < true.
@@ -109,10 +109,10 @@ impl SimpleAggregationOp {
                         // String: lexicographic order.
                         String => Ok(the_type),
 
-                        // These types are unordered.
+                        // Unordered types.
                         Keyword | Ref | Uuid => {
                             bail!(ProjectorError::CannotApplyAggregateOperationToTypes(
-                                *self,
+                                self,
                                 possibilities
                             ))
                         }
@@ -130,7 +130,7 @@ impl SimpleAggregationOp {
                         }
                     } else {
                         bail!(ProjectorError::CannotApplyAggregateOperationToTypes(
-                            *self,
+                            self,
                             possibilities
                         ))
                     }

@@ -29,18 +29,15 @@ impl ConstantProjector {
         results_factory: Box<dyn Fn() -> QueryResults>,
     ) -> ConstantProjector {
         ConstantProjector {
-            spec: spec,
-            results_factory: results_factory,
+            spec,
+            results_factory,
         }
     }
 
-    pub fn project_without_rows<'stmt>(&self) -> Result<QueryOutput> {
+    pub fn project_without_rows(&self) -> Result<QueryOutput> {
         let results = (self.results_factory)();
         let spec = self.spec.clone();
-        Ok(QueryOutput {
-            spec: spec,
-            results: results,
-        })
+        Ok(QueryOutput { spec, results })
     }
 }
 

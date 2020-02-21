@@ -26,10 +26,7 @@ pub(crate) struct ScalarProjector {
 
 impl ScalarProjector {
     fn with_template(spec: Rc<FindSpec>, template: TypedIndex) -> ScalarProjector {
-        ScalarProjector {
-            spec: spec,
-            template: template,
-        }
+        ScalarProjector { spec, template }
     }
 
     pub(crate) fn combine(
@@ -62,7 +59,7 @@ impl Projector for ScalarProjector {
         };
         Ok(QueryOutput {
             spec: self.spec.clone(),
-            results: results,
+            results,
         })
     }
 
@@ -85,9 +82,9 @@ impl TupleProjector {
         templates: Vec<TypedIndex>,
     ) -> TupleProjector {
         TupleProjector {
-            spec: spec,
-            len: len,
-            templates: templates,
+            spec,
+            len,
+            templates,
         }
     }
 
@@ -134,7 +131,7 @@ impl Projector for TupleProjector {
         };
         Ok(QueryOutput {
             spec: self.spec.clone(),
-            results: results,
+            results,
         })
     }
 
@@ -156,9 +153,9 @@ pub(crate) struct RelProjector {
 impl RelProjector {
     fn with_templates(spec: Rc<FindSpec>, len: usize, templates: Vec<TypedIndex>) -> RelProjector {
         RelProjector {
-            spec: spec,
-            len: len,
-            templates: templates,
+            spec,
+            len,
+            templates,
         }
     }
 
@@ -235,10 +232,7 @@ pub(crate) struct CollProjector {
 
 impl CollProjector {
     fn with_template(spec: Rc<FindSpec>, template: TypedIndex) -> CollProjector {
-        CollProjector {
-            spec: spec,
-            template: template,
-        }
+        CollProjector { spec, template }
     }
 
     pub(crate) fn combine(

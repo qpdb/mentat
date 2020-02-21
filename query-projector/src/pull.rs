@@ -61,9 +61,9 @@ impl<'schema> PullConsumer<'schema> {
         indices: PullIndices,
     ) -> PullConsumer<'schema> {
         PullConsumer {
-            indices: indices,
-            schema: schema,
-            puller: puller,
+            indices,
+            schema,
+            puller,
             entities: Default::default(),
             results: Default::default(),
         }
@@ -114,10 +114,6 @@ impl<'schema> PullConsumer<'schema> {
 
     // TODO: do we need to include empty maps for entities that didn't match any pull?
     pub(crate) fn into_coll_results(self) -> Vec<Binding> {
-        self.results
-            .values()
-            .cloned()
-            .map(|vrc| Binding::Map(vrc))
-            .collect()
+        self.results.values().cloned().map(Binding::Map).collect()
     }
 }
