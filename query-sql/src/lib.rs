@@ -93,8 +93,8 @@ pub enum GroupBy {
 impl QueryFragment for GroupBy {
     fn push_sql(&self, out: &mut dyn QueryBuilder) -> BuildQueryResult {
         match self {
-            &GroupBy::ProjectedColumn(ref name) => out.push_identifier(name.as_str()),
-            &GroupBy::QueryColumn(ref qa) => qualified_alias_push_sql(out, qa),
+            GroupBy::ProjectedColumn(ref name) => out.push_identifier(name.as_str()),
+            GroupBy::QueryColumn(ref qa) => qualified_alias_push_sql(out, qa),
         }
     }
 }
@@ -137,24 +137,24 @@ impl Constraint {
     pub fn not_equal(left: ColumnOrExpression, right: ColumnOrExpression) -> Constraint {
         Constraint::Infix {
             op: Op("<>"), // ANSI SQL for future-proofing!
-            left: left,
-            right: right,
+            left,
+            right,
         }
     }
 
     pub fn equal(left: ColumnOrExpression, right: ColumnOrExpression) -> Constraint {
         Constraint::Infix {
             op: Op("="),
-            left: left,
-            right: right,
+            left,
+            right,
         }
     }
 
     pub fn fulltext_match(left: ColumnOrExpression, right: ColumnOrExpression) -> Constraint {
         Constraint::Infix {
             op: Op("MATCH"), // SQLite specific!
-            left: left,
-            right: right,
+            left,
+            right,
         }
     }
 }
@@ -217,8 +217,8 @@ pub struct SelectQuery {
 
 fn push_variable_column(qb: &mut dyn QueryBuilder, vc: &VariableColumn) -> BuildQueryResult {
     match vc {
-        &VariableColumn::Variable(ref v) => qb.push_identifier(v.as_str()),
-        &VariableColumn::VariableTypeTag(ref v) => {
+        VariableColumn::Variable(ref v) => qb.push_identifier(v.as_str()),
+        VariableColumn::VariableTypeTag(ref v) => {
             qb.push_identifier(format!("{}_value_type_tag", v.name()).as_str())
         }
     }
@@ -226,16 +226,16 @@ fn push_variable_column(qb: &mut dyn QueryBuilder, vc: &VariableColumn) -> Build
 
 fn push_column(qb: &mut dyn QueryBuilder, col: &Column) -> BuildQueryResult {
     match col {
-        &Column::Fixed(ref d) => {
+        Column::Fixed(ref d) => {
             qb.push_sql(d.as_str());
             Ok(())
         }
-        &Column::Fulltext(ref d) => {
+        Column::Fulltext(ref d) => {
             qb.push_sql(d.as_str());
             Ok(())
         }
-        &Column::Variable(ref vc) => push_variable_column(qb, vc),
-        &Column::Transactions(ref d) => {
+        Column::Variable(ref vc) => push_variable_column(qb, vc),
+        Column::Transactions(ref d) => {
             qb.push_sql(d.as_str());
             Ok(())
         }
@@ -249,22 +249,22 @@ impl QueryFragment for ColumnOrExpression {
     fn push_sql(&self, out: &mut dyn QueryBuilder) -> BuildQueryResult {
         use self::ColumnOrExpression::*;
         match self {
-            &Column(ref qa) => qualified_alias_push_sql(out, qa),
-            &ExistingColumn(ref alias) => out.push_identifier(alias.as_str()),
-            &Entid(entid) => {
+            Column(ref qa) => qualified_alias_push_sql(out, qa),
+            ExistingColumn(ref alias) => out.push_identifier(alias.as_str()),
+            Entid(entid) => {
                 out.push_sql(entid.to_string().as_str());
                 Ok(())
             }
-            &Integer(integer) => {
+            Integer(integer) => {
                 out.push_sql(integer.to_string().as_str());
                 Ok(())
             }
-            &Long(long) => {
+            Long(long) => {
                 out.push_sql(long.to_string().as_str());
                 Ok(())
             }
-            &Value(ref v) => out.push_typed_value(v),
-            &NullableAggregate(ref e, _) | &Expression(ref e, _) => e.push_sql(out),
+            Value(ref v) => out.push_typed_value(v),
+            NullableAggregate(ref e, _) | &Expression(ref e, _) => e.push_sql(out),
         }
     }
 }
@@ -272,7 +272,7 @@ impl QueryFragment for ColumnOrExpression {
 impl QueryFragment for Expression {
     fn push_sql(&self, out: &mut dyn QueryBuilder) -> BuildQueryResult {
         match self {
-            &Expression::Unary {
+            Expression::Unary {
                 ref sql_op,
                 ref arg,
             } => {
@@ -290,9 +290,9 @@ impl QueryFragment for Projection {
     fn push_sql(&self, out: &mut dyn QueryBuilder) -> BuildQueryResult {
         use self::Projection::*;
         match self {
-            &One => out.push_sql("1"),
-            &Star => out.push_sql("*"),
-            &Columns(ref cols) => {
+            One => out.push_sql("1"),
+            Star => out.push_sql("*"),
+            Columns(ref cols) => {
                 let &ProjectedColumn(ref col, ref alias) = &cols[0];
                 col.push_sql(out)?;
                 out.push_sql(" AS ");
@@ -322,7 +322,7 @@ impl QueryFragment for Constraint {
     fn push_sql(&self, out: &mut dyn QueryBuilder) -> BuildQueryResult {
         use self::Constraint::*;
         match self {
-            &Infix {
+            Infix {
                 ref op,
                 ref left,
                 ref right,
@@ -334,19 +334,19 @@ impl QueryFragment for Constraint {
                 right.push_sql(out)
             }
 
-            &IsNull { ref value } => {
+            IsNull { ref value } => {
                 value.push_sql(out)?;
                 out.push_sql(" IS NULL");
                 Ok(())
             }
 
-            &IsNotNull { ref value } => {
+            IsNotNull { ref value } => {
                 value.push_sql(out)?;
                 out.push_sql(" IS NOT NULL");
                 Ok(())
             }
 
-            &And { ref constraints } => {
+            And { ref constraints } => {
                 // An empty intersection is true.
                 if constraints.is_empty() {
                     out.push_sql("1");
@@ -360,7 +360,7 @@ impl QueryFragment for Constraint {
                 Ok(())
             }
 
-            &Or { ref constraints } => {
+            Or { ref constraints } => {
                 // An empty alternation is false.
                 if constraints.is_empty() {
                     out.push_sql("0");
@@ -374,18 +374,18 @@ impl QueryFragment for Constraint {
                 Ok(())
             }
 
-            &In { ref left, ref list } => {
+            In { ref left, ref list } => {
                 left.push_sql(out)?;
                 out.push_sql(" IN (");
                 interpose!(item, list, { item.push_sql(out)? }, { out.push_sql(", ") });
                 out.push_sql(")");
                 Ok(())
             }
-            &NotExists { ref subquery } => {
+            NotExists { ref subquery } => {
                 out.push_sql("NOT EXISTS ");
                 subquery.push_sql(out)
             }
-            &TypeCheck {
+            TypeCheck {
                 ref value,
                 ref affinity,
             } => {
@@ -449,9 +449,9 @@ impl QueryFragment for Join {
 impl QueryFragment for TableOrSubquery {
     fn push_sql(&self, out: &mut dyn QueryBuilder) -> BuildQueryResult {
         use self::TableOrSubquery::*;
-        match self {
-            &Table(ref sa) => source_alias_push_sql(out, sa),
-            &Union(ref subqueries, ref table_alias) => {
+        match *self {
+            Table(ref sa) => source_alias_push_sql(out, sa),
+            Union(ref subqueries, ref table_alias) => {
                 out.push_sql("(");
                 interpose!(subquery, subqueries, { subquery.push_sql(out)? }, {
                     out.push_sql(" UNION ")
@@ -459,13 +459,13 @@ impl QueryFragment for TableOrSubquery {
                 out.push_sql(") AS ");
                 out.push_identifier(table_alias.as_str())
             }
-            &Subquery(ref subquery) => {
+            Subquery(ref subquery) => {
                 out.push_sql("(");
                 subquery.push_sql(out)?;
                 out.push_sql(")");
                 Ok(())
             }
-            &Values(ref values, ref table_alias) => {
+            Values(ref values, ref table_alias) => {
                 // XXX: does this work for Values::Unnamed?
                 out.push_sql("(");
                 values.push_sql(out)?;
@@ -488,7 +488,7 @@ impl QueryFragment for Values {
         // We don't want to use an undocumented SQLite quirk, and we're a little concerned that some
         // SQL systems will not optimize WITH statements well.  It's also convenient to have an in
         // place table to query, so for now we implement option 3.
-        if let &Values::Named(ref names, _) = self {
+        if let Values::Named(ref names, _) = *self {
             out.push_sql("SELECT ");
             interpose!(
                 alias,
@@ -503,9 +503,9 @@ impl QueryFragment for Values {
             out.push_sql(" WHERE 0 UNION ALL ");
         }
 
-        let values = match self {
-            &Values::Named(ref names, ref values) => values.chunks(names.len()),
-            &Values::Unnamed(ref size, ref values) => values.chunks(*size),
+        let values = match *self {
+            Values::Named(ref names, ref values) => values.chunks(names.len()),
+            Values::Unnamed(ref size, ref values) => values.chunks(*size),
         };
 
         out.push_sql("VALUES ");
@@ -529,8 +529,8 @@ impl QueryFragment for Values {
 impl QueryFragment for FromClause {
     fn push_sql(&self, out: &mut dyn QueryBuilder) -> BuildQueryResult {
         use self::FromClause::*;
-        match self {
-            &TableList(ref table_list) => {
+        match *self {
+            TableList(ref table_list) => {
                 if table_list.is_empty() {
                     Ok(())
                 } else {
@@ -538,11 +538,11 @@ impl QueryFragment for FromClause {
                     table_list.push_sql(out)
                 }
             }
-            &Join(ref join) => {
+            Join(ref join) => {
                 out.push_sql(" FROM ");
                 join.push_sql(out)
             }
-            &Nothing => Ok(()),
+            Nothing => Ok(()),
         }
     }
 }
@@ -605,11 +605,11 @@ impl QueryFragment for SelectQuery {
                 self.order,
                 {
                     push_variable_column(out, var)?;
-                    match dir {
-                        &Direction::Ascending => {
+                    match *dir {
+                        Direction::Ascending => {
                             out.push_sql(" ASC");
                         }
-                        &Direction::Descending => {
+                        Direction::Descending => {
                             out.push_sql(" DESC");
                         }
                     };
@@ -618,14 +618,14 @@ impl QueryFragment for SelectQuery {
             );
         }
 
-        match &self.limit {
-            &Limit::None => (),
-            &Limit::Fixed(limit) => {
+        match self.limit {
+            Limit::None => (),
+            Limit::Fixed(limit) => {
                 // Guaranteed to be non-negative: u64.
                 out.push_sql(" LIMIT ");
                 out.push_sql(limit.to_string().as_str());
             }
-            &Limit::Variable(ref var) => {
+            Limit::Variable(ref var) => {
                 // Guess this wasn't bound yet. Produce an argument.
                 out.push_sql(" LIMIT ");
                 self.push_variable_param(var, out)?;
