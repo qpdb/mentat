@@ -1,3 +1,12 @@
+* sqlite -> monetdb-lite-c + fts5 + bayesdb
+* fts5 + regex + tre/fuzzy + codesearch/trigram filters, streaming bloom filters https://arxiv.org/abs/2001.03147
+* datalog to "goblin relational engine" (gtk)
+* branching distributed wal (chain replication) and CRDTs
+* alf:fn query language
+* datatypes via bit syntax+some code?
+* pure lang?
+
+ * https://github.com/dahjelle/pouch-datalog
  * https://github.com/edn-query-language/eql
  * https://github.com/borkdude/jet
  * https://github.com/walmartlabs/dyn-edn
@@ -7,7 +16,14 @@
  * https://github.com/clojure-emacs/parseedn
  * https://github.com/exoscale/seql
  * https://github.com/axboe/liburing
- * https://github.com/probcomp/BayesDB
- * https://github.com/probcomp/bayeslite
- * http://probcomp.csail.mit.edu/software/bayesdb/
- *
+
+ * (EAVtf) - entity attribute value type flags
+
+ * distributed, replicated WAL
+   * https://github.com/mirage/irmin
+
+ * What if facts had "confidence" [0-1)?
+   * entity attribute value type flags
+   * https://github.com/probcomp/BayesDB
+   * https://github.com/probcomp/bayeslite
+   * http://probcomp.csail.mit.edu/software/bayesdb/
