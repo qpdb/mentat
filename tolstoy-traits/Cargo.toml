@@ -22,5 +22,5 @@ uuid = { version = "0.8" }
 path = "../db-traits"
 
 [dependencies.rusqlite]
-version = "0.21"
+version = "0.22"
 features = ["limits"]

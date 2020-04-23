@@ -11,6 +11,7 @@ authors = [
   "Kit Cambridge <kit@yakshaving.ninja>",
   "Edouard Oger <eoger@fastmail.com>",
   "Thom Chiovoloni <tchiovoloni@mozilla.com>",
+  "Gregory Burd <greg@burd.me>",
 ]
 name = "mentat"
 version = "0.11.2"
@@ -45,7 +46,7 @@ uuid = { version = "0.8", features = ["v4", "serde"] }
 
 
 [dependencies.rusqlite]
-version = "0.21.0"
+version = "0.22.0"
 # System sqlite might be very old.
 features = ["limits"]
 

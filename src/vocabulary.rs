@@ -290,21 +290,21 @@ impl Vocabularies {
 }
 
 lazy_static! {
-    static ref DB_SCHEMA_CORE: Keyword = { kw!(:db.schema/core) };
-    static ref DB_SCHEMA_ATTRIBUTE: Keyword = { kw!(:db.schema/attribute) };
-    static ref DB_SCHEMA_VERSION: Keyword = { kw!(:db.schema/version) };
-    static ref DB_IDENT: Keyword = { kw!(:db/ident) };
-    static ref DB_UNIQUE: Keyword = { kw!(:db/unique) };
-    static ref DB_UNIQUE_VALUE: Keyword = { kw!(:db.unique/value) };
-    static ref DB_UNIQUE_IDENTITY: Keyword = { kw!(:db.unique/identity) };
-    static ref DB_IS_COMPONENT: Keyword = { Keyword::namespaced("db", "isComponent") };
-    static ref DB_VALUE_TYPE: Keyword = { Keyword::namespaced("db", "valueType") };
-    static ref DB_INDEX: Keyword = { kw!(:db/index) };
-    static ref DB_FULLTEXT: Keyword = { kw!(:db/fulltext) };
-    static ref DB_CARDINALITY: Keyword = { kw!(:db/cardinality) };
-    static ref DB_CARDINALITY_ONE: Keyword = { kw!(:db.cardinality/one) };
-    static ref DB_CARDINALITY_MANY: Keyword = { kw!(:db.cardinality/many) };
-    static ref DB_NO_HISTORY: Keyword = { Keyword::namespaced("db", "noHistory") };
+    static ref DB_SCHEMA_CORE: Keyword = kw!(:db.schema/core);
+    static ref DB_SCHEMA_ATTRIBUTE: Keyword = kw!(:db.schema/attribute);
+    static ref DB_SCHEMA_VERSION: Keyword = kw!(:db.schema/version);
+    static ref DB_IDENT: Keyword = kw!(:db/ident);
+    static ref DB_UNIQUE: Keyword = kw!(:db/unique);
+    static ref DB_UNIQUE_VALUE: Keyword = kw!(:db.unique/value);
+    static ref DB_UNIQUE_IDENTITY: Keyword = kw!(:db.unique/identity);
+    static ref DB_IS_COMPONENT: Keyword = Keyword::namespaced("db", "isComponent");
+    static ref DB_VALUE_TYPE: Keyword = Keyword::namespaced("db", "valueType");
+    static ref DB_INDEX: Keyword = kw!(:db/index);
+    static ref DB_FULLTEXT: Keyword = kw!(:db/fulltext);
+    static ref DB_CARDINALITY: Keyword = kw!(:db/cardinality);
+    static ref DB_CARDINALITY_ONE: Keyword = kw!(:db.cardinality/one);
+    static ref DB_CARDINALITY_MANY: Keyword = kw!(:db.cardinality/many);
+    static ref DB_NO_HISTORY: Keyword = Keyword::namespaced("db", "noHistory");
 }
 
 trait HasCoreSchema {

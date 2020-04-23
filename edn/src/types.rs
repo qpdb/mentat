@@ -8,7 +8,7 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-#![allow(redundant_semicolon)]
+#![allow(redundant_semicolons)]
 
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::collections::{BTreeMap, BTreeSet, LinkedList};

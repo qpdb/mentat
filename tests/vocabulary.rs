@@ -43,8 +43,8 @@ use mentat::entity_builder::{BuildTerms, TermBuilder};
 use mentat::errors::MentatError;
 
 lazy_static! {
-    static ref FOO_NAME: Keyword = { kw!(:foo/name) };
-    static ref FOO_MOMENT: Keyword = { kw!(:foo/moment) };
+    static ref FOO_NAME: Keyword = kw!(:foo/name);
+    static ref FOO_MOMENT: Keyword = kw!(:foo/moment);
     static ref FOO_VOCAB: vocabulary::Definition = {
         vocabulary::Definition {
             name: kw!(:org.mozilla/foo),

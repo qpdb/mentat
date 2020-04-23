@@ -13,7 +13,7 @@ failure = "0.1.1"
 path = "../query-pull-traits"
 
 [dependencies.rusqlite]
-version = "0.21"
+version = "0.22"
 features = ["limits"]
 
 [dependencies.edn]
