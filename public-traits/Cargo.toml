@@ -20,8 +20,8 @@ tokio-core = "0.1"
 uuid = "0.8"
 
 [dependencies.rusqlite]
-version = "0.22"
-features = ["limits"]
+version = "0.23"
+features = ["limits", "bundled"]
 
 [dependencies.edn]
 path = "../edn"

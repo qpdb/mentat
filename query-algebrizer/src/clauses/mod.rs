@@ -508,7 +508,7 @@ impl ConjoiningClauses {
 
         self.column_bindings
             .entry(var)
-            .or_insert_with(|| vec![])
+            .or_insert_with(Vec::new)
             .push(alias);
     }
 

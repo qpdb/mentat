@@ -375,7 +375,7 @@ impl RemoveFromCache for MultiValAttributeCache {
 
 impl CardinalityManyCache for MultiValAttributeCache {
     fn acc(&mut self, e: Entid, v: TypedValue) {
-        self.e_vs.entry(e).or_insert_with(|| vec![]).push(v)
+        self.e_vs.entry(e).or_insert_with(Vec::new).push(v)
     }
 
     fn set(&mut self, e: Entid, vs: Vec<TypedValue>) {

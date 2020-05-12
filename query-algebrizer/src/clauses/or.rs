@@ -727,7 +727,7 @@ fn union_types(
     for (var, new_types) in additional_types {
         match into.entry(var.clone()) {
             Entry::Vacant(e) => {
-                e.insert(new_types.clone());
+                e.insert(*new_types);
             }
             Entry::Occupied(mut e) => {
                 let new = e.get().union(*new_types);

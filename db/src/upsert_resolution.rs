@@ -276,7 +276,7 @@ impl Generation {
                     if attribute.unique == Some(attribute::Unique::Identity) {
                         tempid_avs
                             .entry((*a, Right(t2.clone())))
-                            .or_insert_with(|| vec![])
+                            .or_insert_with(Vec::new)
                             .push(t1.clone());
                     }
                 }
@@ -286,7 +286,7 @@ impl Generation {
                     if attribute.unique == Some(attribute::Unique::Identity) {
                         tempid_avs
                             .entry((*a, x.clone()))
-                            .or_insert_with(|| vec![])
+                            .or_insert_with(Vec::new)
                             .push(t.clone());
                     }
                 }

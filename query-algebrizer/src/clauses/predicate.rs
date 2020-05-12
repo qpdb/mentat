@@ -98,7 +98,7 @@ impl ConjoiningClauses {
             .intersection(supported_types);
         if left_types.is_empty() {
             bail!(AlgebrizerError::InvalidArgumentType(
-                predicate.operator.clone(),
+                predicate.operator,
                 supported_types,
                 0
             ));
@@ -109,7 +109,7 @@ impl ConjoiningClauses {
             .intersection(supported_types);
         if right_types.is_empty() {
             bail!(AlgebrizerError::InvalidArgumentType(
-                predicate.operator.clone(),
+                predicate.operator,
                 supported_types,
                 1
             ));
@@ -161,7 +161,7 @@ impl ConjoiningClauses {
             right_v = self.resolve_ref_argument(known.schema, &predicate.operator, 1, right)?;
         } else {
             bail!(AlgebrizerError::InvalidArgumentType(
-                predicate.operator.clone(),
+                predicate.operator,
                 supported_types,
                 0
             ));

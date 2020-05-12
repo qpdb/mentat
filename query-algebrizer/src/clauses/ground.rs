@@ -129,7 +129,7 @@ impl ConjoiningClauses {
         if where_fn.binding.is_empty() {
             // The binding must introduce at least one bound variable.
             bail!(AlgebrizerError::InvalidBinding(
-                where_fn.operator.clone(),
+                where_fn.operator,
                 BindingError::NoBoundVariable
             ));
         }
@@ -137,7 +137,7 @@ impl ConjoiningClauses {
         if !where_fn.binding.is_valid() {
             // The binding must not duplicate bound variables.
             bail!(AlgebrizerError::InvalidBinding(
-                where_fn.operator.clone(),
+                where_fn.operator,
                 BindingError::RepeatedBoundVariable
             ));
         }

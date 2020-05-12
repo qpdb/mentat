@@ -15,8 +15,8 @@ failure = "0.1"
 failure_derive = "0.1"
 
 [dependencies.rusqlite]
-version = "0.22"
-features = ["limits"]
+version = "0.23"
+features = ["limits", "bundled"]
 
 [dependencies.edn]
 path = "../edn"

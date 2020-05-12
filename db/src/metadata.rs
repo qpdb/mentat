@@ -111,7 +111,7 @@ fn update_attribute_map_from_schema_retractions(
     let mut eas = BTreeMap::new();
     for (e, a, v) in retractions.into_iter() {
         if entids::is_a_schema_attribute(a) {
-            eas.entry(e).or_insert_with(|| vec![]).push(a);
+            eas.entry(e).or_insert_with(Vec::new).push(a);
             suspect_retractions.push((e, a, v));
         } else {
             filtered_retractions.push((e, a, v));

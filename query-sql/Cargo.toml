@@ -3,8 +3,9 @@ name = "mentat_query_sql"
 version = "0.0.1"
 workspace = ".."
 
-[dependencies]
-rusqlite = "0.22"
+[dependencies.rusqlite]
+version = "0.23"
+features = ["limits", "bundled"]
 
 [dependencies.edn]
 path = "../edn"

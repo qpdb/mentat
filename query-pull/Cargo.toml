@@ -7,14 +7,14 @@ workspace = ".."
 sqlcipher = ["rusqlite/sqlcipher"]
 
 [dependencies]
-failure = "0.1.1"
+failure = "0.1"
 
 [dependencies.query_pull_traits]
 path = "../query-pull-traits"
 
 [dependencies.rusqlite]
-version = "0.22"
-features = ["limits"]
+version = "0.23"
+features = ["limits", "bundled"]
 
 [dependencies.edn]
 path = "../edn"

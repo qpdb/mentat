@@ -38,17 +38,16 @@ features = ["run-for-all", "precommit-hook", "run-cargo-fmt", "run-cargo-test", 
 
 [dependencies]
 chrono = "0.4"
-failure = "0.1.6"
-lazy_static = "1.4.0"
-time = "0.2"
+failure = "0.1"
+lazy_static = "1.4"
+time = "0.2.15"
 log = "0.4"
 uuid = { version = "0.8", features = ["v4", "serde"] }
 
 
 [dependencies.rusqlite]
-version = "0.22.0"
-# System sqlite might be very old.
-features = ["limits"]
+version = "0.23"
+features = ["limits", "bundled"]
 
 [dependencies.edn]
 path = "edn"
