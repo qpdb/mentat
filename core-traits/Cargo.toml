@@ -1,6 +1,6 @@
 [package]
 name = "core_traits"
-version = "0.0.1"
+version = "0.0.2"
 workspace = ".."
 
 [lib]
@@ -8,14 +8,14 @@ name = "core_traits"
 path = "lib.rs"
 
 [dependencies]
-chrono = { version = "0.4", features = ["serde"] }
-enum-set = "0.0.8"
-lazy_static = "1.4"
-indexmap = "1.3"
-ordered-float = { version = "1.0.2", features = ["serde"] }
-uuid = { version = "0.8", features = ["v4", "serde"] }
-serde = { version = "1.0", features = ["rc"] }
-serde_derive = "1.0"
+chrono = { version = "~0.4", features = ["serde"] }
+enum-set = "~0.0.8"
+lazy_static = "~1.4"
+indexmap = "~1.3"
+ordered-float = { version = "~1.0.2", features = ["serde"] }
+uuid = { version = "~0.8", features = ["v4", "serde"] }
+serde = { version = "~1.0", features = ["rc"] }
+serde_derive = "~1.0"
 
 [dependencies.edn]
 path = "../edn"

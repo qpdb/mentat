@@ -1,6 +1,6 @@
 [package]
 name = "query_pull_traits"
-version = "0.0.1"
+version = "0.0.2"
 workspace = ".."
 
 [lib]
@@ -8,8 +8,8 @@ name = "query_pull_traits"
 path = "lib.rs"
 
 [dependencies]
-failure = "0.1"
-failure_derive = "0.1"
+failure = "~0.1"
+failure_derive = "~0.1"
 
 [dependencies.core_traits]
 path = "../core-traits"

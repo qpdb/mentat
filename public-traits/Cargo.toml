@@ -1,6 +1,6 @@
 [package]
 name = "public_traits"
-version = "0.0.1"
+version = "0.0.2"
 workspace = ".."
 
 [lib]
@@ -13,15 +13,23 @@ sqlcipher = ["rusqlite/sqlcipher"]
 syncable = ["tolstoy_traits", "hyper", "serde_json"]
 
 [dependencies]
-failure = "0.1"
-failure_derive = "0.1"
-http = "0.2"
-tokio-core = "0.1"
-uuid = "0.8"
+failure = "~0.1"
+failure_derive = "~0.1"
+http = "~0.2"
+tokio-core = "~0.1"
+uuid = "~0.8"
 
 [dependencies.rusqlite]
-version = "0.23"
+version = "~0.23"
 features = ["limits", "bundled"]
+
+[dependencies.hyper]
+version = "~0.13"
+optional = true
+
+[dependencies.serde_json]
+version = "~1.0"
+optional = true
 
 [dependencies.edn]
 path = "../edn"
@@ -46,12 +54,4 @@ path = "../sql-traits"
 
 [dependencies.tolstoy_traits]
 path = "../tolstoy-traits"
-optional = true
-
-[dependencies.hyper]
-version = "0.13"
-optional = true
-
-[dependencies.serde_json]
-version = "1.0"
 optional = true

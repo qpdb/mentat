@@ -1,6 +1,6 @@
 [package]
 name = "sql_traits"
-version = "0.0.1"
+version = "0.0.2"
 workspace = ".."
 
 [lib]
@@ -8,5 +8,5 @@ name = "sql_traits"
 path = "lib.rs"
 
 [dependencies]
-failure = "0.1.1"
-failure_derive = "0.1.1"
+failure = "~0.1"
+failure_derive = "~0.1"

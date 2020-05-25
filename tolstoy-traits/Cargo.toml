@@ -1,6 +1,6 @@
 [package]
 name = "tolstoy_traits"
-version = "0.0.1"
+version = "0.0.2"
 workspace = ".."
 
 [lib]
@@ -11,16 +11,16 @@ path = "lib.rs"
 sqlcipher = ["rusqlite/sqlcipher"]
 
 [dependencies]
-failure = "0.1"
-failure_derive = "0.1"
-http = "0.2"
-hyper = "0.13"
-serde_json = "1.0"
-uuid = { version = "0.8" }
+failure = "~0.1"
+failure_derive = "~0.1"
+http = "~0.2"
+hyper = "~0.13"
+serde_json = "~1.0"
+uuid = { version = "~0.8" }
+
+[dependencies.rusqlite]
+version = "~0.23"
+features = ["limits", "bundled"]
 
 [dependencies.db_traits]
 path = "../db-traits"
-
-[dependencies.rusqlite]
-version = "0.23"
-features = ["limits", "bundled"]

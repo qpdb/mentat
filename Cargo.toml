@@ -14,7 +14,7 @@ authors = [
   "Gregory Burd <greg@burd.me>",
 ]
 name = "mentat"
-version = "0.11.2"
+version = "0.12.0"
 build = "build/version.rs"
 
 [features]
@@ -27,26 +27,25 @@ syncable = ["mentat_tolstoy", "tolstoy_traits", "mentat_db/syncable"]
 members = ["tools/cli", "ffi"]
 
 [build-dependencies]
-rustc_version = "0.2"
+rustc_version = "~0.2"
 
 [dev-dependencies.cargo-husky]
 version = "1"
 default-features = false # Disable features which are enabled by default
 features = ["run-for-all", "precommit-hook", "run-cargo-fmt", "run-cargo-test", "run-cargo-check", "run-cargo-clippy"]
-# cargo audit
-# cargo outdated
+#cargo audit
+#cargo outdated
 
 [dependencies]
-chrono = "0.4"
-failure = "0.1"
-lazy_static = "1.4"
+chrono = "~0.4"
+failure = "~0.1"
+lazy_static = "~1.4"
 time = "0.2.15"
-log = "0.4"
-uuid = { version = "0.8", features = ["v4", "serde"] }
-
+log = "~0.4"
+uuid = { version = "~0.8", features = ["v4", "serde"] }
 
 [dependencies.rusqlite]
-version = "0.23"
+version = "~0.23"
 features = ["limits", "bundled"]
 
 [dependencies.edn]

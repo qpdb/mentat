@@ -1,6 +1,6 @@
 [package]
 name = "query_projector_traits"
-version = "0.0.1"
+version = "0.0.2"
 workspace = ".."
 
 [lib]
@@ -11,11 +11,11 @@ path = "lib.rs"
 sqlcipher = ["rusqlite/sqlcipher"]
 
 [dependencies]
-failure = "0.1"
-failure_derive = "0.1"
+failure = "~0.1"
+failure_derive = "~0.1"
 
 [dependencies.rusqlite]
-version = "0.23"
+version = "~0.23"
 features = ["limits", "bundled"]
 
 [dependencies.edn]

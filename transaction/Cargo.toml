@@ -1,13 +1,17 @@
 [package]
 name = "mentat_transaction"
-version = "0.0.1"
+version = "0.0.2"
 workspace = ".."
 
 [features]
 sqlcipher = ["rusqlite/sqlcipher"]
 
 [dependencies]
-failure = "0.1"
+failure = "~0.1"
+
+[dependencies.rusqlite]
+version = "~0.23"
+features = ["limits", "bundled"]
 
 [dependencies.edn]
 path = "../edn"
@@ -41,7 +45,3 @@ path = "../query-pull"
 
 [dependencies.mentat_query_sql]
 path = "../query-sql"
-
-[dependencies.rusqlite]
-version = "0.23"
-features = ["limits", "bundled"]
