@@ -26,7 +26,7 @@ use query_algebrizer_traits::errors::AlgebrizerError;
 
 use mentat_query_algebrizer::{EmptyBecause, Known, QueryInputs};
 
-use utils::{add_attribute, alg, alg_with_inputs, associate_ident, bails};
+use crate::utils::{add_attribute, alg, alg_with_inputs, associate_ident, bails};
 
 fn prepopulated_schema() -> Schema {
     let mut schema = Schema::default();
@@ -162,7 +162,7 @@ fn test_instant_predicates_accepts_var() {
     let cc = alg_with_inputs(
         known,
         query,
-        QueryInputs::with_value_sequence(vec![(instant_var.clone(), instant_value.clone())]),
+        QueryInputs::with_value_sequence(vec![(instant_var.clone(), instant_value)]),
     );
     assert_eq!(
         cc.known_type(&instant_var).expect("?time is known"),
@@ -202,7 +202,7 @@ fn test_numeric_predicates_accepts_var() {
     let cc = alg_with_inputs(
         known,
         query,
-        QueryInputs::with_value_sequence(vec![(numeric_var.clone(), numeric_value.clone())]),
+        QueryInputs::with_value_sequence(vec![(numeric_var.clone(), numeric_value)]),
     );
     assert_eq!(
         cc.known_type(&numeric_var).expect("?long is known"),

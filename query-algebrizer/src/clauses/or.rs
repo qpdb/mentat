@@ -18,17 +18,17 @@ use edn::query::{
     WhereClause,
 };
 
-use clauses::{ConjoiningClauses, PushComputed};
+use crate::clauses::{ConjoiningClauses, PushComputed};
 
 use query_algebrizer_traits::errors::Result;
 
-use types::{
+use crate::types::{
     ColumnAlternation, ColumnConstraintOrAlternation, ColumnIntersection, ComputedTable,
     DatomsTable, EmptyBecause, EvolvedPattern, PlaceOrEmpty, QualifiedAlias, SourceAlias,
     VariableColumn,
 };
 
-use Known;
+use crate::Known;
 
 /// Return true if both left and right are the same variable or both are non-variable.
 fn _simply_matches_place(left: &PatternNonValuePlace, right: &PatternNonValuePlace) -> bool {
@@ -750,14 +750,14 @@ mod testing {
 
     use edn::query::{Keyword, Variable};
 
-    use clauses::{add_attribute, associate_ident};
+    use crate::clauses::{add_attribute, associate_ident};
 
-    use types::{
+    use crate::types::{
         ColumnConstraint, DatomsColumn, DatomsTable, Inequality, QualifiedAlias, QueryValue,
         SourceAlias,
     };
 
-    use {algebrize, algebrize_with_counter, parse_find_string};
+    use crate::{algebrize, algebrize_with_counter, parse_find_string};
 
     fn alg(known: Known, input: &str) -> ConjoiningClauses {
         let parsed = parse_find_string(input).expect("parse failed");
@@ -920,12 +920,10 @@ mod testing {
                     ]),
                     ColumnIntersection(vec![
                         ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                            d0a.clone(),
-                            knows
+                            d0a, knows
                         )),
                         ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                            d0v.clone(),
-                            daphne
+                            d0v, daphne
                         ))
                     ]),
                 ])
@@ -967,10 +965,7 @@ mod testing {
         assert_eq!(
             cc.wheres,
             ColumnIntersection(vec![
-                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                    d0a.clone(),
-                    name.clone()
-                )),
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a, name)),
                 ColumnConstraintOrAlternation::Alternation(ColumnAlternation(vec![
                     ColumnIntersection(vec![
                         ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
@@ -994,12 +989,10 @@ mod testing {
                     ]),
                     ColumnIntersection(vec![
                         ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                            d1a.clone(),
-                            knows
+                            d1a, knows
                         )),
                         ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                            d1v.clone(),
-                            daphne
+                            d1v, daphne
                         ))
                     ]),
                 ])),
@@ -1051,13 +1044,10 @@ mod testing {
         assert_eq!(
             cc.wheres,
             ColumnIntersection(vec![
-                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                    d0a.clone(),
-                    age.clone()
-                )),
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a, age)),
                 ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Inequality {
                     operator: Inequality::LessThan,
-                    left: QueryValue::Column(d0v.clone()),
+                    left: QueryValue::Column(d0v),
                     right: QueryValue::TypedValue(TypedValue::Long(30)),
                 }),
                 ColumnConstraintOrAlternation::Alternation(ColumnAlternation(vec![
@@ -1073,12 +1063,10 @@ mod testing {
                     ]),
                     ColumnIntersection(vec![
                         ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                            d1a.clone(),
-                            knows
+                            d1a, knows
                         )),
                         ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                            d1v.clone(),
-                            daphne
+                            d1v, daphne
                         ))
                     ]),
                 ])),
@@ -1124,10 +1112,7 @@ mod testing {
         assert_eq!(
             cc.wheres,
             ColumnIntersection(vec![
-                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                    d0a.clone(),
-                    knows.clone()
-                )),
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a, knows)),
                 // The outer pattern joins against the `or` on the entity, but not value -- ?y means
                 // different things in each place.
                 ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(

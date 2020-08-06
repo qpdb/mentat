@@ -21,10 +21,10 @@ use command_parser::{command, Command};
 use failure::Error;
 
 /// Starting prompt
-const DEFAULT_PROMPT: &'static str = "mentat=> ";
+const DEFAULT_PROMPT: &str = "mentat=> ";
 /// Prompt when further input is being read
 // TODO: Should this actually reflect the current open brace?
-const MORE_PROMPT: &'static str = "mentat.> ";
+const MORE_PROMPT: &str = "mentat.> ";
 
 /// Possible results from reading input from `InputReader`
 #[derive(Clone, Debug)]
@@ -218,7 +218,7 @@ impl InputReader {
         self.save_history();
     }
 
-    pub fn save_history(&self) -> () {
+    pub fn save_history(&self) {
         if let Some(ref interface) = self.interface {
             let p = ::history_file_path();
             // It's okay to fail to save history.

@@ -309,17 +309,6 @@ mod test {
 
         arr.sort();
 
-        assert_eq!(
-            arr,
-            [
-                n0.clone(),
-                n2.clone(),
-                n1.clone(),
-                n3.clone(),
-                n4.clone(),
-                n5.clone(),
-                n6.clone(),
-            ]
-        );
+        assert_eq!(arr, [n0, n2, n1, n3, n4, n5, n6,]);
     }
 }

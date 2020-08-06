@@ -9,8 +9,6 @@
 // specific language governing permissions and limitations under the License.
 use std::iter::Peekable;
 
-use rusqlite;
-
 use mentat_db::TypedSQLValue;
 
 use core_traits::{Entid, TypedValue};
@@ -32,7 +30,7 @@ pub struct Processor {}
 
 pub struct DatomsIterator<'dbtx, 't, T>
 where
-    T: Sized + Iterator<Item = Result<TxPart>> + 't,
+    T: Sized + Iterator<Item = Result<TxPart>>,
 {
     at_first: bool,
     at_last: bool,
@@ -48,8 +46,8 @@ where
         DatomsIterator {
             at_first: true,
             at_last: false,
-            first: first,
-            rows: rows,
+            first,
+            rows,
         }
     }
 }
@@ -109,7 +107,7 @@ where
     }
 }
 
-fn to_tx_part(row: &rusqlite::Row) -> Result<TxPart> {
+fn to_tx_part(row: &rusqlite::Row<'_>) -> Result<TxPart> {
     Ok(TxPart {
         partitions: None,
         e: row.get(0)?,
@@ -122,13 +120,13 @@ fn to_tx_part(row: &rusqlite::Row) -> Result<TxPart> {
 
 impl Processor {
     pub fn process<RR, R: TxReceiver<RR>>(
-        sqlite: &rusqlite::Transaction,
+        sqlite: &rusqlite::Transaction<'_>,
         from_tx: Option<Entid>,
         mut receiver: R,
     ) -> Result<RR> {
         let tx_filter = match from_tx {
             Some(tx) => format!(" WHERE timeline = 0 AND tx > {} ", tx),
-            None => format!("WHERE timeline = 0"),
+            None => "WHERE timeline = 0".to_string(),
         };
         let select_query = format!(
             "SELECT e, a, v, value_type_tag, tx, added FROM timelined_transactions {} ORDER BY tx",

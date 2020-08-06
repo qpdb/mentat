@@ -18,14 +18,14 @@ use edn::query::{
     NonIntegerConstant, Pattern, PatternNonValuePlace, PatternValuePlace, SrcVar, Variable,
 };
 
-use clauses::ConjoiningClauses;
+use crate::clauses::ConjoiningClauses;
 
-use types::{
+use crate::types::{
     ColumnConstraint, DatomsColumn, EmptyBecause, EvolvedNonValuePlace, EvolvedPattern,
     EvolvedValuePlace, PlaceOrEmpty, SourceAlias,
 };
 
-use Known;
+use crate::Known;
 
 pub fn into_typed_value(nic: NonIntegerConstant) -> TypedValue {
     match nic {
@@ -696,11 +696,13 @@ mod testing {
 
     use edn::query::{Keyword, Variable};
 
-    use clauses::{add_attribute, associate_ident, ident, QueryInputs};
+    use crate::clauses::{add_attribute, associate_ident, ident, QueryInputs};
 
-    use types::{Column, ColumnConstraint, DatomsTable, QualifiedAlias, QueryValue, SourceAlias};
+    use crate::types::{
+        Column, ColumnConstraint, DatomsTable, QualifiedAlias, QueryValue, SourceAlias,
+    };
 
-    use {algebrize, parse_find_string};
+    use crate::{algebrize, parse_find_string};
 
     fn alg(schema: &Schema, input: &str) -> ConjoiningClauses {
         let parsed = parse_find_string(input).expect("parse failed");
@@ -795,7 +797,7 @@ mod testing {
         assert_eq!(cc.known_type(&x).unwrap(), ValueType::Ref);
 
         // ?x is bound to datoms0.e.
-        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e.clone()]);
+        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e]);
 
         // Our 'where' clauses are two:
         // - datoms0.a = 99
@@ -844,7 +846,7 @@ mod testing {
         assert_eq!(cc.known_type(&x).unwrap(), ValueType::Ref);
 
         // ?x is bound to datoms0.e.
-        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e.clone()]);
+        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e]);
 
         // Our 'where' clauses are two:
         // - datoms0.v = true
@@ -888,7 +890,7 @@ mod testing {
             Pattern {
                 source: None,
                 entity: PatternNonValuePlace::Variable(x.clone()),
-                attribute: PatternNonValuePlace::Variable(a.clone()),
+                attribute: PatternNonValuePlace::Variable(a),
                 value: PatternValuePlace::Variable(v.clone()),
                 tx: PatternNonValuePlace::Placeholder,
             },
@@ -913,7 +915,7 @@ mod testing {
         assert_eq!(cc.known_type(&v), Some(ValueType::Boolean));
 
         // ?x is bound to datoms0.e.
-        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e.clone()]);
+        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e]);
         assert_eq!(
             cc.wheres,
             vec![ColumnConstraint::Equals(d0_a, QueryValue::Entid(99)),].into()
@@ -938,9 +940,9 @@ mod testing {
             known,
             Pattern {
                 source: None,
-                entity: PatternNonValuePlace::Variable(x.clone()),
-                attribute: PatternNonValuePlace::Variable(a.clone()),
-                value: PatternValuePlace::Variable(v.clone()),
+                entity: PatternNonValuePlace::Variable(x),
+                attribute: PatternNonValuePlace::Variable(a),
+                value: PatternValuePlace::Variable(v),
                 tx: PatternNonValuePlace::Placeholder,
             },
         );
@@ -967,8 +969,8 @@ mod testing {
             Pattern {
                 source: None,
                 entity: PatternNonValuePlace::Variable(x.clone()),
-                attribute: PatternNonValuePlace::Variable(a.clone()),
-                value: PatternValuePlace::Variable(v.clone()),
+                attribute: PatternNonValuePlace::Variable(a),
+                value: PatternValuePlace::Variable(v),
                 tx: PatternNonValuePlace::Placeholder,
             },
         );
@@ -990,7 +992,7 @@ mod testing {
         assert_eq!(cc.known_type(&x).unwrap(), ValueType::Ref);
 
         // ?x is bound to datoms0.e.
-        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e.clone()]);
+        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e]);
         assert_eq!(cc.wheres, vec![].into());
     }
 
@@ -1031,7 +1033,7 @@ mod testing {
         assert_eq!(cc.known_type(&x).unwrap(), ValueType::Ref);
 
         // ?x is bound to datoms0.e.
-        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e.clone()]);
+        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e]);
 
         // Our 'where' clauses are two:
         // - datoms0.v = 'hello'
@@ -1093,7 +1095,7 @@ mod testing {
                 source: None,
                 entity: PatternNonValuePlace::Variable(x.clone()),
                 attribute: ident("foo", "bar"),
-                value: PatternValuePlace::Variable(y.clone()),
+                value: PatternValuePlace::Variable(y),
                 tx: PatternNonValuePlace::Placeholder,
             },
         );
@@ -1202,7 +1204,7 @@ mod testing {
         assert!(!cc.column_bindings.contains_key(&y));
 
         // ?x is bound to the entity.
-        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e.clone()]);
+        assert_eq!(cc.column_bindings.get(&x).unwrap(), &vec![d0_e]);
     }
 
     #[test]
@@ -1237,9 +1239,9 @@ mod testing {
             known,
             Pattern {
                 source: None,
-                entity: PatternNonValuePlace::Variable(x.clone()),
+                entity: PatternNonValuePlace::Variable(x),
                 attribute: ident("foo", "bar"),
-                value: PatternValuePlace::Variable(y.clone()),
+                value: PatternValuePlace::Variable(y),
                 tx: PatternNonValuePlace::Placeholder,
             },
         );
@@ -1282,9 +1284,9 @@ mod testing {
             known,
             Pattern {
                 source: None,
-                entity: PatternNonValuePlace::Variable(x.clone()),
+                entity: PatternNonValuePlace::Variable(x),
                 attribute: ident("foo", "bar"),
-                value: PatternValuePlace::Variable(y.clone()),
+                value: PatternValuePlace::Variable(y),
                 tx: PatternNonValuePlace::Placeholder,
             },
         );
@@ -1338,7 +1340,7 @@ mod testing {
             known,
             Pattern {
                 source: None,
-                entity: PatternNonValuePlace::Variable(x.clone()),
+                entity: PatternNonValuePlace::Variable(x),
                 attribute: ident("foo", "bar"),
                 value: PatternValuePlace::Variable(y.clone()),
                 tx: PatternNonValuePlace::Placeholder,
@@ -1352,7 +1354,7 @@ mod testing {
         assert_eq!(
             cc.empty_because.unwrap(),
             EmptyBecause::TypeMismatch {
-                var: y.clone(),
+                var: y,
                 existing: ValueTypeSet::of_one(ValueType::String),
                 desired: ValueTypeSet::of_one(ValueType::Boolean),
             }
@@ -1389,8 +1391,8 @@ mod testing {
             known,
             Pattern {
                 source: None,
-                entity: PatternNonValuePlace::Variable(z.clone()),
-                attribute: PatternNonValuePlace::Variable(y.clone()),
+                entity: PatternNonValuePlace::Variable(z),
+                attribute: PatternNonValuePlace::Variable(y),
                 value: PatternValuePlace::Variable(x.clone()),
                 tx: PatternNonValuePlace::Placeholder,
             },
@@ -1403,7 +1405,7 @@ mod testing {
         assert_eq!(
             cc.empty_because.unwrap(),
             EmptyBecause::TypeMismatch {
-                var: x.clone(),
+                var: x,
                 existing: ValueTypeSet::of_one(ValueType::Ref),
                 desired: ValueTypeSet::of_one(ValueType::Boolean),
             }

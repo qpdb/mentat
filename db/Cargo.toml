@@ -10,11 +10,11 @@ syncable = ["serde", "serde_json", "serde_derive"]
 
 [dependencies]
 failure = "~0.1"
-indexmap = "~1.3"
+indexmap = "~1.5"
 itertools = "~0.9"
 lazy_static = "~1.4"
 log = "~0.4"
-ordered-float = "~1.0"
+ordered-float = "~2.0"
 time = "~0.2"
 petgraph = "~0.5"
 serde = { version = "~1.0", optional = true }

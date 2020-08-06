@@ -14,7 +14,7 @@ use core_traits::{Entid, TypedValue, ValueType};
 
 use db_traits::errors::CardinalityConflict;
 
-use internal_types::AEVTrie;
+use crate::internal_types::AEVTrie;
 
 /// Map from found [e a v] to expected type.
 pub(crate) type TypeDisagreements = BTreeMap<(Entid, Entid, TypedValue), ValueType>;

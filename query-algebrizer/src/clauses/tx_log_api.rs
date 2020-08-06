@@ -12,16 +12,16 @@ use core_traits::ValueType;
 
 use edn::query::{Binding, FnArg, SrcVar, VariableOrPlaceholder, WhereFn};
 
-use clauses::ConjoiningClauses;
+use crate::clauses::ConjoiningClauses;
 
 use query_algebrizer_traits::errors::{AlgebrizerError, BindingError, Result};
 
-use types::{
+use crate::types::{
     Column, ColumnConstraint, DatomsTable, Inequality, QualifiedAlias, QueryValue, SourceAlias,
     TransactionsColumn,
 };
 
-use Known;
+use crate::Known;
 
 impl ConjoiningClauses {
     // Log in Query: tx-ids and tx-data

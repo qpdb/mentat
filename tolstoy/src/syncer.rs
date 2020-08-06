@@ -12,7 +12,6 @@ use std::fmt;
 
 use std::collections::HashSet;
 
-use rusqlite;
 use uuid::Uuid;
 
 use core_traits::{Entid, KnownEntid, TypedValue};
@@ -39,6 +38,7 @@ use crate::types::{GlobalTransactionLog, LocalTx, Tx, TxPart};
 use tolstoy_traits::errors::TolstoyError;
 
 use crate::logger::d;
+use crate::syncer;
 
 pub struct Syncer {}
 
@@ -49,7 +49,7 @@ pub enum SyncFollowup {
 }
 
 impl fmt::Display for SyncFollowup {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SyncFollowup::None => write!(f, "None"),
             SyncFollowup::FullSync => write!(f, "Full sync"),
@@ -73,7 +73,7 @@ pub enum SyncResult {
 }
 
 impl fmt::Display for SyncReport {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SyncReport::IncompatibleRemoteBootstrap(local, remote) => write!(
                 f,
@@ -94,7 +94,7 @@ impl fmt::Display for SyncReport {
 }
 
 impl fmt::Display for SyncResult {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SyncResult::Atomic(report) => write!(f, "Single atomic sync: {}", report),
             SyncResult::NonAtomic(reports) => {
@@ -176,6 +176,12 @@ impl LocalTxSet {
     }
 }
 
+impl Default for syncer::LocalTxSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TxReceiver<Vec<LocalTx>> for LocalTxSet {
     fn tx<T>(&mut self, tx_id: Entid, datoms: &mut T) -> Result<()>
     where
@@ -216,7 +222,7 @@ impl Syncer {
     /// Upload local txs: (from_tx, HEAD]. Remote head is necessary here because we need to specify
     /// "parent" for each transaction we'll upload; remote head will be first transaction's parent.
     fn fast_forward_remote<R>(
-        db_tx: &mut rusqlite::Transaction,
+        db_tx: &mut rusqlite::Transaction<'_>,
         from_tx: Option<Entid>,
         remote_client: &mut R,
         remote_head: &Uuid,
@@ -262,7 +268,7 @@ impl Syncer {
         Ok(())
     }
 
-    fn local_tx_for_uuid(db_tx: &rusqlite::Transaction, uuid: &Uuid) -> Result<Entid> {
+    fn local_tx_for_uuid(db_tx: &rusqlite::Transaction<'_>, uuid: &Uuid) -> Result<Entid> {
         match TxMapper::get_tx_for_uuid(db_tx, uuid)? {
             Some(t) => Ok(t),
             None => bail!(TolstoyError::TxIncorrectlyMapped(0)),
@@ -282,8 +288,7 @@ impl Syncer {
             if part.a == entids::DB_TX_INSTANT {
                 e = EntityPlace::TxFunction(TxFunction {
                     op: PlainSymbol("transaction-tx".to_string()),
-                })
-                .into();
+                });
             } else {
                 e = KnownEntid(part.e).into();
             }
@@ -337,7 +342,7 @@ impl Syncer {
                 None => {
                     return Ok(SyncReport::BadRemoteState(
                         "Missing partition map in incoming transaction".to_string(),
-                    ))
+                    ));
                 }
             };
 
@@ -349,7 +354,7 @@ impl Syncer {
             // Allocate space for the incoming entids.
             in_progress.partition_map = partition_map;
             let report = in_progress.transact_builder(builder)?;
-            last_tx = Some((report.tx_id, tx.tx.clone()));
+            last_tx = Some((report.tx_id, tx.tx));
         }
 
         // We've just transacted a new tx, and generated a new tx entid.  Map it to the corresponding
@@ -365,11 +370,11 @@ impl Syncer {
     }
 
     fn merge(
-        ip: &mut InProgress,
+        ip: &mut InProgress<'_, '_>,
         incoming_txs: Vec<Tx>,
         mut local_txs_to_merge: Vec<LocalTx>,
     ) -> Result<SyncReport> {
-        d(&format!("Rewinding local transactions."));
+        d(&"Rewinding local transactions.".to_string());
 
         // 1) Rewind local to shared root.
         local_txs_to_merge.sort(); // TODO sort at the interface level?
@@ -383,16 +388,15 @@ impl Syncer {
             // excisions are prohibited in the 'tx' partition, so this should hold...
             local_txs_to_merge[0].tx - 1,
         )?;
-        match new_schema {
-            Some(schema) => ip.schema = schema,
-            None => (),
+        if let Some(schema) = new_schema {
+            ip.schema = schema
         };
         ip.partition_map = new_partition_map;
 
         // 2) Transact incoming.
         // 2.1) Prepare remote tx tuples (TermBuilder, PartitionMap, Uuid), which represent
         // a remote transaction, its global identifier and partitions after it's applied.
-        d(&format!("Transacting incoming..."));
+        d(&"Transacting incoming...".to_string());
         let mut builders = vec![];
         for remote_tx in incoming_txs {
             let mut builder = TermBuilder::new();
@@ -402,7 +406,7 @@ impl Syncer {
                 None => {
                     return Ok(SyncReport::BadRemoteState(
                         "Missing partition map in incoming transaction".to_string(),
-                    ))
+                    ));
                 }
             };
 
@@ -423,7 +427,7 @@ impl Syncer {
             remote_report = Some((ip.transact_builder(builder)?.tx_id, remote_tx));
         }
 
-        d(&format!("Transacting local on top of incoming..."));
+        d(&"Transacting local on top of incoming...".to_string());
         // 3) Rebase local transactions on top of remote.
         let mut clean_rebase = true;
         for local_tx in local_txs_to_merge {
@@ -617,7 +621,7 @@ impl Syncer {
                 continue;
             }
 
-            d(&format!("Savepoint before transacting a local tx..."));
+            d(&"Savepoint before transacting a local tx...".to_string());
             ip.savepoint("speculative_local")?;
 
             d(&format!(
@@ -634,19 +638,16 @@ impl Syncer {
             // Instead, we simply query the database, checking if transaction produced
             // any schema-altering datoms.
             for e in might_alter_installed_attributes.iter() {
-                match report.tempids.get(&format!("{}", e)) {
-                    Some(resolved_e) => {
-                        if SyncMetadata::has_entity_assertions_in_tx(
-                            &ip.transaction,
-                            *resolved_e,
-                            report.tx_id,
-                        )? {
-                            bail!(TolstoyError::NotYetImplemented(
-                                "Can't sync with schema alterations yet.".to_string()
-                            ));
-                        }
+                if let Some(resolved_e) = report.tempids.get(&format!("{}", e)) {
+                    if SyncMetadata::has_entity_assertions_in_tx(
+                        &ip.transaction,
+                        *resolved_e,
+                        report.tx_id,
+                    )? {
+                        bail!(TolstoyError::NotYetImplemented(
+                            "Can't sync with schema alterations yet.".to_string()
+                        ));
                     }
-                    None => (),
                 }
             }
 
@@ -682,20 +683,18 @@ impl Syncer {
     }
 
     fn first_sync_against_non_empty<R>(
-        ip: &mut InProgress,
+        ip: &mut InProgress<'_, '_>,
         remote_client: &R,
         local_metadata: &SyncMetadata,
     ) -> Result<SyncReport>
     where
         R: GlobalTransactionLog,
     {
-        d(&format!(
-            "remote non-empty on first sync, adopting remote state."
-        ));
+        d(&"remote non-empty on first sync, adopting remote state.".to_string());
 
         // 1) Download remote transactions.
         let incoming_txs = remote_client.transactions_after(&Uuid::nil())?;
-        if incoming_txs.len() == 0 {
+        if incoming_txs.is_empty() {
             return Ok(SyncReport::BadRemoteState(
                 "Remote specified non-root HEAD but gave no transactions".to_string(),
             ));
@@ -744,53 +743,53 @@ impl Syncer {
         match Syncer::what_do(remote_state, local_state) {
             SyncAction::NoOp => {
                 Ok(SyncReport::Merge(SyncFollowup::None))
-            },
+            }
 
             SyncAction::PopulateRemote => {
                 // This is a programming error.
-                bail!(TolstoyError::UnexpectedState(format!("Remote state can't be empty on first sync against non-empty remote")))
-            },
+                bail!(TolstoyError::UnexpectedState("Remote state can't be empty on first sync against non-empty remote".to_string()))
+            }
 
             SyncAction::RemoteFastForward => {
-                bail!(TolstoyError::NotYetImplemented(format!("TODO fast-forward remote on first sync when remote is just bootstrap and local has more")))
-            },
+                bail!(TolstoyError::NotYetImplemented("TODO fast-forward remote on first sync when remote is just bootstrap and local has more".to_string()))
+            }
 
             SyncAction::LocalFastForward => {
-                Syncer::fast_forward_local(ip, incoming_txs[1 ..].to_vec())?;
+                Syncer::fast_forward_local(ip, incoming_txs[1..].to_vec())?;
                 Ok(SyncReport::Merge(SyncFollowup::None))
-            },
+            }
 
             SyncAction::CombineChanges => {
                 let local_txs = Processor::process(
-                    &mut ip.transaction, Some(local_metadata.root), LocalTxSet::new())?;
+                    &ip.transaction, Some(local_metadata.root), LocalTxSet::new())?;
                 Syncer::merge(
                     ip,
-                    incoming_txs[1 ..].to_vec(),
-                    local_txs
+                    incoming_txs[1..].to_vec(),
+                    local_txs,
                 )
             }
         }
     }
 
-    pub fn sync<R>(ip: &mut InProgress, remote_client: &mut R) -> Result<SyncReport>
+    pub fn sync<R>(ip: &mut InProgress<'_, '_>, remote_client: &mut R) -> Result<SyncReport>
     where
         R: GlobalTransactionLog,
     {
-        d(&format!("sync flowing"));
+        d(&"sync flowing".to_string());
 
         ensure_current_version(&mut ip.transaction)?;
 
         let remote_head = remote_client.head()?;
         d(&format!("remote head {:?}", remote_head));
 
-        let locally_known_remote_head = SyncMetadata::remote_head(&mut ip.transaction)?;
+        let locally_known_remote_head = SyncMetadata::remote_head(&ip.transaction)?;
         d(&format!("local head {:?}", locally_known_remote_head));
 
-        let (root, head) = SyncMetadata::root_and_head_tx(&mut ip.transaction)?;
+        let (root, head) = SyncMetadata::root_and_head_tx(&ip.transaction)?;
         let local_metadata = SyncMetadata::new(root, head);
 
         // impl From ... vs ::new() calls to constuct "state" objects?
-        let local_state = TxMapper::get(&mut ip.transaction, local_metadata.head)?.into();
+        let local_state = TxMapper::get(&ip.transaction, local_metadata.head)?.into();
         let remote_state = (&locally_known_remote_head, &remote_head).into();
 
         // Currently, first sync against a non-empty remote is special.
@@ -800,12 +799,12 @@ impl Syncer {
 
         match Syncer::what_do(remote_state, local_state) {
             SyncAction::NoOp => {
-                d(&format!("local HEAD did not move. Nothing to do!"));
+                d(&"local HEAD did not move. Nothing to do!".to_string());
                 Ok(SyncReport::NoChanges)
             }
 
             SyncAction::PopulateRemote => {
-                d(&format!("empty remote!"));
+                d(&"empty remote!".to_string());
                 Syncer::fast_forward_remote(
                     &mut ip.transaction,
                     None,
@@ -816,11 +815,11 @@ impl Syncer {
             }
 
             SyncAction::RemoteFastForward => {
-                d(&format!("local HEAD moved."));
+                d(&"local HEAD moved.".to_string());
                 let upload_from_tx =
-                    Syncer::local_tx_for_uuid(&mut ip.transaction, &locally_known_remote_head)?;
+                    Syncer::local_tx_for_uuid(&ip.transaction, &locally_known_remote_head)?;
 
-                d(&format!("Fast-forwarding the remote."));
+                d(&"Fast-forwarding the remote.".to_string());
 
                 // TODO it's possible that we've successfully advanced remote head previously,
                 // but failed to advance our own local head. If that's the case, and we can recognize it,
@@ -835,7 +834,7 @@ impl Syncer {
             }
 
             SyncAction::LocalFastForward => {
-                d(&format!("fast-forwarding local store."));
+                d(&"fast-forwarding local store.".to_string());
                 Syncer::fast_forward_local(
                     ip,
                     remote_client.transactions_after(&locally_known_remote_head)?,
@@ -844,12 +843,12 @@ impl Syncer {
             }
 
             SyncAction::CombineChanges => {
-                d(&format!("combining changes from local and remote stores."));
+                d(&"combining changes from local and remote stores.".to_string());
                 // Get the starting point for out local set of txs to merge.
                 let combine_local_from_tx =
-                    Syncer::local_tx_for_uuid(&mut ip.transaction, &locally_known_remote_head)?;
+                    Syncer::local_tx_for_uuid(&ip.transaction, &locally_known_remote_head)?;
                 let local_txs = Processor::process(
-                    &mut ip.transaction,
+                    &ip.transaction,
                     Some(combine_local_from_tx),
                     LocalTxSet::new(),
                 )?;

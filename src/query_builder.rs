@@ -54,7 +54,7 @@ impl<'a> QueryBuilder<'a> {
             .conn()
             .current_schema()
             .get_entid(&value)
-            .ok_or(MentatError::UnknownAttribute(value.to_string()))?;
+            .ok_or_else(|| MentatError::UnknownAttribute(value.to_string()))?;
         self.values.insert(
             Variable::from_valid_name(var),
             TypedValue::Ref(entid.into()),
@@ -99,11 +99,11 @@ impl<'a> QueryBuilder<'a> {
     }
 
     pub fn execute(&mut self) -> Result<QueryOutput> {
-        let values = ::std::mem::replace(&mut self.values, Default::default());
-        let types = ::std::mem::replace(&mut self.types, Default::default());
+        let values = ::std::mem::take(&mut self.values);
+        let types = ::std::mem::take(&mut self.types);
         let query_inputs = QueryInputs::new(types, values)?;
         let read = self.store.begin_read()?;
-        read.q_once(&self.query, query_inputs).map_err(|e| e.into())
+        read.q_once(&self.query, query_inputs).map_err(|e| e)
     }
 
     pub fn execute_scalar(&mut self) -> Result<Option<Binding>> {
@@ -153,7 +153,7 @@ mod test {
             )
             .expect("successful transaction");
 
-        let yes = report.tempids.get("u").expect("found it").clone();
+        let yes = *report.tempids.get("u").expect("found it");
 
         let entid = QueryBuilder::new(
             &mut store,
@@ -164,7 +164,7 @@ mod test {
         .bind_value("?v", true)
         .execute_scalar()
         .expect("ScalarResult")
-        .map_or(None, |t| t.into_entid());
+        .and_then(|t| t.into_entid());
         assert_eq!(entid, Some(yes));
     }
 
@@ -201,9 +201,9 @@ mod test {
             )
             .expect("successful transaction");
 
-        let u_yes = report.tempids.get("u").expect("found it").clone();
-        let l_yes = report.tempids.get("l").expect("found it").clone();
-        let n_yes = report.tempids.get("n").expect("found it").clone();
+        let u_yes = *report.tempids.get("u").expect("found it");
+        let l_yes = *report.tempids.get("l").expect("found it");
+        let n_yes = *report.tempids.get("n").expect("found it");
 
         let entids: Vec<i64> = QueryBuilder::new(
             &mut store,
@@ -254,7 +254,7 @@ mod test {
             )
             .expect("successful transaction");
 
-        let n_yes = report.tempids.get("n").expect("found it").clone();
+        let n_yes = *report.tempids.get("n").expect("found it");
 
         let results = QueryBuilder::new(
             &mut store,
@@ -267,7 +267,7 @@ mod test {
         .expect("CollResult");
         let entid = results
             .get(1)
-            .map_or(None, |t| t.to_owned().into_entid())
+            .and_then(|t| t.to_owned().into_entid())
             .expect("entid");
 
         assert_eq!(entid, n_yes);
@@ -306,7 +306,7 @@ mod test {
             )
             .expect("successful transaction");
 
-        let n_yes = report.tempids.get("n").expect("found it").clone();
+        let n_yes = *report.tempids.get("n").expect("found it");
 
         let results = QueryBuilder::new(
             &mut store,
@@ -322,11 +322,11 @@ mod test {
         .expect("Vec<TypedValue>");
         let entid = results
             .get(0)
-            .map_or(None, |t| t.to_owned().into_entid())
+            .and_then(|t| t.to_owned().into_entid())
             .expect("entid");
         let long_val = results
             .get(1)
-            .map_or(None, |t| t.to_owned().into_long())
+            .and_then(|t| t.to_owned().into_long())
             .expect("long");
 
         assert_eq!(entid, n_yes);
@@ -366,7 +366,7 @@ mod test {
             )
             .expect("successful transaction");
 
-        let n_yes = report.tempids.get("n").expect("found it").clone();
+        let n_yes = *report.tempids.get("n").expect("found it");
 
         let results: Vec<_> = QueryBuilder::new(
             &mut store,
@@ -379,8 +379,8 @@ mod test {
         .bind_long("?i", 27)
         .execute_tuple()
         .expect("TupleResult")
-        .unwrap_or(vec![]);
-        let entid = TypedValue::Ref(n_yes.clone()).into();
+        .unwrap_or_default();
+        let entid = TypedValue::Ref(n_yes).into();
         let long_val = TypedValue::Long(27).into();
 
         assert_eq!(results, vec![entid, long_val]);
@@ -415,9 +415,9 @@ mod test {
             )
             .expect("successful transaction");
 
-        let l_yes = report.tempids.get("l").expect("found it").clone();
-        let m_yes = report.tempids.get("m").expect("found it").clone();
-        let n_yes = report.tempids.get("n").expect("found it").clone();
+        let l_yes = *report.tempids.get("l").expect("found it");
+        let m_yes = *report.tempids.get("m").expect("found it");
+        let n_yes = *report.tempids.get("n").expect("found it");
 
         #[derive(Debug, PartialEq)]
         struct Res {
@@ -438,15 +438,15 @@ mod test {
         .map(|row| Res {
             entid: row
                 .get(0)
-                .map_or(None, |t| t.to_owned().into_entid())
+                .and_then(|t| t.to_owned().into_entid())
                 .expect("entid"),
             boolean: row
                 .get(1)
-                .map_or(None, |t| t.to_owned().into_boolean())
+                .and_then(|t| t.to_owned().into_boolean())
                 .expect("boolean"),
             long_val: row
                 .get(2)
-                .map_or(None, |t| t.to_owned().into_long())
+                .and_then(|t| t.to_owned().into_long())
                 .expect("long"),
         })
         .collect();
@@ -510,7 +510,7 @@ mod test {
             )
             .expect("successful transaction");
 
-        let l_yes = report.tempids.get("l").expect("found it").clone();
+        let l_yes = *report.tempids.get("l").expect("found it");
 
         let results = QueryBuilder::new(
             &mut store,
@@ -522,11 +522,11 @@ mod test {
         .bind_ref("?x", l_yes)
         .execute_tuple()
         .expect("TupleResult")
-        .unwrap_or(vec![]);
+        .unwrap_or_default();
         assert_eq!(
             results
                 .get(0)
-                .map_or(None, |t| t.to_owned().into_boolean())
+                .and_then(|t| t.to_owned().into_boolean())
                 .expect("boolean"),
             true
         );

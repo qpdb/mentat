@@ -63,7 +63,8 @@ pub fn might_update_metadata(attribute: Entid) -> bool {
     if attribute >= DB_DOC {
         return false;
     }
-    match attribute {
+    matches!(
+        attribute,
         // Idents.
         DB_IDENT |
         // Schema.
@@ -72,19 +73,22 @@ pub fn might_update_metadata(attribute: Entid) -> bool {
         DB_INDEX |
         DB_IS_COMPONENT |
         DB_UNIQUE |
-        DB_VALUE_TYPE =>
-            true,
-        _ => false,
-    }
+        DB_VALUE_TYPE
+    )
 }
 
 /// Return 'false' if the given attribute might be used to describe a schema attribute.
 pub fn is_a_schema_attribute(attribute: Entid) -> bool {
-    match attribute {
-        DB_IDENT | DB_CARDINALITY | DB_FULLTEXT | DB_INDEX | DB_IS_COMPONENT | DB_UNIQUE
-        | DB_VALUE_TYPE => true,
-        _ => false,
-    }
+    matches!(
+        attribute,
+        DB_IDENT
+            | DB_CARDINALITY
+            | DB_FULLTEXT
+            | DB_INDEX
+            | DB_IS_COMPONENT
+            | DB_UNIQUE
+            | DB_VALUE_TYPE
+    )
 }
 
 lazy_static! {

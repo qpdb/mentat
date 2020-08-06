@@ -23,10 +23,10 @@ use edn::entities;
 use edn::entities::{EntityPlace, OpType, TempId, TxFunction};
 use edn::{SpannedValue, ValueAndSpan, ValueRc};
 
+use crate::schema::SchemaTypeChecking;
+use crate::types::{AVMap, AVPair, Schema, TransactableValue};
 use db_traits::errors;
 use db_traits::errors::{DbErrorKind, Result};
-use schema::SchemaTypeChecking;
-use types::{AVMap, AVPair, Schema, TransactableValue};
 
 impl TransactableValue for ValueAndSpan {
     fn into_typed_value(self, schema: &Schema, value_type: ValueType) -> Result<TypedValue> {
@@ -82,11 +82,7 @@ impl TransactableValue for ValueAndSpan {
     }
 
     fn as_tempid(&self) -> Option<TempId> {
-        self.inner
-            .as_text()
-            .cloned()
-            .map(TempId::External)
-            .map(|v| v)
+        self.inner.as_text().cloned().map(TempId::External)
     }
 }
 

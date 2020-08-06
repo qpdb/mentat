@@ -28,9 +28,9 @@ impl Metadata {
         cache: SQLiteAttributeCache,
     ) -> Metadata {
         Metadata {
-            generation: generation,
-            partition_map: partition_map,
-            schema: schema,
+            generation,
+            partition_map,
+            schema,
             attribute_cache: cache,
         }
     }

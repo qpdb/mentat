@@ -91,11 +91,11 @@ mod tests {
         Variable, WhereClause,
     };
 
-    use clauses::ident;
+    use crate::clauses::ident;
 
     use super::*;
-    use parse_find_string;
-    use types::FindQuery;
+    use crate::parse_find_string;
+    use crate::types::FindQuery;
 
     fn value_ident(ns: &str, name: &str) -> PatternValuePlace {
         Keyword::namespaced(ns, name).into()
@@ -112,7 +112,7 @@ mod tests {
         match clause {
             WhereClause::OrJoin(or_join) => {
                 // It's valid: the variables are the same in each branch.
-                assert_eq!((), validate_or_join(&or_join).unwrap());
+                validate_or_join(&or_join).unwrap();
                 assert_eq!(expected_unify, or_join.unify_vars);
                 or_join.clauses
             }
@@ -254,10 +254,10 @@ mod tests {
     /// Tests that the top-level form is a valid `not`, returning the clauses.
     fn valid_not_join(parsed: FindQuery, expected_unify: UnifyVars) -> Vec<WhereClause> {
         // Filter out all the clauses that are not `not`s.
-        let mut nots = parsed.where_clauses.into_iter().filter(|x| match x {
-            &WhereClause::NotJoin(_) => true,
-            _ => false,
-        });
+        let mut nots = parsed
+            .where_clauses
+            .into_iter()
+            .filter(|x| matches!(x, WhereClause::NotJoin(_)));
 
         // There should be only one not clause.
         let clause = nots.next().unwrap();
@@ -266,7 +266,7 @@ mod tests {
         match clause {
             WhereClause::NotJoin(not_join) => {
                 // It's valid: the variables are the same in each branch.
-                assert_eq!((), validate_not_join(&not_join).unwrap());
+                validate_not_join(&not_join).unwrap();
                 assert_eq!(expected_unify, not_join.unify_vars);
                 not_join.clauses
             }
@@ -368,11 +368,10 @@ mod tests {
                                    [?release :release/artists "Pink Floyd"]
                                    [?release :release/year 1970])]"#;
         let parsed = parse_find_string(query).expect("expected successful parse");
-        let mut nots = parsed.where_clauses.iter().filter(|&x| match *x {
-            WhereClause::NotJoin(_) => true,
-            _ => false,
-        });
-
+        let mut nots = parsed
+            .where_clauses
+            .iter()
+            .filter(|&x| matches!(*x, WhereClause::NotJoin(_)));
         let clause = nots.next().unwrap().clone();
         assert_eq!(None, nots.next());
 

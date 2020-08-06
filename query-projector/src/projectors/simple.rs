@@ -10,7 +10,7 @@
 
 use std::rc::Rc;
 
-use {
+use crate::{
     rusqlite, Binding, CombinedProjection, Element, FindSpec, ProjectedElements, QueryOutput,
     QueryResults, RelResult, Row, Rows, Schema, TypedIndex,
 };

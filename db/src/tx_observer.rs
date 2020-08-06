@@ -24,11 +24,12 @@ use edn::entities::OpType;
 
 use db_traits::errors::Result;
 
-use types::AttributeSet;
+use crate::types::AttributeSet;
 
-use watcher::TransactWatcher;
+use crate::watcher::TransactWatcher;
 
 pub struct TxObserver {
+    #[allow(clippy::type_complexity)]
     notify_fn: Arc<Box<dyn Fn(&str, IndexMap<&Entid, &AttributeSet>) + Send + Sync>>,
     attributes: AttributeSet,
 }
@@ -131,6 +132,7 @@ impl TxObservationService {
         }
 
         let executor = self.executor.get_or_insert_with(|| {
+            #[allow(clippy::type_complexity)]
             let (tx, rx): (
                 Sender<Box<dyn Command + Send>>,
                 Receiver<Box<dyn Command + Send>>,

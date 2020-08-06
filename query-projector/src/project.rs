@@ -32,9 +32,9 @@ use query_projector_traits::aggregates::{
 
 use query_projector_traits::errors::{ProjectorError, Result};
 
-use projectors::Projector;
+use crate::projectors::Projector;
 
-use pull::{PullIndices, PullOperation, PullTemplate};
+use crate::pull::{PullIndices, PullOperation, PullTemplate};
 
 use super::{CombinedProjection, TypedIndex};
 

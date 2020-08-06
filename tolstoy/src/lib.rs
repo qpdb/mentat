@@ -8,53 +8,32 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-extern crate failure;
-
 #[macro_use]
 extern crate lazy_static;
 
 #[macro_use]
 extern crate serde_derive;
 
-extern crate edn;
-
-extern crate hyper;
 // TODO https://github.com/mozilla/mentat/issues/569
 // extern crate hyper_tls;
-extern crate futures;
-extern crate serde;
-extern crate serde_cbor;
-extern crate serde_json;
-extern crate tokio_core;
 
-extern crate log;
-extern crate mentat_db;
-
-extern crate db_traits;
-extern crate mentat_core;
 #[macro_use]
 extern crate core_traits;
-extern crate public_traits;
-extern crate rusqlite;
-extern crate uuid;
-
-extern crate mentat_transaction;
-extern crate tolstoy_traits;
 
 pub mod bootstrap;
 pub mod metadata;
-pub use metadata::{PartitionsTable, SyncMetadata};
+pub use crate::metadata::{PartitionsTable, SyncMetadata};
 mod datoms;
 pub mod debug;
 pub mod remote_client;
-pub use remote_client::RemoteClient;
+pub use crate::remote_client::RemoteClient;
 pub mod schema;
 pub mod syncer;
-pub use syncer::{SyncFollowup, SyncReport, SyncResult, Syncer};
+pub use crate::syncer::{SyncFollowup, SyncReport, SyncResult, Syncer};
 pub mod logger;
 pub mod tx_mapper;
 mod tx_uploader;
-pub use tx_mapper::TxMapper;
+pub use crate::tx_mapper::TxMapper;
 pub mod tx_processor;
 pub mod types;
-pub use types::{GlobalTransactionLog, Tx, TxPart};
+pub use crate::types::{GlobalTransactionLog, Tx, TxPart};

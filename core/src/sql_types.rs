@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 
 use core_traits::{ValueType, ValueTypeSet};
 
-use types::ValueTypeTag;
+use crate::types::ValueTypeTag;
 
 /// Type safe representation of the possible return values from SQLite's `typeof`
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
@@ -62,7 +62,7 @@ impl SQLValueType for ValueType {
     /// Returns true if the provided integer is in the SQLite value space of this type. For
     /// example, `1` is how we encode `true`.
     fn accommodates_integer(&self, int: i64) -> bool {
-        use ValueType::*;
+        use crate::ValueType::*;
         match *self {
             Instant => false, // Always use #inst.
             Long | Double => true,
@@ -123,8 +123,8 @@ impl SQLValueTypeSet for ValueTypeSet {
 
 #[cfg(test)]
 mod tests {
+    use crate::sql_types::SQLValueType;
     use core_traits::ValueType;
-    use sql_types::SQLValueType;
 
     #[test]
     fn test_accommodates_integer() {

@@ -10,7 +10,7 @@
 
 use enum_set::EnumSet;
 
-use ValueType;
+use crate::ValueType;
 
 trait EnumSetExtensions<T: ::enum_set::CLike + Clone> {
     /// Return a set containing both `x` and `y`.

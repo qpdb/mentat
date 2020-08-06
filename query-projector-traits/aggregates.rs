@@ -16,7 +16,7 @@ use mentat_query_algebrizer::{ColumnName, ConjoiningClauses, VariableColumn};
 
 use mentat_query_sql::{ColumnOrExpression, Expression, Name, ProjectedColumn};
 
-use errors::{ProjectorError, Result};
+use crate::errors::{ProjectorError, Result};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SimpleAggregationOp {

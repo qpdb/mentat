@@ -15,12 +15,12 @@ use core_traits::{Entid, TypedValue};
 
 /// A primitive query interface geared toward processing bootstrap-like sets of datoms.
 pub struct DatomsHelper<'a> {
-    parts: &'a Vec<TxPart>,
+    parts: &'a [TxPart],
 }
 
 impl<'a> DatomsHelper<'a> {
-    pub fn new(parts: &'a Vec<TxPart>) -> DatomsHelper {
-        DatomsHelper { parts: parts }
+    pub fn new(parts: &[TxPart]) -> DatomsHelper<'_> {
+        DatomsHelper { parts }
     }
 
     // TODO these are obviously quite inefficient

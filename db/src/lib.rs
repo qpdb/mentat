@@ -60,30 +60,30 @@ mod upsert_resolution;
 mod watcher;
 
 // Export these for reference from sync code and tests.
-pub use bootstrap::{TX0, USER0, V1_PARTS};
+pub use crate::bootstrap::{TX0, USER0, V1_PARTS};
 
 pub static TIMELINE_MAIN: i64 = 0;
 
-pub use schema::{AttributeBuilder, AttributeValidation};
+pub use crate::schema::{AttributeBuilder, AttributeValidation};
 
-pub use bootstrap::CORE_SCHEMA_VERSION;
+pub use crate::bootstrap::CORE_SCHEMA_VERSION;
 
 use edn::symbols;
 
-pub use entids::DB_SCHEMA_CORE;
+pub use crate::entids::DB_SCHEMA_CORE;
 
-pub use db::{new_connection, TypedSQLValue};
+pub use crate::db::{new_connection, TypedSQLValue};
 
 #[cfg(feature = "sqlcipher")]
 pub use db::{change_encryption_key, new_connection_with_key};
 
-pub use watcher::TransactWatcher;
+pub use crate::watcher::TransactWatcher;
 
-pub use tx::{transact, transact_terms};
+pub use crate::tx::{transact, transact_terms};
 
-pub use tx_observer::{InProgressObserverTransactWatcher, TxObservationService, TxObserver};
+pub use crate::tx_observer::{InProgressObserverTransactWatcher, TxObservationService, TxObserver};
 
-pub use types::{AttributeSet, Partition, PartitionMap, TransactableValue, DB};
+pub use crate::types::{AttributeSet, Partition, PartitionMap, TransactableValue, DB};
 
 pub fn to_namespaced_keyword(s: &str) -> Result<symbols::Keyword> {
     let splits = [':', '/'];

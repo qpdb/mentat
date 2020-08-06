@@ -16,10 +16,7 @@ use std::collections::BTreeMap;
 
 use std::sync::{Arc, Mutex};
 
-use rusqlite;
 use rusqlite::TransactionBehavior;
-
-use edn;
 
 pub use core_traits::{Attribute, Entid, KnownEntid, StructuredMap, TypedValue, ValueType};
 
@@ -376,8 +373,6 @@ impl Conn {
 mod tests {
     use super::*;
 
-    use time;
-
     use std::time::Instant;
 
     use core_traits::{Binding, TypedValue};
@@ -476,8 +471,8 @@ mod tests {
                 .begin_transaction(&mut sqlite)
                 .expect("begun successfully");
             let report = in_progress.transact(t).expect("transacted successfully");
-            let one = report.tempids.get("one").expect("found one").clone();
-            let two = report.tempids.get("two").expect("found two").clone();
+            let one = *report.tempids.get("one").expect("found one");
+            let two = *report.tempids.get("two").expect("found two");
             assert!(one != two);
             assert!(one == tempid_offset || one == tempid_offset + 1);
             assert!(two == tempid_offset || two == tempid_offset + 1);
@@ -499,7 +494,7 @@ mod tests {
 
             let report = in_progress.transact(t2).expect("t2 succeeded");
             in_progress.commit().expect("commit succeeded");
-            let three = report.tempids.get("three").expect("found three").clone();
+            let three = *report.tempids.get("three").expect("found three");
             assert!(one != three);
             assert!(two != three);
         }
@@ -532,7 +527,7 @@ mod tests {
         ]"#,
             )
             .expect("successful transaction");
-        let yes = report.tempids.get("u").expect("found it").clone();
+        let yes = *report.tempids.get("u").expect("found it");
 
         let vv = Variable::from_valid_name("?v");
 
@@ -585,8 +580,8 @@ mod tests {
                 .expect("begun successfully");
             let report = in_progress.transact(t).expect("transacted successfully");
 
-            let one = report.tempids.get("one").expect("found it").clone();
-            let two = report.tempids.get("two").expect("found it").clone();
+            let one = *report.tempids.get("one").expect("found it");
+            let two = *report.tempids.get("two").expect("found it");
 
             // The IDs are contiguous, starting at the previous part index.
             assert!(one != two);
@@ -619,7 +614,7 @@ mod tests {
 
         let after = conn
             .q_once(
-                &mut sqlite,
+                &sqlite,
                 "[:find ?x . :where [?x :db/ident :a/keyword1]]",
                 None,
             )

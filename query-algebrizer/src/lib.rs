@@ -34,9 +34,9 @@ use edn::query::{Element, FindSpec, Limit, Order, ParsedQuery, SrcVar, Variable,
 
 use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
-pub use clauses::{QueryInputs, VariableBindings};
+pub use crate::clauses::{QueryInputs, VariableBindings};
 
-pub use types::{EmptyBecause, FindQuery};
+pub use crate::types::{EmptyBecause, FindQuery};
 
 /// A convenience wrapper around things known in memory: the schema and caches.
 /// We use a trait object here to avoid making dozens of functions generic over the type
@@ -347,9 +347,9 @@ pub fn algebrize_with_inputs(
     simplify_limit(q)
 }
 
-pub use clauses::ConjoiningClauses;
+pub use crate::clauses::ConjoiningClauses;
 
-pub use types::{
+pub use crate::types::{
     Column, ColumnAlternation, ColumnConstraint, ColumnConstraintOrAlternation, ColumnIntersection,
     ColumnName, ComputedTable, DatomsColumn, DatomsTable, FulltextColumn, OrderBy, QualifiedAlias,
     QueryValue, SourceAlias, TableAlias, VariableColumn,

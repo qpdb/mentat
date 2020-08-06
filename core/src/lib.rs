@@ -35,18 +35,18 @@ pub use chrono::{
 pub use edn::parse::parse_query;
 pub use edn::{Cloned, FromMicros, FromRc, Keyword, ToMicros, Utc, ValueRc};
 
-pub use cache::{CachedAttributes, UpdateableCache};
+pub use crate::cache::{CachedAttributes, UpdateableCache};
 
 mod sql_types;
 mod tx_report;
 /// Core types defining a Mentat knowledge base.
 mod types;
 
-pub use tx_report::TxReport;
+pub use crate::tx_report::TxReport;
 
-pub use types::ValueTypeTag;
+pub use crate::types::ValueTypeTag;
 
-pub use sql_types::{SQLTypeAffinity, SQLValueType, SQLValueTypeSet};
+pub use crate::sql_types::{SQLTypeAffinity, SQLValueType, SQLValueTypeSet};
 
 /// Map `Keyword` idents (`:db/ident`) to positive integer entids (`1`).
 pub type IdentMap = BTreeMap<Keyword, Entid>;

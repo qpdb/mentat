@@ -176,6 +176,8 @@ pub unsafe extern "C" fn store_open(uri: *const c_char, error: *mut ExternError)
 }
 
 /// Variant of store_open that opens an encrypted database.
+/// # Safety
+/// Be afraid... TODO
 #[cfg(feature = "sqlcipher")]
 #[no_mangle]
 pub unsafe extern "C" fn store_open_encrypted(
@@ -246,6 +248,7 @@ pub unsafe extern "C" fn in_progress_transact<'m>(
 /// Commit all the transacts that have been performed using this
 /// in progress transaction.
 ///
+/// # Safety
 /// TODO: Document the errors that can result from transact
 #[no_mangle]
 pub unsafe extern "C" fn in_progress_commit<'m>(
@@ -260,6 +263,7 @@ pub unsafe extern "C" fn in_progress_commit<'m>(
 /// Rolls back all the transacts that have been performed using this
 /// in progress transaction.
 ///
+/// # Safety
 /// TODO: Document the errors that can result from rollback
 #[no_mangle]
 pub unsafe extern "C" fn in_progress_rollback<'m>(
@@ -342,7 +346,7 @@ pub unsafe extern "C" fn store_in_progress_builder<'a, 'c>(
     let store = &mut *store;
     let result = store
         .begin_transaction()
-        .and_then(|in_progress| Ok(in_progress.builder()));
+        .map(|in_progress| in_progress.builder());
     translate_result(result, error)
 }
 
@@ -365,7 +369,7 @@ pub unsafe extern "C" fn store_entity_builder_from_temp_id<'a, 'c>(
     let temp_id = c_char_to_string(temp_id);
     let result = store
         .begin_transaction()
-        .and_then(|in_progress| Ok(in_progress.builder().describe_tempid(&temp_id)));
+        .map(|in_progress| in_progress.builder().describe_tempid(&temp_id));
     translate_result(result, error)
 }
 
@@ -387,7 +391,7 @@ pub unsafe extern "C" fn store_entity_builder_from_entid<'a, 'c>(
     let store = &mut *store;
     let result = store
         .begin_transaction()
-        .and_then(|in_progress| Ok(in_progress.builder().describe(KnownEntid(entid))));
+        .map(|in_progress| in_progress.builder().describe(KnownEntid(entid)));
     translate_result(result, error)
 }
 
@@ -399,10 +403,12 @@ pub unsafe extern "C" fn store_entity_builder_from_entid<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/string`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_add_string<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_add_string(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: *const c_char,
@@ -422,10 +428,13 @@ pub unsafe extern "C" fn in_progress_builder_add_string<'a, 'c>(
 /// If `entid` is not present in the store.
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/long`.
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+///
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_add_long<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_add_long(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: c_longlong,
@@ -446,10 +455,13 @@ pub unsafe extern "C" fn in_progress_builder_add_long<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If `value` is not present as an Entid in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/ref`.
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+///
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_add_ref<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_add_ref(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: c_longlong,
@@ -471,10 +483,12 @@ pub unsafe extern "C" fn in_progress_builder_add_ref<'a, 'c>(
 /// If `value` is not present as an attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/keyword`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_add_keyword<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_add_keyword(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: *const c_char,
@@ -495,10 +509,12 @@ pub unsafe extern "C" fn in_progress_builder_add_keyword<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/boolean`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_add_boolean<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_add_boolean(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: bool,
@@ -519,10 +535,12 @@ pub unsafe extern "C" fn in_progress_builder_add_boolean<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/double`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_add_double<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_add_double(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: f64,
@@ -543,10 +561,12 @@ pub unsafe extern "C" fn in_progress_builder_add_double<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/instant`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_add_timestamp<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_add_timestamp(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: c_longlong,
@@ -567,10 +587,12 @@ pub unsafe extern "C" fn in_progress_builder_add_timestamp<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/uuid`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_add_uuid<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_add_uuid(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: *const [u8; 16],
@@ -593,10 +615,12 @@ pub unsafe extern "C" fn in_progress_builder_add_uuid<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/string`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_retract_string<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_retract_string(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: *const c_char,
@@ -617,10 +641,12 @@ pub unsafe extern "C" fn in_progress_builder_retract_string<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/long`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_retract_long<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_retract_long(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: c_longlong,
@@ -641,10 +667,12 @@ pub unsafe extern "C" fn in_progress_builder_retract_long<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/ref`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_retract_ref<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_retract_ref(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: c_longlong,
@@ -665,10 +693,12 @@ pub unsafe extern "C" fn in_progress_builder_retract_ref<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/keyword`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_retract_keyword<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_retract_keyword(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: *const c_char,
@@ -689,10 +719,12 @@ pub unsafe extern "C" fn in_progress_builder_retract_keyword<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/boolean`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_retract_boolean<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_retract_boolean(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: bool,
@@ -713,10 +745,12 @@ pub unsafe extern "C" fn in_progress_builder_retract_boolean<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/double`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_retract_double<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_retract_double(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: f64,
@@ -737,10 +771,12 @@ pub unsafe extern "C" fn in_progress_builder_retract_double<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/instant`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_retract_timestamp<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_retract_timestamp(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: c_longlong,
@@ -761,12 +797,13 @@ pub unsafe extern "C" fn in_progress_builder_retract_timestamp<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/uuid`.
 ///
+/// # Safety
+/// TODO:
 // TODO don't panic if the UUID is not valid - return result instead.
-//
 // TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_retract_uuid<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_retract_uuid(
+    builder: *mut InProgressBuilder,
     entid: c_longlong,
     kw: *const c_char,
     value: *const [u8; 16],
@@ -786,10 +823,12 @@ pub unsafe extern "C" fn in_progress_builder_retract_uuid<'a, 'c>(
 ///
 /// This consumes the builder and the enclosed [InProgress](mentat::InProgress) transaction.
 ///
+/// # Safety
+/// TODO:
 // TODO: Document the errors that can result from transact
 #[no_mangle]
-pub unsafe extern "C" fn in_progress_builder_commit<'a, 'c>(
-    builder: *mut InProgressBuilder<'a, 'c>,
+pub unsafe extern "C" fn in_progress_builder_commit(
+    builder: *mut InProgressBuilder,
     error: *mut ExternError,
 ) -> *mut TxReport {
     assert_not_null!(builder);
@@ -828,10 +867,12 @@ pub unsafe extern "C" fn in_progress_builder_transact<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/string`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_add_string<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_add_string(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: *const c_char,
     error: *mut ExternError,
@@ -851,10 +892,12 @@ pub unsafe extern "C" fn entity_builder_add_string<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/long`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_add_long<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_add_long(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: c_longlong,
     error: *mut ExternError,
@@ -874,10 +917,12 @@ pub unsafe extern "C" fn entity_builder_add_long<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/ref`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_add_ref<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_add_ref(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: c_longlong,
     error: *mut ExternError,
@@ -897,10 +942,12 @@ pub unsafe extern "C" fn entity_builder_add_ref<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/keyword`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_add_keyword<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_add_keyword(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: *const c_char,
     error: *mut ExternError,
@@ -920,10 +967,12 @@ pub unsafe extern "C" fn entity_builder_add_keyword<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/boolean`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_add_boolean<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_add_boolean(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: bool,
     error: *mut ExternError,
@@ -943,10 +992,12 @@ pub unsafe extern "C" fn entity_builder_add_boolean<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/double`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_add_double<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_add_double(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: f64,
     error: *mut ExternError,
@@ -966,10 +1017,12 @@ pub unsafe extern "C" fn entity_builder_add_double<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/instant`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_add_timestamp<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_add_timestamp(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: c_longlong,
     error: *mut ExternError,
@@ -989,10 +1042,12 @@ pub unsafe extern "C" fn entity_builder_add_timestamp<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/uuid`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_add_uuid<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_add_uuid(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: *const [u8; 16],
     error: *mut ExternError,
@@ -1014,10 +1069,12 @@ pub unsafe extern "C" fn entity_builder_add_uuid<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/string`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_retract_string<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_retract_string(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: *const c_char,
     error: *mut ExternError,
@@ -1037,10 +1094,12 @@ pub unsafe extern "C" fn entity_builder_retract_string<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/long`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_retract_long<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_retract_long(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: c_longlong,
     error: *mut ExternError,
@@ -1060,10 +1119,12 @@ pub unsafe extern "C" fn entity_builder_retract_long<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/ref`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_retract_ref<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_retract_ref(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: c_longlong,
     error: *mut ExternError,
@@ -1083,10 +1144,12 @@ pub unsafe extern "C" fn entity_builder_retract_ref<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/keyword`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_retract_keyword<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_retract_keyword(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: *const c_char,
     error: *mut ExternError,
@@ -1106,10 +1169,12 @@ pub unsafe extern "C" fn entity_builder_retract_keyword<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/boolean`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_retract_boolean<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_retract_boolean(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: bool,
     error: *mut ExternError,
@@ -1129,10 +1194,12 @@ pub unsafe extern "C" fn entity_builder_retract_boolean<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/double`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_retract_double<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_retract_double(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: f64,
     error: *mut ExternError,
@@ -1152,10 +1219,12 @@ pub unsafe extern "C" fn entity_builder_retract_double<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/instant`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_retract_timestamp<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_retract_timestamp(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: c_longlong,
     error: *mut ExternError,
@@ -1175,11 +1244,13 @@ pub unsafe extern "C" fn entity_builder_retract_timestamp<'a, 'c>(
 /// If `kw` is not a valid attribute in the store.
 /// If the `:db/type` of the attribute described by `kw` is not `:db.type/uuid`.
 ///
-// TODO Generalise with macro https://github.com/mozilla/mentat/issues/703
-// TODO don't panic if the UUID is not valid - return result instead.
+/// # Safety
+/// TODO:
+// TODO: Generalise with macro https://github.com/mozilla/mentat/issues/703
+// TODO: don't panic if the UUID is not valid - return result instead.
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_retract_uuid<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_retract_uuid(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     kw: *const c_char,
     value: *const [u8; 16],
     error: *mut ExternError,
@@ -1221,10 +1292,12 @@ pub unsafe extern "C" fn entity_builder_transact<'a, 'c>(
 ///
 /// This consumes the builder and the enclosed [InProgress](mentat::InProgress) transaction.
 ///
+/// # Safety
+/// TODO:
 /// TODO: Document the errors that can result from transact
 #[no_mangle]
-pub unsafe extern "C" fn entity_builder_commit<'a, 'c>(
-    builder: *mut EntityBuilder<InProgressBuilder<'a, 'c>>,
+pub unsafe extern "C" fn entity_builder_commit(
+    builder: *mut EntityBuilder<InProgressBuilder>,
     error: *mut ExternError,
 ) -> *mut TxReport {
     assert_not_null!(builder);
@@ -1234,6 +1307,8 @@ pub unsafe extern "C" fn entity_builder_commit<'a, 'c>(
 
 /// Performs a single transaction against the store.
 ///
+/// # Safety
+/// TODO:
 /// TODO: Document the errors that can result from transact
 #[no_mangle]
 pub unsafe extern "C" fn store_transact(
@@ -1253,6 +1328,7 @@ pub unsafe extern "C" fn store_transact(
 }
 
 /// Fetches the `tx_id` for the given [TxReport](mentat::TxReport)`.
+/// # Safety
 #[no_mangle]
 pub unsafe extern "C" fn tx_report_get_entid(tx_report: *mut TxReport) -> c_longlong {
     assert_not_null!(tx_report);
@@ -1261,6 +1337,7 @@ pub unsafe extern "C" fn tx_report_get_entid(tx_report: *mut TxReport) -> c_long
 }
 
 /// Fetches the `tx_instant` for the given [TxReport](mentat::TxReport).
+/// # Safety
 #[no_mangle]
 pub unsafe extern "C" fn tx_report_get_tx_instant(tx_report: *mut TxReport) -> c_longlong {
     assert_not_null!(tx_report);

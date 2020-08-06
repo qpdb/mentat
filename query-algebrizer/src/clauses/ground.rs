@@ -14,15 +14,15 @@ use mentat_core::Schema;
 
 use edn::query::{Binding, FnArg, Variable, VariableOrPlaceholder, WhereFn};
 
-use clauses::{ConjoiningClauses, PushComputed};
+use crate::clauses::{ConjoiningClauses, PushComputed};
 
-use clauses::convert::ValueConversion;
+use crate::clauses::convert::ValueConversion;
 
 use query_algebrizer_traits::errors::{AlgebrizerError, BindingError, Result};
 
-use types::{ComputedTable, EmptyBecause, SourceAlias, VariableColumn};
+use crate::types::{ComputedTable, EmptyBecause, SourceAlias, VariableColumn};
 
-use Known;
+use crate::Known;
 
 impl ConjoiningClauses {
     /// Take a relation: a matrix of values which will successively bind to named variables of
@@ -342,7 +342,7 @@ mod testing {
 
     use edn::query::{Binding, FnArg, Keyword, PlainSymbol, Variable};
 
-    use clauses::{add_attribute, associate_ident};
+    use crate::clauses::{add_attribute, associate_ident};
 
     #[test]
     fn test_apply_ground() {

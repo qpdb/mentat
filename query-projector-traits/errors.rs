@@ -17,7 +17,7 @@ use db_traits::errors::DbError;
 use edn::query::PlainSymbol;
 use query_pull_traits::errors::PullError;
 
-use aggregates::SimpleAggregationOp;
+use crate::aggregates::SimpleAggregationOp;
 
 pub type Result<T> = std::result::Result<T, ProjectorError>;
 

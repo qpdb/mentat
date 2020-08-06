@@ -14,11 +14,11 @@ use mentat_core::{HasSchema, SQLValueType, Schema};
 
 use edn::query::{FnArg, NonIntegerConstant, Variable};
 
-use clauses::ConjoiningClauses;
+use crate::clauses::ConjoiningClauses;
 
 use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
-use types::EmptyBecause;
+use crate::types::EmptyBecause;
 
 macro_rules! coerce_to_typed_value {
     ($var: ident, $val: ident, $types: expr, $type: path, $constructor: path) => {{

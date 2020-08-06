@@ -20,7 +20,7 @@ test = false
 
 [dependencies]
 combine = "~4.2"
-dirs = "~2.0"
+dirs = "~3.0"
 env_logger = "~0.7"
 failure = "~0.1"
 failure_derive = "~0.1"

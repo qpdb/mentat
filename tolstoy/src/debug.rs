@@ -10,8 +10,6 @@
 
 // TODO: could hide this behind #[cfg(test)], since this is only for test use.
 
-use rusqlite;
-
 use uuid::Uuid;
 
 use edn::entities::EntidOrIdent;
@@ -51,8 +49,8 @@ pub fn txs_after(sqlite: &rusqlite::Connection, schema: &Schema, after: Entid) -
 
             tx.parts.push(TxPart {
                 partitions: None,
-                e: e,
-                a: a,
+                e,
+                a,
                 v: TypedValue::from_edn_value(&datom.v).unwrap(),
                 tx: datom.tx,
                 added: datom.added.unwrap(),
@@ -81,6 +79,6 @@ pub fn part_to_datom(schema: &Schema, part: &TxPart) -> Datom {
     }
 }
 
-pub fn parts_to_datoms(schema: &Schema, parts: &Vec<TxPart>) -> Datoms {
+pub fn parts_to_datoms(schema: &Schema, parts: &[TxPart]) -> Datoms {
     Datoms(parts.iter().map(|p| part_to_datom(schema, p)).collect())
 }

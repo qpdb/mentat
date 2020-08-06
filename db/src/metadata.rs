@@ -29,18 +29,18 @@ use failure::ResultExt;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
-use add_retract_alter_set::AddRetractAlterSet;
+use crate::add_retract_alter_set::AddRetractAlterSet;
+use crate::entids;
 use db_traits::errors::{DbErrorKind, Result};
 use edn::symbols;
-use entids;
 
 use core_traits::{attribute, Entid, TypedValue, ValueType};
 
 use mentat_core::{AttributeMap, Schema};
 
-use schema::{AttributeBuilder, AttributeValidation};
+use crate::schema::{AttributeBuilder, AttributeValidation};
 
-use types::EAV;
+use crate::types::EAV;
 
 /// An alteration to an attribute.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]

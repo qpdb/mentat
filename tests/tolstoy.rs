@@ -50,7 +50,7 @@ mod tolstoy_tests {
         where
             T: Iterator<Item = TxPart>,
         {
-            self.tx_count = self.tx_count + 1;
+            self.tx_count += 1;
             Ok(())
         }
 
@@ -77,7 +77,7 @@ mod tolstoy_tests {
         where
             T: Iterator<Item = TxPart>,
         {
-            let datoms = self.txes.entry(tx_id).or_insert(vec![]);
+            let datoms = self.txes.entry(tx_id).or_insert_with(|| vec![]);
             datoms.extend(d);
             Ok(())
         }
@@ -135,7 +135,7 @@ mod tolstoy_tests {
             let mut txs = vec![];
             for tx_uuid in &self.rowid_tx[rowid_range] {
                 txs.push(Tx {
-                    tx: tx_uuid.clone(),
+                    tx: *tx_uuid,
                     parts: self.transactions.get(tx_uuid).unwrap().clone(),
                 });
             }
@@ -143,16 +143,15 @@ mod tolstoy_tests {
         }
 
         fn set_head(&mut self, tx: &Uuid) -> Result<()> {
-            self.head = tx.clone();
+            self.head = *tx;
             Ok(())
         }
 
         fn put_chunk(&mut self, tx: &Uuid, payload: &TxPart) -> Result<()> {
-            match self.chunks.entry(tx.clone()) {
+            match self.chunks.entry(*tx) {
                 Entry::Occupied(_) => panic!("trying to overwrite chunk"),
                 Entry::Vacant(entry) => {
                     entry.insert(payload.clone());
-                    ()
                 }
             }
             Ok(())
@@ -162,15 +161,15 @@ mod tolstoy_tests {
             &mut self,
             tx: &Uuid,
             _parent_tx: &Uuid,
-            chunk_txs: &Vec<Uuid>,
+            chunk_txs: &[Uuid],
         ) -> Result<()> {
             let mut parts = vec![];
             for chunk_tx in chunk_txs {
                 parts.push(self.chunks.get(chunk_tx).unwrap().clone());
             }
-            self.transactions.insert(tx.clone(), parts);
-            self.rowid_tx.push(tx.clone());
-            self.tx_rowid.insert(tx.clone(), self.rowid_tx.len() - 1);
+            self.transactions.insert(*tx, parts);
+            self.rowid_tx.push(*tx);
+            self.tx_rowid.insert(*tx, self.rowid_tx.len() - 1);
             Ok(())
         }
     }
@@ -206,7 +205,7 @@ mod tolstoy_tests {
             let mut index = 1;
             $(
                 assert_matches!(parts_to_datoms(&$conn.current_schema(), &txs[index].parts), $tx);
-                index = index + 1;
+                index += 1;
             )*
 
             assert_eq!(index, txs.len());
@@ -278,7 +277,7 @@ mod tolstoy_tests {
             assert_eq!(3, txes.keys().count());
             assert_tx_datoms_count(&txes, 2, 2);
 
-            first_tx = txes.keys().nth(1).expect("first non-bootstrap tx").clone();
+            first_tx = *txes.keys().nth(1).expect("first non-bootstrap tx");
         }
 
         let ids = conn

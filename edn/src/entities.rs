@@ -13,11 +13,11 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use value_rc::ValueRc;
+use crate::value_rc::ValueRc;
 
-use symbols::{Keyword, PlainSymbol};
+use crate::symbols::{Keyword, PlainSymbol};
 
-use types::ValueAndSpan;
+use crate::types::ValueAndSpan;
 
 /// `EntityPlace` and `ValuePlace` embed values, either directly (i.e., `ValuePlace::Atom`) or
 /// indirectly (i.e., `EntityPlace::LookupRef`).  In order to maintain the graph of `Into` and

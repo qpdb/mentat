@@ -8,8 +8,6 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use rusqlite;
-
 use mentat_db::V1_PARTS as BOOTSTRAP_PARTITIONS;
 
 use public_traits::errors::Result;
@@ -33,7 +31,7 @@ lazy_static! {
     };
 }
 
-pub fn ensure_current_version(tx: &mut rusqlite::Transaction) -> Result<()> {
+pub fn ensure_current_version(tx: &mut rusqlite::Transaction<'_>) -> Result<()> {
     for statement in (&SCHEMA_STATEMENTS).iter() {
         tx.execute(statement, rusqlite::params![])?;
     }
@@ -79,11 +77,11 @@ pub mod tests {
         conn
     }
 
-    pub fn setup_tx_bare<'a>(conn: &'a mut rusqlite::Connection) -> rusqlite::Transaction<'a> {
+    pub fn setup_tx_bare(conn: &mut rusqlite::Connection) -> rusqlite::Transaction {
         conn.transaction().expect("tx")
     }
 
-    pub fn setup_tx<'a>(conn: &'a mut rusqlite::Connection) -> rusqlite::Transaction<'a> {
+    pub fn setup_tx(conn: &mut rusqlite::Connection) -> rusqlite::Transaction {
         let mut tx = conn.transaction().expect("tx");
         ensure_current_version(&mut tx).expect("connection setup");
         tx
@@ -137,22 +135,20 @@ pub mod tests {
         let test_uuid = Uuid::new_v4();
         {
             let uuid_bytes = test_uuid.as_bytes().to_vec();
-            match tx.execute(
+            if let Err(e) = tx.execute(
                 "UPDATE tolstoy_metadata SET value = ? WHERE key = ?",
                 rusqlite::params![&uuid_bytes, &REMOTE_HEAD_KEY],
             ) {
-                Err(e) => panic!("Error running an update: {}", e),
-                _ => (),
+                panic!("Error running an update: {}", e)
             }
         }
 
         let new_idx = USER0 + 1;
-        match tx.execute(
+        if let Err(e) = tx.execute(
             "UPDATE tolstoy_parts SET idx = ? WHERE part = ?",
             rusqlite::params![&new_idx, &PARTITION_USER],
         ) {
-            Err(e) => panic!("Error running an update: {}", e),
-            _ => (),
+            panic!("Error running an update: {}", e)
         }
 
         assert!(ensure_current_version(&mut tx).is_ok());

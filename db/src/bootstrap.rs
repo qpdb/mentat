@@ -10,19 +10,19 @@
 
 #![allow(dead_code)]
 
-use db::TypedSQLValue;
+use crate::db::TypedSQLValue;
+use crate::entids;
 use db_traits::errors::{DbErrorKind, Result};
 use edn;
 use edn::entities::Entity;
 use edn::symbols;
 use edn::types::Value;
-use entids;
 
 use core_traits::{values, TypedValue};
 
+use crate::schema::SchemaBuilding;
+use crate::types::{Partition, PartitionMap};
 use mentat_core::{IdentMap, Schema};
-use schema::SchemaBuilding;
-use types::{Partition, PartitionMap};
 
 /// The first transaction ID applied to the knowledge base.
 ///

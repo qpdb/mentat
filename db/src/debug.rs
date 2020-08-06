@@ -66,23 +66,23 @@ use rusqlite::types::ToSql;
 use rusqlite::TransactionBehavior;
 use tabwriter::TabWriter;
 
-use bootstrap;
-use db::*;
-use db::{read_attribute_map, read_ident_map};
+use crate::bootstrap;
+use crate::db::*;
+use crate::db::{read_attribute_map, read_ident_map};
+use crate::entids;
 use db_traits::errors::Result;
 use edn;
-use entids;
 
 use core_traits::{Entid, TypedValue, ValueType};
 
+use crate::internal_types::TermWithTempIds;
+use crate::schema::SchemaBuilding;
+use crate::tx::{transact, transact_terms};
+use crate::types::*;
+use crate::watcher::NullWatcher;
 use edn::entities::{EntidOrIdent, TempId};
 use edn::InternSet;
-use internal_types::TermWithTempIds;
 use mentat_core::{HasSchema, SQLValueType, TxReport};
-use schema::SchemaBuilding;
-use tx::{transact, transact_terms};
-use types::*;
-use watcher::NullWatcher;
 
 /// Represents a *datom* (assertion) in the store.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]

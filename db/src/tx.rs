@@ -49,17 +49,17 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::iter::once;
 
-use db;
-use db::MentatStoring;
-use db_traits::errors;
-use db_traits::errors::{DbErrorKind, Result};
-use edn::{InternSet, Keyword};
-use entids;
-use internal_types::{
+use crate::db;
+use crate::db::MentatStoring;
+use crate::entids;
+use crate::internal_types::{
     replace_lookup_ref, AEVTrie, AddAndRetract, KnownEntidOr, LookupRef, LookupRefOrTempId,
     TempIdHandle, TempIdMap, Term, TermWithTempIds, TermWithTempIdsAndLookupRefs,
     TermWithoutTempIds, TypedValueOr,
 };
+use db_traits::errors;
+use db_traits::errors::{DbErrorKind, Result};
+use edn::{InternSet, Keyword};
 
 use mentat_core::util::Either;
 
@@ -67,15 +67,15 @@ use core_traits::{attribute, now, Attribute, Entid, KnownEntid, TypedValue, Valu
 
 use mentat_core::{DateTime, Schema, TxReport, Utc};
 
+use crate::metadata;
+use crate::schema::SchemaBuilding;
+use crate::tx_checking;
+use crate::types::{AVMap, AVPair, PartitionMap, TransactableValue};
+use crate::upsert_resolution::{FinalPopulations, Generation};
+use crate::watcher::TransactWatcher;
 use edn::entities as entmod;
 use edn::entities::{AttributePlace, Entity, OpType, TempId};
-use metadata;
 use rusqlite;
-use schema::SchemaBuilding;
-use tx_checking;
-use types::{AVMap, AVPair, PartitionMap, TransactableValue};
-use upsert_resolution::{FinalPopulations, Generation};
-use watcher::TransactWatcher;
 
 /// Defines transactor's high level behaviour.
 pub(crate) enum TransactorAction {
@@ -1058,6 +1058,7 @@ where
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn transact_terms_with_action<'conn, 'a, I, W>(
     conn: &'conn rusqlite::Connection,
     partition_map: PartitionMap,

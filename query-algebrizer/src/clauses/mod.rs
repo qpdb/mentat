@@ -26,7 +26,7 @@ use edn::query::{Element, FindSpec, Keyword, PatternNonValuePlace, Pull, Variabl
 
 use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
-use types::{
+use crate::types::{
     Column, ColumnConstraint, ColumnIntersection, ComputedTable, DatomsColumn, DatomsTable,
     EmptyBecause, EvolvedNonValuePlace, EvolvedPattern, EvolvedValuePlace, FulltextColumn,
     PlaceOrEmpty, QualifiedAlias, QueryValue, SourceAlias, TableAlias,
@@ -45,11 +45,11 @@ mod ground;
 mod tx_log_api;
 mod where_fn;
 
-use validate::{validate_not_join, validate_or_join};
+use crate::validate::{validate_not_join, validate_or_join};
 
 pub use self::inputs::QueryInputs;
 
-use Known;
+use crate::Known;
 
 trait Contains<K, T> {
     fn when_contains<F: FnOnce() -> T>(&self, k: &K, f: F) -> Option<T>;
@@ -1227,7 +1227,7 @@ impl PushComputed for Vec<ComputedTable> {
 #[cfg(test)]
 fn associate_ident(schema: &mut Schema, i: Keyword, e: Entid) {
     schema.entid_map.insert(e, i.clone());
-    schema.ident_map.insert(i.clone(), e);
+    schema.ident_map.insert(i, e);
 }
 
 #[cfg(test)]

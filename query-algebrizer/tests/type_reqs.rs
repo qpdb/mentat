@@ -16,7 +16,7 @@ extern crate query_algebrizer_traits;
 
 mod utils;
 
-use utils::{alg, bails, SchemaBuilder};
+use crate::utils::{alg, bails, SchemaBuilder};
 
 use core_traits::ValueType;
 

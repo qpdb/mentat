@@ -25,7 +25,7 @@ use num::BigInt;
 use ordered_float::OrderedFloat;
 use uuid::Uuid;
 
-use symbols;
+use crate::symbols;
 
 /// Value represents one of the allowed values in an EDN string.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -139,7 +139,7 @@ impl Value {
     /// But right now, it's used in the bootstrapper.  We'll fix that soon.
     pub fn with_spans(self) -> ValueAndSpan {
         let s = self.to_pretty(120).unwrap();
-        use parse;
+        use crate::parse;
         let with_spans = parse::value(&s).unwrap();
         assert_eq!(self, with_spans.clone().without_spans());
         with_spans
@@ -209,10 +209,7 @@ macro_rules! def_from_option {
 macro_rules! def_is {
     ($name: ident, $pat: pat) => {
         pub fn $name(&self) -> bool {
-            match *self {
-                $pat => true,
-                _ => false,
-            }
+            matches!(*self, $pat)
         }
     };
 }
@@ -707,7 +704,7 @@ mod test {
     use std::f64;
     use std::iter::FromIterator;
 
-    use parse;
+    use crate::parse;
 
     use chrono::{DateTime, Utc};
     use num::BigInt;
@@ -740,12 +737,12 @@ mod test {
     fn test_print_edn() {
         assert_eq!("1234N", Value::from_bigint("1234").unwrap().to_string());
 
-        let string = "[ 1 2 ( 3.14 ) #{ 4N } { foo/bar 42 :baz/boz 43 } [ ] :five :six/seven eight nine/ten true false nil #f NaN #f -Infinity #f +Infinity ]";
+        let string = "[ 1 2 ( 7.14 ) #{ 4N } { foo/bar 42 :baz/boz 43 } [ ] :five :six/seven eight nine/ten true false nil #f NaN #f -Infinity #f +Infinity ]";
 
         let data = Value::Vector(vec![
             Value::Integer(1),
             Value::Integer(2),
-            Value::List(LinkedList::from_iter(vec![Value::from_float(3.14)])),
+            Value::List(LinkedList::from_iter(vec![Value::from_float(7.14)])),
             Value::Set(BTreeSet::from_iter(vec![Value::from_bigint("4").unwrap()])),
             Value::Map(BTreeMap::from_iter(vec![
                 (Value::from_symbol("foo", "bar"), Value::Integer(42)),
@@ -847,10 +844,10 @@ mod test {
 
         assert!(n_v.clone().into_keyword().is_some());
         assert!(n_v.clone().into_plain_keyword().is_none());
-        assert!(n_v.clone().into_namespaced_keyword().is_some());
+        assert!(n_v.into_namespaced_keyword().is_some());
 
         assert!(p_v.clone().into_keyword().is_some());
         assert!(p_v.clone().into_plain_keyword().is_some());
-        assert!(p_v.clone().into_namespaced_keyword().is_none());
+        assert!(p_v.into_namespaced_keyword().is_none());
     }
 }

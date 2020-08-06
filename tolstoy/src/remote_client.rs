@@ -10,14 +10,11 @@
 
 #![allow(dead_code)]
 
-use std;
-
 use hyper::{body, header, Body, Client, Method, Request, StatusCode};
 use hyper_tls::HttpsConnector;
 // TODO: https://github.com/mozilla/mentat/issues/570
 // use serde_cbor;
 use futures::executor::block_on;
-use serde_json;
 use uuid::Uuid;
 
 use crate::logger::d;
@@ -33,7 +30,7 @@ struct SerializedHead {
 #[derive(Serialize)]
 struct SerializedTransaction<'a> {
     parent: &'a Uuid,
-    chunks: &'a Vec<Uuid>,
+    chunks: &'a [Uuid],
 }
 
 #[derive(Deserialize)]
@@ -59,8 +56,8 @@ pub struct RemoteClient {
 impl RemoteClient {
     pub fn new(base_uri: String, user_uuid: Uuid) -> Self {
         RemoteClient {
-            base_uri: base_uri,
-            user_uuid: user_uuid,
+            base_uri,
+            user_uuid,
         }
     }
 
@@ -77,7 +74,7 @@ impl RemoteClient {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, Body>(https);
 
-        d(&format!("client"));
+        d(&"client".to_string());
 
         let uri = uri.parse()?;
 
@@ -129,7 +126,7 @@ impl RemoteClient {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, Body>(https);
 
-        d(&format!("client"));
+        d(&"client".to_string());
 
         let uri = format!(
             "{}/transactions?from={}",
@@ -159,7 +156,7 @@ impl RemoteClient {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, Body>(https);
 
-        d(&format!("client"));
+        d(&"client".to_string());
 
         let uri = format!(
             "{}/transactions/{}",
@@ -190,7 +187,7 @@ impl RemoteClient {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, Body>(https);
 
-        d(&format!("client"));
+        d(&"client".to_string());
 
         let uri = format!("{}/chunks/{}", self.bound_base_uri(), chunk_uuid);
         let uri = uri.parse()?;
@@ -221,7 +218,7 @@ impl GlobalTransactionLog for RemoteClient {
 
     fn set_head(&mut self, uuid: &Uuid) -> Result<()> {
         // {"head": uuid}
-        let head = SerializedHead { head: uuid.clone() };
+        let head = SerializedHead { head: *uuid };
 
         let uri = format!("{}/head", self.bound_base_uri());
         let json = serde_json::to_string(&head)?;
@@ -249,7 +246,7 @@ impl GlobalTransactionLog for RemoteClient {
             }
 
             tx_list.push(Tx {
-                tx: tx.into(),
+                tx,
                 parts: tx_parts,
             });
         }
@@ -263,12 +260,12 @@ impl GlobalTransactionLog for RemoteClient {
         &mut self,
         transaction_uuid: &Uuid,
         parent_uuid: &Uuid,
-        chunks: &Vec<Uuid>,
+        chunks: &[Uuid],
     ) -> Result<()> {
         // {"parent": uuid, "chunks": [chunk1, chunk2...]}
         let transaction = SerializedTransaction {
             parent: parent_uuid,
-            chunks: chunks,
+            chunks,
         };
 
         let uri = format!(

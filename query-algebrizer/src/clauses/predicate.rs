@@ -14,15 +14,15 @@ use mentat_core::Schema;
 
 use edn::query::{FnArg, PlainSymbol, Predicate, TypeAnnotation};
 
-use clauses::ConjoiningClauses;
+use crate::clauses::ConjoiningClauses;
 
-use clauses::convert::ValueTypes;
+use crate::clauses::convert::ValueTypes;
 
 use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
-use types::{ColumnConstraint, EmptyBecause, Inequality, QueryValue};
+use crate::types::{ColumnConstraint, EmptyBecause, Inequality, QueryValue};
 
-use Known;
+use crate::Known;
 
 /// Application of predicates.
 impl ConjoiningClauses {
@@ -206,9 +206,9 @@ mod testing {
         FnArg, Keyword, Pattern, PatternNonValuePlace, PatternValuePlace, PlainSymbol, Variable,
     };
 
-    use clauses::{add_attribute, associate_ident, ident};
+    use crate::clauses::{add_attribute, associate_ident, ident};
 
-    use types::{ColumnConstraint, EmptyBecause, QueryValue};
+    use crate::types::{ColumnConstraint, EmptyBecause, QueryValue};
 
     #[test]
     /// Apply two patterns: a pattern and a numeric predicate.
@@ -235,7 +235,7 @@ mod testing {
             known,
             Pattern {
                 source: None,
-                entity: PatternNonValuePlace::Variable(x.clone()),
+                entity: PatternNonValuePlace::Variable(x),
                 attribute: PatternNonValuePlace::Placeholder,
                 value: PatternValuePlace::Variable(y.clone()),
                 tx: PatternNonValuePlace::Placeholder,
@@ -348,7 +348,7 @@ mod testing {
             known,
             Pattern {
                 source: None,
-                entity: PatternNonValuePlace::Variable(x.clone()),
+                entity: PatternNonValuePlace::Variable(x),
                 attribute: ident("foo", "roz"),
                 value: PatternValuePlace::Variable(y.clone()),
                 tx: PatternNonValuePlace::Placeholder,
@@ -362,7 +362,7 @@ mod testing {
         assert_eq!(
             cc.empty_because.unwrap(),
             EmptyBecause::TypeMismatch {
-                var: y.clone(),
+                var: y,
                 existing: ValueTypeSet::of_numeric_types(),
                 desired: ValueTypeSet::of_one(ValueType::String),
             }

@@ -23,20 +23,14 @@ pub struct LocalGlobalTxMapping<'a> {
 }
 
 impl<'a> From<(Entid, &'a Uuid)> for LocalGlobalTxMapping<'a> {
-    fn from((local, remote): (Entid, &'a Uuid)) -> LocalGlobalTxMapping {
-        LocalGlobalTxMapping {
-            local: local,
-            remote: remote,
-        }
+    fn from((local, remote): (Entid, &'a Uuid)) -> LocalGlobalTxMapping<'_> {
+        LocalGlobalTxMapping { local, remote }
     }
 }
 
 impl<'a> LocalGlobalTxMapping<'a> {
     pub fn new(local: Entid, remote: &'a Uuid) -> LocalGlobalTxMapping<'a> {
-        LocalGlobalTxMapping {
-            local: local,
-            remote: remote,
-        }
+        LocalGlobalTxMapping { local, remote }
     }
 }
 
@@ -90,7 +84,6 @@ pub trait GlobalTransactionLog {
     fn head(&self) -> Result<Uuid>;
     fn transactions_after(&self, tx: &Uuid) -> Result<Vec<Tx>>;
     fn set_head(&mut self, tx: &Uuid) -> Result<()>;
-    fn put_transaction(&mut self, tx: &Uuid, parent_tx: &Uuid, chunk_txs: &Vec<Uuid>)
-        -> Result<()>;
+    fn put_transaction(&mut self, tx: &Uuid, parent_tx: &Uuid, chunk_txs: &[Uuid]) -> Result<()>;
     fn put_chunk(&mut self, tx: &Uuid, payload: &TxPart) -> Result<()>;
 }

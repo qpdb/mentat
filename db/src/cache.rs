@@ -72,11 +72,11 @@ use mentat_sql::{QueryBuilder, SQLQuery, SQLiteQueryBuilder};
 
 use edn::entities::OpType;
 
-use db::TypedSQLValue;
+use crate::db::TypedSQLValue;
 
 use db_traits::errors::{DbError, DbErrorKind, Result};
 
-use watcher::TransactWatcher;
+use crate::watcher::TransactWatcher;
 
 // Right now we use BTreeMap, because we expect few cached attributes.
 pub type CacheMap<K, V> = BTreeMap<K, V>;
@@ -198,9 +198,7 @@ impl AevFactory {
         let a: Entid = row.get_unwrap(0);
         let e: Entid = row.get_unwrap(1);
         let value_type_tag: i32 = row.get_unwrap(3);
-        let v = TypedValue::from_sql_value_pair(row.get_unwrap(2), value_type_tag)
-            .map(|x| x)
-            .unwrap();
+        let v = TypedValue::from_sql_value_pair(row.get_unwrap(2), value_type_tag).unwrap();
         (a, e, self.intern(v))
     }
 }

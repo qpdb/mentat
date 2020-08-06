@@ -11,10 +11,6 @@
 #[macro_use]
 extern crate mentat;
 
-use db_traits;
-
-use mentat_db;
-
 use mentat::conn::Conn;
 
 use core_traits::{Entid, KnownEntid, TypedValue};
@@ -46,7 +42,7 @@ fn test_entity_builder_bogus_entids() {
         .add(e.clone(), a2, e.clone())
         .expect("add succeeded, even though it's meaningless");
     builder
-        .add(e.clone(), a2, ve)
+        .add(e, a2, ve)
         .expect("add succeeded, even though it's meaningless");
     let (terms, tempids) = builder.build().expect("build succeeded");
 
@@ -111,9 +107,7 @@ fn test_in_progress_builder() {
     builder
         .add(e_x.clone(), kw!(:foo/many), v_many_1)
         .expect("add succeeded");
-    builder
-        .add(e_x.clone(), a_many, v_many_2)
-        .expect("add succeeded");
+    builder.add(e_x, a_many, v_many_2).expect("add succeeded");
     builder.commit().expect("commit succeeded");
 }
 
@@ -168,12 +162,8 @@ fn test_entity_builder() {
             builder
                 .add(e_x.clone(), a_many, v_many_2)
                 .expect("add succeeded");
-            builder
-                .add(e_y.clone(), a_ref, e_x.clone())
-                .expect("add succeeded");
-            builder
-                .add(e_x.clone(), a_one, v_long)
-                .expect("add succeeded");
+            builder.add(e_y, a_ref, e_x.clone()).expect("add succeeded");
+            builder.add(e_x, a_one, v_long).expect("add succeeded");
 
             let (terms, tempids) = builder.build().expect("build succeeded");
 
@@ -204,7 +194,7 @@ fn test_entity_builder() {
     let x = report.tempids.get("x").expect("our tempid has an ID");
     let y = report.tempids.get("y").expect("our tempid has an ID");
     assert_eq!(
-        conn.lookup_value_for_attribute(&mut sqlite, *y, &foo_ref)
+        conn.lookup_value_for_attribute(&sqlite, *y, &foo_ref)
             .expect("lookup succeeded"),
         Some(TypedValue::Ref(*x))
     );

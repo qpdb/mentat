@@ -70,11 +70,11 @@ impl<'sqlite> PreparedQuery<'sqlite> {
         T: Into<Option<QueryInputs>>,
     {
         match self {
-            &mut PreparedQuery::Empty { ref find_spec } => Ok(QueryOutput::empty(find_spec)),
-            &mut PreparedQuery::Constant { ref select } => {
+            PreparedQuery::Empty { ref find_spec } => Ok(QueryOutput::empty(find_spec)),
+            PreparedQuery::Constant { ref select } => {
                 select.project_without_rows().map_err(|e| e.into())
             }
-            &mut PreparedQuery::Bound {
+            PreparedQuery::Bound {
                 ref mut statement,
                 ref schema,
                 ref connection,
@@ -145,12 +145,7 @@ fn algebrize_query<T>(known: Known, query: FindQuery, inputs: T) -> Result<Algeb
 where
     T: Into<Option<QueryInputs>>,
 {
-    let algebrized = algebrize_with_inputs(
-        known,
-        query,
-        0,
-        inputs.into().unwrap_or(QueryInputs::default()),
-    )?;
+    let algebrized = algebrize_with_inputs(known, query, 0, inputs.into().unwrap_or_default())?;
     let unbound = algebrized.unbound_variables();
     // Because we are running once, we can check that all of our `:in` variables are bound at this point.
     // If they aren't, the user has made an error -- perhaps writing the wrong variable in `:in`, or
@@ -198,13 +193,14 @@ fn fetch_values<'sqlite>(
 fn lookup_attribute(schema: &Schema, attribute: &Keyword) -> Result<KnownEntid> {
     schema
         .get_entid(attribute)
-        .ok_or_else(|| MentatError::UnknownAttribute(attribute.name().into()).into())
+        .ok_or_else(|| MentatError::UnknownAttribute(attribute.name().into()))
 }
 
 /// Return a single value for the provided entity and attribute.
 /// If the attribute is multi-valued, an arbitrary value is returned.
 /// If no value is present for that entity, `None` is returned.
 /// If `attribute` isn't an attribute, `None` is returned.
+#[allow(clippy::extra_unused_lifetimes)]
 pub fn lookup_value<'sqlite, 'schema, 'cache, E, A>(
     sqlite: &'sqlite rusqlite::Connection,
     known: Known,
@@ -247,7 +243,7 @@ where
         Ok(known
             .get_values_for_entid(known.schema, attrid, entid)
             .cloned()
-            .unwrap_or_else(|| vec![]))
+            .unwrap_or_else(Vec::new))
     } else {
         fetch_values(sqlite, known, entid, attrid, false)
             .into_coll_result()
@@ -385,10 +381,10 @@ where
 }
 
 /// Just like `q_once`, but doesn't use any cached values.
-pub fn q_uncached<'sqlite, 'schema, 'query, T>(
-    sqlite: &'sqlite rusqlite::Connection,
-    schema: &'schema Schema,
-    query: &'query str,
+pub fn q_uncached<T>(
+    sqlite: &rusqlite::Connection,
+    schema: &Schema,
+    query: &str,
     inputs: T,
 ) -> QueryExecutionResult
 where
@@ -439,7 +435,7 @@ where
                 schema: known.schema.clone(),
                 connection: sqlite,
                 args,
-                projector: projector,
+                projector,
             })
         }
     }

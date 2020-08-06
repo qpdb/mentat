@@ -837,7 +837,7 @@ mod tests {
             from: FromClause::TableList(TableList(source_aliases)),
             constraints: vec![
                 Constraint::Infix {
-                    op: eq.clone(),
+                    op: eq,
                     left: ColumnOrExpression::Column(QualifiedAlias::new(
                         datoms01.clone(),
                         DatomsColumn::Value,
@@ -848,17 +848,17 @@ mod tests {
                     )),
                 },
                 Constraint::Infix {
-                    op: eq.clone(),
+                    op: eq,
                     left: ColumnOrExpression::Column(QualifiedAlias::new(
-                        datoms00.clone(),
+                        datoms00,
                         DatomsColumn::Attribute,
                     )),
                     right: ColumnOrExpression::Entid(65537),
                 },
                 Constraint::Infix {
-                    op: eq.clone(),
+                    op: eq,
                     left: ColumnOrExpression::Column(QualifiedAlias::new(
-                        datoms01.clone(),
+                        datoms01,
                         DatomsColumn::Attribute,
                     )),
                     right: ColumnOrExpression::Entid(65536),

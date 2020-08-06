@@ -25,7 +25,7 @@ pub struct BootstrapHelper<'a> {
 }
 
 impl<'a> BootstrapHelper<'a> {
-    pub fn new(assumed_bootstrap_tx: &Tx) -> BootstrapHelper {
+    pub fn new(assumed_bootstrap_tx: &Tx) -> BootstrapHelper<'_> {
         BootstrapHelper {
             parts: DatomsHelper::new(&assumed_bootstrap_tx.parts),
         }

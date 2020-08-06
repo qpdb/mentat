@@ -28,7 +28,7 @@ use mentat_query_projector::query_projection;
 // These are helpers that tests use to build Schema instances.
 fn associate_ident(schema: &mut Schema, i: Keyword, e: Entid) {
     schema.entid_map.insert(e, i.clone());
-    schema.ident_map.insert(i.clone(), e);
+    schema.ident_map.insert(i, e);
 }
 
 fn add_attribute(schema: &mut Schema, e: Entid, a: Attribute) {

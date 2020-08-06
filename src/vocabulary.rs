@@ -280,6 +280,10 @@ impl Vocabularies {
         self.0.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.len() == 0
+    }
+
     pub fn get(&self, name: &Keyword) -> Option<&Vocabulary> {
         self.0.get(name)
     }
@@ -325,17 +329,17 @@ where
 {
     fn core_type(&self, t: ValueType) -> Result<KnownEntid> {
         self.entid_for_type(t)
-            .ok_or_else(|| MentatError::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()).into())
+            .ok_or_else(|| MentatError::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()))
     }
 
     fn core_entid(&self, ident: &Keyword) -> Result<KnownEntid> {
         self.get_entid(ident)
-            .ok_or_else(|| MentatError::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()).into())
+            .ok_or_else(|| MentatError::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()))
     }
 
     fn core_attribute(&self, ident: &Keyword) -> Result<KnownEntid> {
         self.attribute_for_ident(ident)
-            .ok_or_else(|| MentatError::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()).into())
+            .ok_or_else(|| MentatError::MissingCoreVocabulary(DB_SCHEMA_VERSION.clone()))
             .map(|(_, e)| e)
     }
 }
@@ -436,16 +440,16 @@ impl Definition {
                         // Nothing to do.
                     }
                     Some(Unique::Identity) => {
-                        builder.retract(tempid.clone(), a_unique, v_unique_identity.clone())?;
+                        builder.retract(tempid.clone(), a_unique, v_unique_identity)?;
                     }
                     Some(Unique::Value) => {
-                        builder.retract(tempid.clone(), a_unique, v_unique_value.clone())?;
+                        builder.retract(tempid.clone(), a_unique, v_unique_value)?;
                     }
                 }
             }
         }
 
-        builder.build().map_err(|e| e.into())
+        builder.build().map_err(|e| e)
     }
 
     /// Return a sequence of terms that describes this vocabulary definition and its attributes.
@@ -698,8 +702,7 @@ impl<'a, 'c> VersionedStore for InProgress<'a, 'c> {
                     definition.name.to_string(),
                     newer_version.version,
                     definition.version,
-                )
-                .into())
+                ))
             }
         }
     }
@@ -962,7 +965,7 @@ where
             if let Some(attribute) = self.attribute_for_entid(attr).cloned() {
                 attributes
                     .entry(vocab)
-                    .or_insert(Vec::new())
+                    .or_insert_with(Vec::new)
                     .push((attr, attribute));
             }
         }
@@ -976,9 +979,9 @@ where
                 .filter_map(|(vocab, version)| {
                     // Get the name.
                     self.get_ident(vocab).cloned().map(|name| {
-                        let attrs = attributes.remove(&vocab).unwrap_or(vec![]);
+                        let attrs = attributes.remove(&vocab).unwrap_or_default();
                         (
-                            name.clone(),
+                            name,
                             Vocabulary {
                                 entity: vocab,
                                 version,

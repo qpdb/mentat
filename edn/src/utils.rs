@@ -10,7 +10,7 @@
 
 #![allow(dead_code)]
 
-use types::Value;
+use crate::types::Value;
 
 /// Merge the EDN `Value::Map` instance `right` into `left`.  Returns `None` if either `left` or
 /// `right` is not a `Value::Map`.

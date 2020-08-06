@@ -179,10 +179,9 @@ fn test_simple_pull() {
             capitol_district_pull.into(),
             TypedValue::Ref(beacon).into(),
             beacon_district_pull.into(),
-        ]
-        .into(),
+        ],
     };
-    assert_eq!(results, expected.clone());
+    assert_eq!(results, expected);
 
     // We can also prepare the query.
     let reader = store.begin_read().expect("read");

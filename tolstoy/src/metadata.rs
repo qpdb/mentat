@@ -10,7 +10,6 @@
 
 #![allow(dead_code)]
 
-use rusqlite;
 use uuid::Uuid;
 
 use core_traits::Entid;
@@ -45,13 +44,10 @@ pub enum PartitionsTable {
 
 impl SyncMetadata {
     pub fn new(root: Entid, head: Entid) -> SyncMetadata {
-        SyncMetadata {
-            root: root,
-            head: head,
-        }
+        SyncMetadata { root, head }
     }
 
-    pub fn remote_head(tx: &rusqlite::Transaction) -> Result<Uuid> {
+    pub fn remote_head(tx: &rusqlite::Transaction<'_>) -> Result<Uuid> {
         let uuid_bytes = tx.query_row(
             "SELECT value FROM tolstoy_metadata WHERE key = ?",
             rusqlite::params![&schema::REMOTE_HEAD_KEY],
@@ -63,7 +59,7 @@ impl SyncMetadata {
         Ok(Uuid::from_slice(uuid_bytes.as_slice())?)
     }
 
-    pub fn set_remote_head(tx: &rusqlite::Transaction, uuid: &Uuid) -> Result<()> {
+    pub fn set_remote_head(tx: &rusqlite::Transaction<'_>, uuid: &Uuid) -> Result<()> {
         let uuid_bytes = uuid.as_bytes().to_vec();
         let updated = tx.execute(
             "UPDATE tolstoy_metadata SET value = ? WHERE key = ?",
@@ -78,8 +74,8 @@ impl SyncMetadata {
     }
 
     pub fn set_remote_head_and_map(
-        tx: &mut rusqlite::Transaction,
-        mapping: LocalGlobalTxMapping,
+        tx: &mut rusqlite::Transaction<'_>,
+        mapping: LocalGlobalTxMapping<'_>,
     ) -> Result<()> {
         SyncMetadata::set_remote_head(tx, mapping.remote)?;
         TxMapper::set_lg_mapping(tx, mapping)?;
@@ -88,13 +84,13 @@ impl SyncMetadata {
 
     // TODO Functions below start to blur the line between mentat-proper and tolstoy...
     pub fn get_partitions(
-        tx: &rusqlite::Transaction,
+        tx: &rusqlite::Transaction<'_>,
         parts_table: PartitionsTable,
     ) -> Result<PartitionMap> {
         match parts_table {
             PartitionsTable::Core => db::read_partition_map(tx).map_err(|e| e.into()),
             PartitionsTable::Tolstoy => {
-                let mut stmt: ::rusqlite::Statement =
+                let mut stmt: ::rusqlite::Statement<'_> =
                     tx.prepare("SELECT part, start, end, idx, allow_excision FROM tolstoy_parts")?;
                 let m: Result<PartitionMap> = stmt
                     .query_and_then(rusqlite::params![], |row| -> Result<(String, Partition)> {
@@ -109,8 +105,8 @@ impl SyncMetadata {
         }
     }
 
-    pub fn root_and_head_tx(tx: &rusqlite::Transaction) -> Result<(Entid, Entid)> {
-        let mut stmt: ::rusqlite::Statement = tx.prepare(
+    pub fn root_and_head_tx(tx: &rusqlite::Transaction<'_>) -> Result<(Entid, Entid)> {
+        let mut stmt: ::rusqlite::Statement<'_> = tx.prepare(
             "SELECT tx FROM timelined_transactions WHERE timeline = 0 GROUP BY tx ORDER BY tx",
         )?;
         let txs: Vec<_> = stmt
@@ -121,10 +117,10 @@ impl SyncMetadata {
 
         let mut txs = txs.into_iter();
 
-        let root_tx = match txs.nth(0) {
-            None => bail!(TolstoyError::UnexpectedState(format!(
-                "Could not get root tx"
-            ))),
+        let root_tx = match txs.next() {
+            None => bail!(TolstoyError::UnexpectedState(
+                "Could not get root tx".to_string()
+            )),
             Some(t) => t?,
         };
 
@@ -134,12 +130,15 @@ impl SyncMetadata {
         }
     }
 
-    pub fn local_txs(db_tx: &rusqlite::Transaction, after: Option<Entid>) -> Result<Vec<Entid>> {
+    pub fn local_txs(
+        db_tx: &rusqlite::Transaction<'_>,
+        after: Option<Entid>,
+    ) -> Result<Vec<Entid>> {
         let after_clause = match after {
             Some(t) => format!("WHERE timeline = 0 AND tx > {}", t),
-            None => format!("WHERE timeline = 0"),
+            None => "WHERE timeline = 0".to_string(),
         };
-        let mut stmt: ::rusqlite::Statement = db_tx.prepare(&format!(
+        let mut stmt: ::rusqlite::Statement<'_> = db_tx.prepare(&format!(
             "SELECT tx FROM timelined_transactions {} GROUP BY tx ORDER BY tx",
             after_clause
         ))?;
@@ -157,7 +156,7 @@ impl SyncMetadata {
         Ok(all)
     }
 
-    pub fn is_tx_empty(db_tx: &rusqlite::Transaction, tx_id: Entid) -> Result<bool> {
+    pub fn is_tx_empty(db_tx: &rusqlite::Transaction<'_>, tx_id: Entid) -> Result<bool> {
         let count: i64 = db_tx.query_row("SELECT count(rowid) FROM timelined_transactions WHERE timeline = 0 AND tx = ? AND e != ?", rusqlite::params![&tx_id, &tx_id], |row| {
             Ok(row.get(0)?)
         })?;
@@ -165,7 +164,7 @@ impl SyncMetadata {
     }
 
     pub fn has_entity_assertions_in_tx(
-        db_tx: &rusqlite::Transaction,
+        db_tx: &rusqlite::Transaction<'_>,
         e: Entid,
         tx_id: Entid,
     ) -> Result<bool> {

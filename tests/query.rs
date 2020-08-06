@@ -8,15 +8,11 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-use time;
-
 #[macro_use]
 extern crate mentat;
 
-use mentat_db;
-
 // TODO: when we switch to `failure`, make this more humane.
-use query_algebrizer_traits; // For errors;
+//use query_algebrizer_traits; // For errors;
 
 use std::str::FromStr;
 
@@ -277,7 +273,7 @@ fn test_instants_and_uuids() {
     .unwrap();
     let r = conn
         .q_once(
-            &mut c,
+            &c,
             r#"[:find [?x ?u ?when]
                             :where [?x :foo/uuid ?u ?tx]
                                    [?tx :db/txInstant ?when]]"#,
@@ -340,7 +336,7 @@ fn test_tx() {
     )
     .expect("successful transaction");
 
-    let r = conn.q_once(&mut c,
+    let r = conn.q_once(&c,
                         r#"[:find ?tx
                             :where [?x :foo/uuid #uuid "cf62d552-6569-4d1b-b667-04703041dfc4" ?tx]]"#, None)
                 .expect("results")
@@ -393,7 +389,7 @@ fn test_tx_as_input() {
     let inputs = QueryInputs::with_value_sequence(vec![tx]);
     let r = conn
         .q_once(
-            &mut c,
+            &c,
             r#"[:find ?uuid
                             :in ?tx
                             :where [?x :foo/uuid ?uuid ?tx]]"#,
@@ -453,7 +449,7 @@ fn test_fulltext() {
 
     let r = conn
         .q_once(
-            &mut c,
+            &c,
             r#"[:find [?x ?val ?score]
                             :where [(fulltext $ :foo/fts "darkness") [[?x ?val _ ?score]]]]"#,
             None,
@@ -472,7 +468,7 @@ fn test_fulltext() {
                 ) => {
                     assert_eq!(x, v);
                     assert_eq!(text.as_str(), "hello darkness my old friend");
-                    assert_eq!(score, 0.0f64.into());
+                    assert_eq!(score, 0.0f64);
                 }
                 _ => panic!("Unexpected results."),
             }
@@ -494,7 +490,7 @@ fn test_fulltext() {
                     [(fulltext $ :foo/fts ?term) [[?x ?val]]]
                     [?a :foo/term ?term]
                     ]"#;
-    let r = conn.q_once(&mut c, query, None);
+    let r = conn.q_once(&c, query, None);
     match r.expect_err("expected query to fail") {
         MentatError::AlgebrizerError(
             query_algebrizer_traits::errors::AlgebrizerError::InvalidArgument(
@@ -515,7 +511,7 @@ fn test_fulltext() {
                     :where
                     [?a :foo/term ?term]
                     [(fulltext $ :foo/fts ?a) [[?x ?val]]]]"#;
-    let r = conn.q_once(&mut c, query, None);
+    let r = conn.q_once(&c, query, None);
     match r.expect_err("expected query to fail") {
         MentatError::AlgebrizerError(
             query_algebrizer_traits::errors::AlgebrizerError::InvalidArgument(
@@ -541,7 +537,7 @@ fn test_fulltext() {
         Variable::from_valid_name("?a"),
         TypedValue::Ref(a),
     )]);
-    let r = conn.q_once(&mut c, query, inputs).expect("results").into();
+    let r = conn.q_once(&c, query, inputs).expect("results").into();
     match r {
         QueryResults::Rel(rels) => {
             let values: Vec<Vec<Binding>> = rels.into_iter().collect();
@@ -587,7 +583,7 @@ fn test_instant_range_query() {
 
     let r = conn
         .q_once(
-            &mut c,
+            &c,
             r#"[:find [?x ...]
                             :order (asc ?date)
                             :where
@@ -881,7 +877,7 @@ fn test_type_reqs() {
         );
         let results = conn
             .q_once(
-                &mut c,
+                &c,
                 &q,
                 QueryInputs::with_value_sequence(vec![(
                     Variable::from_valid_name("?e"),
@@ -917,7 +913,7 @@ fn test_type_reqs() {
 
     let res = conn
         .q_once(
-            &mut c,
+            &c,
             longs_query,
             QueryInputs::with_value_sequence(vec![(
                 Variable::from_valid_name("?e"),

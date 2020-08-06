@@ -10,7 +10,7 @@
 
 use std::rc::Rc;
 
-use {rusqlite, Element, FindSpec, QueryOutput, QueryResults, Rows, Schema};
+use crate::{rusqlite, Element, FindSpec, QueryOutput, QueryResults, Rows, Schema};
 
 use query_projector_traits::errors::Result;
 

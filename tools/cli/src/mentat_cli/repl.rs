@@ -307,7 +307,7 @@ impl Repl {
                         start = Instant::now();
                         let r = p.run(None);
                         end = Some(Instant::now());
-                        return r;
+                        r
                     })
                     .map(|o| self.print_results(o))
                     .map_err(|err| {
@@ -351,7 +351,7 @@ impl Repl {
             format_time(end - start);
         }
 
-        return true;
+        true
     }
 
     fn execute_import<T>(&mut self, path: T)
@@ -446,7 +446,7 @@ impl Repl {
                 }
             }
         }
-        writeln!(output, "").unwrap();
+        writeln!(output).unwrap();
         output.flush().unwrap();
     }
 
@@ -462,7 +462,7 @@ impl Repl {
         for _ in 0..query_output.spec.expected_column_count() {
             write!(output, "---\t")?;
         }
-        writeln!(output, "")?;
+        writeln!(output)?;
 
         match query_output.results {
             QueryResults::Scalar(v) => {
@@ -498,7 +498,7 @@ impl Repl {
         for _ in 0..query_output.spec.expected_column_count() {
             write!(output, "---\t")?;
         }
-        writeln!(output, "")?;
+        writeln!(output)?;
         output.flush()?;
         Ok(())
     }

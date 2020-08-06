@@ -28,7 +28,7 @@ use query_algebrizer_traits::errors::{AlgebrizerError, BindingError};
 
 use mentat_query_algebrizer::{ComputedTable, Known, QueryInputs};
 
-use utils::{add_attribute, alg, associate_ident, bails, bails_with_inputs};
+use crate::utils::{add_attribute, alg, associate_ident, bails, bails_with_inputs};
 
 fn prepopulated_schema() -> Schema {
     let mut schema = Schema::default();

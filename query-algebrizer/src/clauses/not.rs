@@ -10,13 +10,13 @@
 
 use edn::query::{ContainsVariables, NotJoin, UnifyVars};
 
-use clauses::ConjoiningClauses;
+use crate::clauses::ConjoiningClauses;
 
 use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
-use types::{ColumnConstraint, ComputedTable};
+use crate::types::{ColumnConstraint, ComputedTable};
 
-use Known;
+use crate::Known;
 
 impl ConjoiningClauses {
     pub(crate) fn apply_not_join(&mut self, known: Known, not_join: NotJoin) -> Result<()> {
@@ -87,16 +87,16 @@ mod testing {
 
     use edn::query::{Keyword, PlainSymbol, Variable};
 
-    use clauses::{add_attribute, associate_ident, QueryInputs};
+    use crate::clauses::{add_attribute, associate_ident, QueryInputs};
 
     use query_algebrizer_traits::errors::AlgebrizerError;
 
-    use types::{
+    use crate::types::{
         ColumnAlternation, ColumnConstraint, ColumnConstraintOrAlternation, ColumnIntersection,
         DatomsColumn, DatomsTable, Inequality, QualifiedAlias, QueryValue, SourceAlias,
     };
 
-    use {algebrize, algebrize_with_inputs, parse_find_string};
+    use crate::{algebrize, algebrize_with_inputs, parse_find_string};
 
     fn alg(schema: &Schema, input: &str) -> ConjoiningClauses {
         let known = Known::for_schema(schema);
@@ -216,26 +216,17 @@ mod testing {
             .column_bindings
             .insert(vx.clone(), vec![d0e.clone(), d1e.clone(), d2e.clone()]);
         subquery.wheres = ColumnIntersection(vec![
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1a, parent)),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1v, ambar)),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d2a, knows.clone())),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d2v, daphne)),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d1a.clone(),
-                parent,
-            )),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1v.clone(), ambar)),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d2a.clone(),
-                knows.clone(),
-            )),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d2v.clone(),
-                daphne,
+                d0e.clone(),
+                QueryValue::Column(d1e),
             )),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
                 d0e.clone(),
-                QueryValue::Column(d1e.clone()),
-            )),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d0e.clone(),
-                QueryValue::Column(d2e.clone()),
+                QueryValue::Column(d2e),
             )),
         ]);
 
@@ -247,14 +238,8 @@ mod testing {
         assert_eq!(
             cc.wheres,
             ColumnIntersection(vec![
-                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                    d0a.clone(),
-                    knows.clone()
-                )),
-                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                    d0v.clone(),
-                    john
-                )),
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a, knows)),
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0v, john)),
                 ColumnConstraintOrAlternation::Constraint(ColumnConstraint::NotExists(
                     ComputedTable::Subquery(Box::new(subquery))
                 )),
@@ -317,17 +302,14 @@ mod testing {
             .column_bindings
             .insert(vy.clone(), vec![d0v.clone(), d3v.clone()]);
         subquery.wheres = ColumnIntersection(vec![
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d3a.clone(),
-                parent,
-            )),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d3a, parent)),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
                 d0e.clone(),
-                QueryValue::Column(d3e.clone()),
+                QueryValue::Column(d3e),
             )),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d0v.clone(),
-                QueryValue::Column(d3v.clone()),
+                d0v,
+                QueryValue::Column(d3v),
             )),
         ]);
 
@@ -336,24 +318,15 @@ mod testing {
             .insert(vx.clone(), ValueTypeSet::of_one(ValueType::Ref));
         subquery
             .known_types
-            .insert(vy.clone(), ValueTypeSet::of_one(ValueType::String));
+            .insert(vy, ValueTypeSet::of_one(ValueType::String));
 
         assert!(!cc.is_known_empty());
         let expected_wheres = ColumnIntersection(vec![
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a.clone(), knows)),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d1a.clone(),
-                age.clone(),
-            )),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d1v.clone(),
-                eleven,
-            )),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d2a.clone(),
-                name.clone(),
-            )),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d2v.clone(), john)),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a, knows)),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1a, age)),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1v, eleven)),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d2a, name)),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d2v, john)),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::NotExists(
                 ComputedTable::Subquery(Box::new(subquery)),
             )),
@@ -423,29 +396,17 @@ mod testing {
             .column_bindings
             .insert(vx.clone(), vec![d0e.clone(), d1e.clone(), d2e.clone()]);
         subquery.wheres = ColumnIntersection(vec![
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1a, knows.clone())),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1v, john)),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d2a, knows)),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d2v, daphne)),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d1a.clone(),
-                knows.clone(),
-            )),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d1v.clone(),
-                john.clone(),
-            )),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d2a.clone(),
-                knows.clone(),
-            )),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d2v.clone(),
-                daphne.clone(),
+                d0e.clone(),
+                QueryValue::Column(d1e),
             )),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
                 d0e.clone(),
-                QueryValue::Column(d1e.clone()),
-            )),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d0e.clone(),
-                QueryValue::Column(d2e.clone()),
+                QueryValue::Column(d2e),
             )),
         ]);
 
@@ -457,13 +418,10 @@ mod testing {
         assert_eq!(
             cc.wheres,
             ColumnIntersection(vec![
-                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                    d0a.clone(),
-                    age.clone()
-                )),
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a, age)),
                 ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Inequality {
                     operator: Inequality::LessThan,
-                    left: QueryValue::Column(d0v.clone()),
+                    left: QueryValue::Column(d0v),
                     right: QueryValue::TypedValue(TypedValue::Long(30)),
                 }),
                 ColumnConstraintOrAlternation::Constraint(ColumnConstraint::NotExists(
@@ -490,7 +448,7 @@ mod testing {
         let d0 = "datoms00".to_string();
         let d0e = QualifiedAlias::new(d0.clone(), DatomsColumn::Entity);
         let d0a = QualifiedAlias::new(d0.clone(), DatomsColumn::Attribute);
-        let d0v = QualifiedAlias::new(d0.clone(), DatomsColumn::Value);
+        let d0v = QualifiedAlias::new(d0, DatomsColumn::Value);
 
         let d1 = "datoms01".to_string();
         let d1e = QualifiedAlias::new(d1.clone(), DatomsColumn::Entity);
@@ -534,49 +492,34 @@ mod testing {
                 ]),
                 ColumnIntersection(vec![
                     ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                        d1a.clone(),
+                        d1a,
                         knows.clone(),
                     )),
-                    ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                        d1v.clone(),
-                        ambar,
-                    )),
+                    ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1v, ambar)),
                 ]),
             ])),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d2a.clone(),
-                parent,
-            )),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d2v.clone(),
-                daphne,
-            )),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d2a, parent)),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d2v, daphne)),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
                 d0e.clone(),
-                QueryValue::Column(d1e.clone()),
+                QueryValue::Column(d1e),
             )),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d0e.clone(),
-                QueryValue::Column(d2e.clone()),
+                d0e,
+                QueryValue::Column(d2e),
             )),
         ]);
 
         subquery
             .known_types
-            .insert(vx.clone(), ValueTypeSet::of_one(ValueType::Ref));
+            .insert(vx, ValueTypeSet::of_one(ValueType::Ref));
 
         assert!(!cc.is_known_empty());
         assert_eq!(
             cc.wheres,
             ColumnIntersection(vec![
-                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                    d0a.clone(),
-                    knows
-                )),
-                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                    d0v.clone(),
-                    bill
-                )),
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a, knows)),
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0v, bill)),
                 ColumnConstraintOrAlternation::Constraint(ColumnConstraint::NotExists(
                     ComputedTable::Subquery(Box::new(subquery))
                 )),
@@ -611,7 +554,7 @@ mod testing {
         let d0 = "datoms00".to_string();
         let d0e = QualifiedAlias::new(d0.clone(), DatomsColumn::Entity);
         let d0a = QualifiedAlias::new(d0.clone(), DatomsColumn::Attribute);
-        let d0v = QualifiedAlias::new(d0.clone(), DatomsColumn::Value);
+        let d0v = QualifiedAlias::new(d0, DatomsColumn::Value);
 
         let d1 = "datoms01".to_string();
         let d1e = QualifiedAlias::new(d1.clone(), DatomsColumn::Entity);
@@ -624,20 +567,17 @@ mod testing {
             .column_bindings
             .insert(vx.clone(), vec![d0e.clone(), d1e.clone()]);
         subquery.wheres = ColumnIntersection(vec![
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1a, knows.clone())),
+            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1v, john)),
             ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d1a.clone(),
-                knows.clone(),
-            )),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d1v.clone(), john)),
-            ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                d0e.clone(),
-                QueryValue::Column(d1e.clone()),
+                d0e,
+                QueryValue::Column(d1e),
             )),
         ]);
 
         subquery
             .known_types
-            .insert(vx.clone(), ValueTypeSet::of_one(ValueType::Ref));
+            .insert(vx, ValueTypeSet::of_one(ValueType::Ref));
         subquery
             .known_types
             .insert(vy.clone(), ValueTypeSet::of_one(ValueType::String));
@@ -647,20 +587,14 @@ mod testing {
         subquery.input_variables = input_vars;
         subquery
             .value_bindings
-            .insert(vy.clone(), TypedValue::typed_string("John"));
+            .insert(vy, TypedValue::typed_string("John"));
 
         assert!(!cc.is_known_empty());
         assert_eq!(
             cc.wheres,
             ColumnIntersection(vec![
-                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                    d0a.clone(),
-                    knows
-                )),
-                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(
-                    d0v.clone(),
-                    bill
-                )),
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0a, knows)),
+                ColumnConstraintOrAlternation::Constraint(ColumnConstraint::Equals(d0v, bill)),
                 ColumnConstraintOrAlternation::Constraint(ColumnConstraint::NotExists(
                     ComputedTable::Subquery(Box::new(subquery))
                 )),

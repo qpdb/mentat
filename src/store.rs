@@ -14,10 +14,6 @@ use std::collections::BTreeMap;
 
 use std::sync::Arc;
 
-use rusqlite;
-
-use edn;
-
 use core_traits::{Entid, StructuredMap, TypedValue};
 
 use mentat_core::{Keyword, TxReport, ValueRc};
@@ -65,7 +61,7 @@ impl Store {
     }
 
     #[cfg(feature = "syncable")]
-    pub fn sync(&mut self, server_uri: &String, user_uuid: &String) -> Result<SyncResult> {
+    pub fn sync(&mut self, server_uri: &str, user_uuid: &str) -> Result<SyncResult> {
         let mut reports = vec![];
         loop {
             let mut ip = self.begin_transaction()?;
@@ -162,7 +158,7 @@ impl Store {
         self.conn.register_observer(key, observer);
     }
 
-    pub fn unregister_observer(&mut self, key: &String) {
+    pub fn unregister_observer(&mut self, key: &str) {
         self.conn.unregister_observer(key);
     }
 
@@ -244,8 +240,6 @@ impl Pullable for Store {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use time;
 
     use uuid::Uuid;
 

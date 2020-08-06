@@ -59,11 +59,11 @@ pub mod entity_builder;
 pub mod metadata;
 pub mod query;
 
-pub use entity_builder::{InProgressBuilder, TermBuilder};
+pub use crate::entity_builder::{InProgressBuilder, TermBuilder};
 
-pub use metadata::Metadata;
+pub use crate::metadata::Metadata;
 
-use query::{
+use crate::query::{
     lookup_value_for_attribute, lookup_values_for_attribute, q_explain, q_once, q_prepare,
     q_uncached, Known, PreparedResult, QueryExplanation, QueryInputs, QueryOutput,
 };
@@ -590,8 +590,8 @@ impl<'a, 'o> InProgressTransactWatcher<'a, 'o> {
         cache_watcher: InProgressCacheTransactWatcher<'a>,
     ) -> Self {
         InProgressTransactWatcher {
-            cache_watcher: cache_watcher,
-            observer_watcher: observer_watcher,
+            cache_watcher,
+            observer_watcher,
             tx_id: None,
         }
     }
@@ -599,16 +599,14 @@ impl<'a, 'o> InProgressTransactWatcher<'a, 'o> {
 
 impl<'a, 'o> TransactWatcher for InProgressTransactWatcher<'a, 'o> {
     fn datom(&mut self, op: OpType, e: Entid, a: Entid, v: &TypedValue) {
-        self.cache_watcher
-            .datom(op.clone(), e.clone(), a.clone(), v);
-        self.observer_watcher
-            .datom(op.clone(), e.clone(), a.clone(), v);
+        self.cache_watcher.datom(op, e, a, v);
+        self.observer_watcher.datom(op, e, a, v);
     }
 
     fn done(&mut self, t: &Entid, schema: &Schema) -> ::db_traits::errors::Result<()> {
         self.cache_watcher.done(t, schema)?;
         self.observer_watcher.done(t, schema)?;
-        self.tx_id = Some(t.clone());
+        self.tx_id = Some(*t);
         Ok(())
     }
 }

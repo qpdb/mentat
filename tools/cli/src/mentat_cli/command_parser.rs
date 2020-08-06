@@ -21,25 +21,25 @@ use failure::Error;
 use combine::error::StringStreamError;
 use mentat::CacheDirection;
 
-pub static COMMAND_CACHE: &'static str = &"cache";
-pub static COMMAND_CLOSE: &'static str = &"close";
-pub static COMMAND_EXIT_LONG: &'static str = &"exit";
-pub static COMMAND_EXIT_SHORT: &'static str = &"e";
-pub static COMMAND_HELP: &'static str = &"help";
-pub static COMMAND_IMPORT_LONG: &'static str = &"import";
-pub static COMMAND_IMPORT_SHORT: &'static str = &"i";
-pub static COMMAND_OPEN: &'static str = &"open";
-pub static COMMAND_OPEN_ENCRYPTED: &'static str = &"open_encrypted";
-pub static COMMAND_QUERY_LONG: &'static str = &"query";
-pub static COMMAND_QUERY_SHORT: &'static str = &"q";
-pub static COMMAND_QUERY_EXPLAIN_LONG: &'static str = &"explain_query";
-pub static COMMAND_QUERY_EXPLAIN_SHORT: &'static str = &"eq";
-pub static COMMAND_QUERY_PREPARED_LONG: &'static str = &"query_prepared";
-pub static COMMAND_SCHEMA: &'static str = &"schema";
-pub static COMMAND_SYNC: &'static str = &"sync";
-pub static COMMAND_TIMER_LONG: &'static str = &"timer";
-pub static COMMAND_TRANSACT_LONG: &'static str = &"transact";
-pub static COMMAND_TRANSACT_SHORT: &'static str = &"t";
+pub static COMMAND_CACHE: &str = &"cache";
+pub static COMMAND_CLOSE: &str = &"close";
+pub static COMMAND_EXIT_LONG: &str = &"exit";
+pub static COMMAND_EXIT_SHORT: &str = &"e";
+pub static COMMAND_HELP: &str = &"help";
+pub static COMMAND_IMPORT_LONG: &str = &"import";
+pub static COMMAND_IMPORT_SHORT: &str = &"i";
+pub static COMMAND_OPEN: &str = &"open";
+pub static COMMAND_OPEN_ENCRYPTED: &str = &"open_encrypted";
+pub static COMMAND_QUERY_LONG: &str = &"query";
+pub static COMMAND_QUERY_SHORT: &str = &"q";
+pub static COMMAND_QUERY_EXPLAIN_LONG: &str = &"explain_query";
+pub static COMMAND_QUERY_EXPLAIN_SHORT: &str = &"eq";
+pub static COMMAND_QUERY_PREPARED_LONG: &str = &"query_prepared";
+pub static COMMAND_SCHEMA: &str = &"schema";
+pub static COMMAND_SYNC: &str = &"sync";
+pub static COMMAND_TIMER_LONG: &str = &"timer";
+pub static COMMAND_TRANSACT_LONG: &str = &"transact";
+pub static COMMAND_TRANSACT_SHORT: &str = &"t";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Command {

@@ -18,19 +18,19 @@ use std::collections::{BTreeMap, BTreeSet};
 use indexmap;
 use petgraph::unionfind;
 
-use db_traits::errors::{DbErrorKind, Result};
-use internal_types::{
+use crate::internal_types::{
     Population, TempIdHandle, TempIdMap, Term, TermWithTempIds, TermWithoutTempIds, TypedValueOr,
 };
-use types::AVPair;
+use crate::types::AVPair;
+use db_traits::errors::{DbErrorKind, Result};
 
 use mentat_core::util::Either::*;
 
 use core_traits::{attribute, Attribute, Entid, TypedValue};
 
+use crate::schema::SchemaBuilding;
 use edn::entities::OpType;
 use mentat_core::Schema;
-use schema::SchemaBuilding;
 
 /// A "Simple upsert" that looks like [:db/add TEMPID a v], where a is :db.unique/identity.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]

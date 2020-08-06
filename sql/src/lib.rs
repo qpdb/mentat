@@ -137,7 +137,7 @@ impl QueryBuilder for SQLiteQueryBuilder {
     }
 
     fn push_typed_value(&mut self, value: &TypedValue) -> BuildQueryResult {
-        use TypedValue::*;
+        use crate::TypedValue::*;
         match value {
             Ref(entid) => self.push_sql(entid.to_string().as_str()),
             Boolean(v) => self.push_sql(if *v { "1" } else { "0" }),

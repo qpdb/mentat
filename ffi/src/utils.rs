@@ -14,9 +14,12 @@ pub mod strings {
 
     use mentat::Keyword;
 
-    pub fn c_char_to_string(cchar: *const c_char) -> &'static str {
+    /// # Safety
+    ///
+    /// This function TODO
+    pub unsafe fn c_char_to_string(cchar: *const c_char) -> &'static str {
         assert!(!cchar.is_null());
-        let c_str = unsafe { CStr::from_ptr(cchar) };
+        let c_str = CStr::from_ptr(cchar);
         c_str.to_str().unwrap_or("")
     }
 
@@ -29,8 +32,8 @@ pub mod strings {
 
     pub fn kw_from_string(keyword_string: &'static str) -> Keyword {
         // TODO: validate. The input might not be a keyword!
-        let attr_name = keyword_string.trim_start_matches(":");
-        let parts: Vec<&str> = attr_name.split("/").collect();
+        let attr_name = keyword_string.trim_start_matches(':');
+        let parts: Vec<&str> = attr_name.split('/').collect();
         Keyword::namespaced(parts[0], parts[1])
     }
 }
@@ -107,6 +110,8 @@ pub mod error {
     /// - If `result` is `Err(e)`, returns a null pointer and stores a string representing the error
     ///   message (which was allocated on the heap and should eventually be freed) into
     ///   `error.message`
+    /// # Safety
+    /// Be afraid... TODO
     pub unsafe fn translate_result<T, E>(result: Result<T, E>, error: *mut ExternError) -> *mut T
     where
         E: Display,
@@ -133,6 +138,8 @@ pub mod error {
     /// - If `result` is `Err(e)`, returns a null pointer and stores a string representing the error
     ///   message (which was allocated on the heap and should eventually be freed) into
     ///   `error.message`
+    /// # Safety
+    /// Be afraid... TODO
     pub unsafe fn translate_opt_result<T, E>(
         result: Result<Option<T>, E>,
         error: *mut ExternError,
@@ -155,6 +162,8 @@ pub mod error {
 
     /// Identical to `translate_result`, but with additional type checking for the case that we have
     /// a `Result<(), E>` (which we're about to drop on the floor).
+    /// # Safety
+    /// Be afraid... TODO
     pub unsafe fn translate_void_result<E>(result: Result<(), E>, error: *mut ExternError)
     where
         E: Display,

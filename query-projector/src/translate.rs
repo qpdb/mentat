@@ -22,7 +22,7 @@ use mentat_query_algebrizer::{
     OrderBy, QualifiedAlias, QueryValue, SourceAlias, TableAlias, VariableColumn,
 };
 
-use {
+use crate::{
     projected_column_for_var, query_projection, CombinedProjection, ConstantProjector, Projector,
 };
 
@@ -82,6 +82,7 @@ fn affinity_count(tag: i32) -> usize {
         .count()
 }
 
+#[allow(clippy::ptr_arg)]
 fn type_constraint(
     table: &TableAlias,
     tag: i32,
@@ -369,7 +370,7 @@ fn cc_to_select_query(
         FromClause::TableList(TableList(tables.collect()))
     };
 
-    let order = order.map_or(vec![], |vec| vec.into_iter().map(|o| o).collect());
+    let order = order.map_or(vec![], |vec| vec.into_iter().collect());
     let limit = if cc.empty_because.is_some() {
         Limit::Fixed(0)
     } else {

@@ -16,12 +16,12 @@ use mentat_query_pull::Puller;
 
 use core_traits::Entid;
 
-use {
+use crate::{
     rusqlite, Binding, CombinedProjection, Element, FindSpec, ProjectedElements, QueryOutput,
     QueryResults, RelResult, Row, Rows, Schema, TypedIndex,
 };
 
-use pull::{PullConsumer, PullOperation, PullTemplate};
+use crate::pull::{PullConsumer, PullOperation, PullTemplate};
 
 use query_projector_traits::errors::Result;
 

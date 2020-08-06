@@ -14,11 +14,11 @@ use mentat_core::{HasSchema, Schema};
 
 use edn::query::{FnArg, NonIntegerConstant, PlainSymbol};
 
-use clauses::ConjoiningClauses;
+use crate::clauses::ConjoiningClauses;
 
 use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
-use types::{EmptyBecause, QueryValue};
+use crate::types::{EmptyBecause, QueryValue};
 
 /// Argument resolution.
 impl ConjoiningClauses {

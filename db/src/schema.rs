@@ -10,16 +10,16 @@
 
 #![allow(dead_code)]
 
-use db::TypedSQLValue;
+use crate::db::TypedSQLValue;
 use db_traits::errors::{DbErrorKind, Result};
 use edn;
 use edn::symbols;
 
 use core_traits::{attribute, Attribute, Entid, KnownEntid, TypedValue, ValueType};
 
+use crate::metadata;
+use crate::metadata::AttributeAlteration;
 use mentat_core::{AttributeMap, EntidMap, HasSchema, IdentMap, Schema};
-use metadata;
-use metadata::AttributeAlteration;
 
 pub trait AttributeValidation {
     fn validate<F>(&self, ident: F) -> Result<()>
@@ -394,7 +394,7 @@ mod test {
 
     fn add_attribute(schema: &mut Schema, ident: Keyword, entid: Entid, attribute: Attribute) {
         schema.entid_map.insert(entid, ident.clone());
-        schema.ident_map.insert(ident.clone(), entid);
+        schema.ident_map.insert(ident, entid);
 
         if attribute.component {
             schema.component_attributes.push(entid);

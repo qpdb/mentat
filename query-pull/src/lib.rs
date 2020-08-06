@@ -159,7 +159,7 @@ impl Puller {
 
         for attr in attributes.iter() {
             match attr {
-                &PullAttributeSpec::Wildcard => {
+                PullAttributeSpec::Wildcard => {
                     let attribute_ids = schema.attribute_map.keys();
                     for id in attribute_ids {
                         names.insert(*id, lookup_name(id)?);
@@ -167,28 +167,28 @@ impl Puller {
                     }
                     break;
                 }
-                &PullAttributeSpec::Attribute(NamedPullAttribute {
+                PullAttributeSpec::Attribute(NamedPullAttribute {
                     ref attribute,
                     ref alias,
                 }) => {
                     let alias = alias.as_ref().map(|ref r| r.to_value_rc());
                     match attribute {
                         // Handle :db/id.
-                        &PullConcreteAttribute::Ident(ref i) if i.as_ref() == db_id.as_ref() => {
+                        PullConcreteAttribute::Ident(ref i) if i.as_ref() == db_id.as_ref() => {
                             // We only allow :db/id once.
                             if db_id_alias.is_some() {
-                                Err(PullError::RepeatedDbId)?
+                                return Err(PullError::RepeatedDbId);
                             }
                             db_id_alias = Some(alias.unwrap_or_else(|| db_id.to_value_rc()));
                         }
-                        &PullConcreteAttribute::Ident(ref i) => {
+                        PullConcreteAttribute::Ident(ref i) => {
                             if let Some(entid) = schema.get_entid(i) {
                                 let name = alias.unwrap_or_else(|| i.to_value_rc());
                                 names.insert(entid.into(), name);
                                 attrs.insert(entid.into());
                             }
                         }
-                        &PullConcreteAttribute::Entid(ref entid) => {
+                        PullConcreteAttribute::Entid(ref entid) => {
                             let name = alias.map(Ok).unwrap_or_else(|| lookup_name(entid))?;
                             names.insert(*entid, name);
                             attrs.insert(*entid);
@@ -242,7 +242,7 @@ impl Puller {
             for e in entities.iter() {
                 let r = maps
                     .entry(*e)
-                    .or_insert(ValueRc::new(StructuredMap::default()));
+                    .or_insert_with(|| ValueRc::new(StructuredMap::default()));
                 let m = ValueRc::get_mut(r).unwrap();
                 m.insert(alias.clone(), Binding::Scalar(TypedValue::Ref(*e)));
             }
@@ -257,7 +257,7 @@ impl Puller {
                 if let Some(binding) = cache.binding_for_e(*e) {
                     let r = maps
                         .entry(*e)
-                        .or_insert(ValueRc::new(StructuredMap::default()));
+                        .or_insert_with(|| ValueRc::new(StructuredMap::default()));
 
                     // Get into the inner map so we can accumulate a value.
                     // We can unwrap here because we created all of these maps…

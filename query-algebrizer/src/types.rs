@@ -32,11 +32,11 @@ pub enum DatomsTable {
 /// A source of rows that isn't a named table -- typically a subquery or union.
 #[derive(PartialEq, Eq, Debug)]
 pub enum ComputedTable {
-    Subquery(Box<::clauses::ConjoiningClauses>),
+    Subquery(Box<crate::clauses::ConjoiningClauses>),
     Union {
         projection: BTreeSet<Variable>,
         type_extraction: BTreeSet<Variable>,
-        arms: Vec<::clauses::ConjoiningClauses>,
+        arms: Vec<crate::clauses::ConjoiningClauses>,
     },
     NamedValues {
         names: Vec<Variable>,

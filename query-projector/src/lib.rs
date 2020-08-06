@@ -50,24 +50,24 @@ use mentat_query_sql::{GroupBy, Projection};
 pub mod translate;
 
 mod binding_tuple;
-pub use binding_tuple::BindingTuple;
+pub use crate::binding_tuple::BindingTuple;
 mod project;
 mod projectors;
 mod pull;
 mod relresult;
 
-use project::{project_elements, ProjectedElements};
+use crate::project::{project_elements, ProjectedElements};
 
-pub use project::projected_column_for_var;
+pub use crate::project::projected_column_for_var;
 
-pub use projectors::{ConstantProjector, Projector};
+pub use crate::projectors::{ConstantProjector, Projector};
 
-use projectors::{
+use crate::projectors::{
     CollProjector, CollTwoStagePullProjector, RelProjector, RelTwoStagePullProjector,
     ScalarProjector, ScalarTwoStagePullProjector, TupleProjector, TupleTwoStagePullProjector,
 };
 
-pub use relresult::{RelResult, StructuredRelResult};
+pub use crate::relresult::{RelResult, StructuredRelResult};
 
 use query_projector_traits::errors::{ProjectorError, Result};
 
@@ -241,7 +241,7 @@ impl QueryOutput {
 
 impl QueryResults {
     pub fn len(&self) -> usize {
-        use QueryResults::*;
+        use crate::QueryResults::*;
         match *self {
             Scalar(ref o) => {
                 if o.is_some() {
@@ -263,7 +263,7 @@ impl QueryResults {
     }
 
     pub fn is_empty(&self) -> bool {
-        use QueryResults::*;
+        use crate::QueryResults::*;
         match *self {
             Scalar(ref o) => o.is_none(),
             Tuple(ref o) => o.is_none(),
@@ -339,7 +339,7 @@ impl TypedIndex {
     /// This function will return a runtime error if the type tag is unknown, or the value is
     /// otherwise not convertible by the DB layer.
     fn lookup<'a>(&self, row: &Row<'a>) -> Result<Binding> {
-        use TypedIndex::*;
+        use crate::TypedIndex::*;
 
         match *self {
             Known(value_index, value_type) => {
@@ -403,10 +403,7 @@ trait IsPull {
 
 impl IsPull for Element {
     fn is_pull(&self) -> bool {
-        match *self {
-            Element::Pull(_) => true,
-            _ => false,
-        }
+        matches!(*self, Element::Pull(_))
     }
 }
 
@@ -525,12 +522,14 @@ fn test_into_tuple() {
         ))
     );
 
-    match query_output.clone().into_tuple() {
+    match query_output.into_tuple() {
         Err(ProjectorError::UnexpectedResultsTupleLength(expected, got)) => {
             assert_eq!((expected, got), (3, 2));
         }
         // This forces the result type.
-        Ok(Some((_, _, _))) | _ => panic!("expected error"),
+        Ok(Some((_, _, _))) => panic!("expected error"),
+        #[allow(clippy::wildcard_in_or_patterns)]
+        _ => panic!("expected error"),
     }
 
     let query_output = QueryOutput {
@@ -544,14 +543,18 @@ fn test_into_tuple() {
     match query_output.clone().into_tuple() {
         Ok(None) => {}
         // This forces the result type.
-        Ok(Some((_, _))) | _ => panic!("expected error"),
+        Ok(Some((_, _))) => panic!("expected error"),
+        #[allow(clippy::wildcard_in_or_patterns)]
+        _ => panic!("expected error"),
     }
 
-    match query_output.clone().into_tuple() {
+    match query_output.into_tuple() {
         Err(ProjectorError::UnexpectedResultsTupleLength(expected, got)) => {
             assert_eq!((expected, got), (3, 2));
         }
         // This forces the result type.
-        Ok(Some((_, _, _))) | _ => panic!("expected error"),
+        Ok(Some((_, _, _))) => panic!("expected error"),
+        #[allow(clippy::wildcard_in_or_patterns)]
+        _ => panic!("expected error"),
     }
 }

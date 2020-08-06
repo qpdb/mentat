@@ -25,7 +25,7 @@ extern crate serde_derive;
 
 pub mod entities;
 pub mod intern_set;
-pub use intern_set::InternSet;
+pub use crate::intern_set::InternSet;
 // Intentionally not pub.
 pub mod matcher;
 mod namespaceable_name;
@@ -35,7 +35,7 @@ pub mod symbols;
 pub mod types;
 pub mod utils;
 pub mod value_rc;
-pub use value_rc::{Cloned, FromRc, ValueRc};
+pub use crate::value_rc::{Cloned, FromRc, ValueRc};
 
 // Re-export the types we use.
 pub use chrono::{DateTime, Utc};
@@ -44,11 +44,11 @@ pub use ordered_float::OrderedFloat;
 pub use uuid::Uuid;
 
 // Export from our modules.
-pub use types::{
+pub use crate::types::{
     FromMicros, FromMillis, Span, SpannedValue, ToMicros, ToMillis, Value, ValueAndSpan,
 };
 
-pub use symbols::{Keyword, NamespacedSymbol, PlainSymbol};
+pub use crate::symbols::{Keyword, NamespacedSymbol, PlainSymbol};
 
 use std::collections::{BTreeMap, BTreeSet, LinkedList};
 use std::f64::{INFINITY, NAN, NEG_INFINITY};
@@ -56,8 +56,8 @@ use std::iter::FromIterator;
 
 use chrono::TimeZone;
 
-use entities::*;
-use query::FromValue;
+use crate::entities::*;
+use crate::query::FromValue;
 
 // Goal: Be able to parse https://github.com/edn-format/edn
 // Also extensible to help parse http://docs.datomic.com/query.html
@@ -311,7 +311,7 @@ peg::parser!(pub grammar parse() for str {
         / __ v:atom() __ { ValuePlace::Atom(v) }
 
     pub rule entity() -> Entity<ValueAndSpan>
-        = __ "[" __ op:(op()) __ e:(entity_place()) __ a:(forward_entid())  __ v:(value_place()) __  "]" __ { Entity::AddOrRetract { op, e: e, a: AttributePlace::Entid(a), v: v } }
+        = __ "[" __ op:(op()) __ e:(entity_place()) __ a:(forward_entid())  __ v:(value_place()) __  "]" __ { Entity::AddOrRetract { op, e, a: AttributePlace::Entid(a), v } }
         / __ "[" __ op:(op()) __ e:(value_place())  __ a:(backward_entid()) __ v:(entity_place()) __ "]" __ { Entity::AddOrRetract { op, e: v, a: AttributePlace::Entid(a), v: e } }
         / __ map:map_notation() __ { Entity::MapNotation(map) }
         / expected!("entity")
@@ -353,7 +353,7 @@ peg::parser!(pub grammar parse() for str {
             query::PullAttributeSpec::Attribute(
                 query::NamedPullAttribute {
                     attribute,
-                    alias: alias,
+                    alias,
                 })
         }
 
@@ -470,7 +470,7 @@ peg::parser!(pub grammar parse() for str {
             query::WhereClause::Pred(
                 query::Predicate {
                     operator: func.0,
-                    args: args,
+                    args,
                 })
         }
 
@@ -479,7 +479,7 @@ peg::parser!(pub grammar parse() for str {
             query::WhereClause::WhereFn(
                 query::WhereFn {
                     operator: func.0,
-                    args: args,
+                    args,
                     binding,
                 })
         }

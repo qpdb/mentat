@@ -46,9 +46,9 @@ impl<'c> TxUploader<'c> {
         TxUploader {
             tx_temp_uuids: HashMap::new(),
             remote_client: client,
-            remote_head: remote_head,
+            remote_head,
             rolling_temp_head: None,
-            local_partitions: local_partitions,
+            local_partitions,
         }
     }
 }
@@ -138,7 +138,7 @@ impl<'c> TxReceiver<UploaderReport> for TxUploader<'c> {
             .put_transaction(&tx_uuid, &tx_parent, &tx_chunks)?;
 
         d(&format!("updating rolling head: {:?}", tx_uuid));
-        self.rolling_temp_head = Some(tx_uuid.clone());
+        self.rolling_temp_head = Some(tx_uuid);
 
         Ok(())
     }

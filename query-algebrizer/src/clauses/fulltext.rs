@@ -16,16 +16,16 @@ use mentat_core::util::Either;
 
 use edn::query::{Binding, FnArg, NonIntegerConstant, SrcVar, VariableOrPlaceholder, WhereFn};
 
-use clauses::ConjoiningClauses;
+use crate::clauses::ConjoiningClauses;
 
 use query_algebrizer_traits::errors::{AlgebrizerError, BindingError, Result};
 
-use types::{
+use crate::types::{
     Column, ColumnConstraint, DatomsColumn, DatomsTable, EmptyBecause, FulltextColumn,
     QualifiedAlias, QueryValue, SourceAlias,
 };
 
-use Known;
+use crate::Known;
 
 impl ConjoiningClauses {
     #[allow(unused_variables)]
@@ -311,7 +311,7 @@ mod testing {
 
     use edn::query::{Binding, FnArg, Keyword, PlainSymbol, Variable};
 
-    use clauses::{add_attribute, associate_ident};
+    use crate::clauses::{add_attribute, associate_ident};
 
     #[test]
     fn test_apply_fulltext() {

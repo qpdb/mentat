@@ -10,11 +10,11 @@
 
 use edn::query::WhereFn;
 
-use clauses::ConjoiningClauses;
+use crate::clauses::ConjoiningClauses;
 
 use query_algebrizer_traits::errors::{AlgebrizerError, Result};
 
-use Known;
+use crate::Known;
 
 /// Application of `where` functions.
 impl ConjoiningClauses {

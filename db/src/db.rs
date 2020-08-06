@@ -25,12 +25,12 @@ use rusqlite::limits::Limit;
 use rusqlite::types::{ToSql, ToSqlOutput};
 use rusqlite::TransactionBehavior;
 
-use bootstrap;
-use {repeat_values, to_namespaced_keyword};
+use crate::bootstrap;
+use crate::{repeat_values, to_namespaced_keyword};
 
 use edn::{DateTime, Utc, Uuid, Value};
 
-use entids;
+use crate::entids;
 
 use core_traits::{attribute, Attribute, AttributeBitFlags, Entid, TypedValue, ValueType};
 
@@ -38,13 +38,13 @@ use mentat_core::{AttributeMap, FromMicros, IdentMap, Schema, ToMicros, ValueRc}
 
 use db_traits::errors::{DbErrorKind, Result};
 
-use metadata;
-use schema::SchemaBuilding;
-use tx::transact;
-use types::{AVMap, AVPair, Partition, PartitionMap, DB};
+use crate::metadata;
+use crate::schema::SchemaBuilding;
+use crate::tx::transact;
+use crate::types::{AVMap, AVPair, Partition, PartitionMap, DB};
 
+use crate::watcher::NullWatcher;
 use std::convert::TryInto;
-use watcher::NullWatcher;
 
 // In PRAGMA foo='bar', `'bar'` must be a constant string (it cannot be a
 // bound parameter), so we need to escape manually. According to
@@ -314,7 +314,7 @@ fn create_current_partition_view(conn: &rusqlite::Connection) -> Result<()> {
             max(e) + 1 AS idx
         FROM timelined_transactions WHERE timeline = {} GROUP BY part",
         case.join(" "),
-        ::TIMELINE_MAIN
+        crate::TIMELINE_MAIN
     );
 
     conn.execute(&view_stmt, rusqlite::params![])?;
@@ -908,6 +908,7 @@ impl MentatStoring for rusqlite::Connection {
             // We must keep these computed values somewhere to reference them later, so we can't
             // combine this map and the subsequent flat_map.
             // (e0, a0, v0, value_type_tag0, added0, flags0)
+            #[allow(clippy::type_complexity)]
             let block: Result<Vec<(i64 /* e */,
                                    i64 /* a */,
                                    ToSqlOutput<'a> /* value */,
@@ -984,6 +985,7 @@ impl MentatStoring for rusqlite::Connection {
             // We must keep these computed values somewhere to reference them later, so we can't
             // combine this map and the subsequent flat_map.
             // (e0, a0, v0, value_type_tag0, added0, flags0)
+            #[allow(clippy::type_complexity)]
             let block: Result<Vec<(i64 /* e */,
                                    i64 /* a */,
                                    Option<ToSqlOutput<'a>> /* value */,
@@ -1174,7 +1176,7 @@ pub fn update_metadata(
     new_schema: &Schema,
     metadata_report: &metadata::MetadataReport,
 ) -> Result<()> {
-    use metadata::AttributeAlteration::*;
+    use crate::metadata::AttributeAlteration::*;
 
     // Populate the materialized view directly from datoms (and, potentially in the future,
     // transactions).  This might generalize nicely as we expand the set of materialized views.
@@ -1331,12 +1333,12 @@ mod tests {
     use std::borrow::Borrow;
 
     use super::*;
+    use crate::debug::{tempids, TestConn};
+    use crate::internal_types::Term;
     use core_traits::{attribute, KnownEntid};
     use db_traits::errors;
-    use debug::{tempids, TestConn};
     use edn::entities::OpType;
     use edn::{self, InternSet};
-    use internal_types::Term;
     use mentat_core::util::Either::*;
     use mentat_core::{HasSchema, Keyword};
     use std::collections::BTreeMap;

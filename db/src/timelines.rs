@@ -22,16 +22,16 @@ use edn::InternSet;
 
 use edn::entities::OpType;
 
-use db;
-use db::TypedSQLValue;
+use crate::db;
+use crate::db::TypedSQLValue;
 
-use tx::{transact_terms_with_action, TransactorAction};
+use crate::tx::{transact_terms_with_action, TransactorAction};
 
-use types::PartitionMap;
+use crate::types::PartitionMap;
 
-use internal_types::{Term, TermWithoutTempIds};
+use crate::internal_types::{Term, TermWithoutTempIds};
 
-use watcher::NullWatcher;
+use crate::watcher::NullWatcher;
 
 /// Collects a supplied tx range into an DESC ordered Vec of valid txs,
 /// ensuring they all belong to the same timeline.
@@ -79,7 +79,7 @@ fn move_transactions_to(
         &format!(
             "UPDATE timelined_transactions SET timeline = {} WHERE tx IN {}",
             new_timeline,
-            ::repeat_values(tx_ids.len(), 1)
+            crate::repeat_values(tx_ids.len(), 1)
         ),
         &(tx_ids
             .iter()
@@ -109,7 +109,7 @@ fn reversed_terms_for(
 ) -> Result<Vec<TermWithoutTempIds>> {
     let mut stmt = conn.prepare("SELECT e, a, v, value_type_tag, tx, added FROM timelined_transactions WHERE tx = ? AND timeline = ? ORDER BY tx DESC")?;
     let rows = stmt.query_and_then(
-        &[&tx_id, &::TIMELINE_MAIN],
+        &[&tx_id, &crate::TIMELINE_MAIN],
         |row| -> Result<TermWithoutTempIds> {
             let op = if row.get(5)? {
                 OpType::Retract
@@ -141,7 +141,7 @@ pub fn move_from_main_timeline(
     txs_from: RangeFrom<Entid>,
     new_timeline: Entid,
 ) -> Result<(Option<Schema>, PartitionMap)> {
-    if new_timeline == ::TIMELINE_MAIN {
+    if new_timeline == crate::TIMELINE_MAIN {
         bail!(DbErrorKind::NotYetImplemented(
             "Can't move transactions to main timeline".to_string()
         ));
@@ -154,7 +154,7 @@ pub fn move_from_main_timeline(
         bail!(DbErrorKind::TimelinesMoveToNonEmpty);
     }
 
-    let txs_to_move = collect_ordered_txs_to_move(conn, txs_from, ::TIMELINE_MAIN)?;
+    let txs_to_move = collect_ordered_txs_to_move(conn, txs_from, crate::TIMELINE_MAIN)?;
 
     let mut last_schema = None;
     for tx_id in &txs_to_move {
@@ -199,16 +199,16 @@ mod tests {
 
     use std::borrow::Borrow;
 
-    use debug::TestConn;
+    use crate::debug::TestConn;
 
-    use bootstrap;
+    use crate::bootstrap;
 
     // For convenience during testing.
     // Real consumers will perform similar operations when appropriate.
     fn update_conn(conn: &mut TestConn, schema: &Option<Schema>, pmap: &PartitionMap) {
         match schema {
-            &Some(ref s) => conn.schema = s.clone(),
-            &None => (),
+            Some(ref s) => conn.schema = s.clone(),
+            None => (),
         };
         conn.partition_map = pmap.clone();
     }
@@ -241,7 +241,7 @@ mod tests {
         assert_matches!(conn.transactions(), "[]");
         assert_eq!(new_partition_map, partition_map0);
 
-        conn.partition_map = partition_map0.clone();
+        conn.partition_map = partition_map0;
         let report2 = assert_transact!(conn, t);
         let partition_map2 = conn.partition_map.clone();
 

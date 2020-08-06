@@ -22,7 +22,7 @@ use mentat_core::Schema;
 
 use edn::query::Keyword;
 
-use utils::{add_attribute, alg, associate_ident};
+use crate::utils::{add_attribute, alg, associate_ident};
 
 use mentat_query_algebrizer::Known;
 

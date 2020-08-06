@@ -61,7 +61,7 @@ use core_traits::TypedValue;
 
 use mentat_core::TxReport;
 
-use InProgress;
+use crate::InProgress;
 
 use public_traits::errors::Result;
 
@@ -155,6 +155,12 @@ impl BuildTerms for TermBuilder {
     }
 }
 
+impl Default for TermBuilder {
+    fn default() -> Self {
+        TermBuilder::new()
+    }
+}
+
 impl TermBuilder {
     pub fn build(self) -> Result<Terms> {
         Ok((self.terms, self.tempids))
@@ -227,7 +233,7 @@ pub struct InProgressBuilder<'a, 'c> {
 impl<'a, 'c> InProgressBuilder<'a, 'c> {
     pub fn new(in_progress: InProgress<'a, 'c>) -> Self {
         InProgressBuilder {
-            in_progress: in_progress,
+            in_progress,
             builder: TermBuilder::new(),
         }
     }

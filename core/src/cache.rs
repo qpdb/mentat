@@ -13,7 +13,7 @@ use std::collections::BTreeSet;
 
 use core_traits::{Entid, TypedValue};
 
-use Schema;
+use crate::Schema;
 
 pub trait CachedAttributes {
     fn is_attribute_cached_reverse(&self, entid: Entid) -> bool;
