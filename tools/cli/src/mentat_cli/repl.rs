@@ -430,14 +430,10 @@ impl Repl {
             }
         } else {
             for mut arg in args {
-                if arg.chars().nth(0).unwrap() == '.' {
+                if arg.starts_with('.') {
                     arg.remove(0);
                 }
-                if let Some(&(cmd, msg)) = HELP_COMMANDS
-                    .iter()
-                    .filter(|&&(c, _)| c == arg.as_str())
-                    .next()
-                {
+                if let Some(&(cmd, msg)) = HELP_COMMANDS.iter().find(|&&(c, _)| c == arg.as_str()) {
                     write!(output, ".{}\t", cmd).unwrap();
                     writeln!(output, "{}", msg).unwrap();
                 } else {
@@ -569,13 +565,13 @@ impl Repl {
     fn binding_as_string(&self, value: &Binding) -> String {
         use self::Binding::*;
         match value {
-            &Scalar(ref v) => self.value_as_string(v),
-            &Map(ref v) => self.map_as_string(v),
-            &Vec(ref v) => self.vec_as_string(v),
+            Scalar(ref v) => self.value_as_string(v),
+            Map(ref v) => self.map_as_string(v),
+            Vec(ref v) => self.vec_as_string(v),
         }
     }
 
-    fn vec_as_string(&self, value: &Vec<Binding>) -> String {
+    fn vec_as_string(&self, value: &[Binding]) -> String {
         let mut out: String = "[".to_string();
         let vals: Vec<String> = value.iter().map(|v| self.binding_as_string(v)).collect();
 
@@ -603,20 +599,20 @@ impl Repl {
     fn value_as_string(&self, value: &TypedValue) -> String {
         use self::TypedValue::*;
         match value {
-            &Boolean(b) => {
-                if b {
+            Boolean(b) => {
+                if *b {
                     "true".to_string()
                 } else {
                     "false".to_string()
                 }
             }
-            &Double(d) => format!("{}", d),
-            &Instant(ref i) => format!("{}", i),
-            &Keyword(ref k) => format!("{}", k),
-            &Long(l) => format!("{}", l),
-            &Ref(r) => format!("{}", r),
-            &String(ref s) => format!("{:?}", s.to_string()),
-            &Uuid(ref u) => format!("{}", u),
+            Double(d) => format!("{}", d),
+            Instant(ref i) => format!("{}", i),
+            Keyword(ref k) => format!("{}", k),
+            Long(l) => format!("{}", l),
+            Ref(r) => format!("{}", r),
+            String(ref s) => format!("{:?}", s.to_string()),
+            Uuid(ref u) => format!("{}", u),
         }
     }
 }

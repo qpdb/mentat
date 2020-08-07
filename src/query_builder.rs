@@ -533,7 +533,7 @@ mod test {
         assert_eq!(
             results
                 .get(1)
-                .map_or(None, |t| t.to_owned().into_long())
+                .and_then(|t| t.to_owned().into_long())
                 .expect("long"),
             25
         );

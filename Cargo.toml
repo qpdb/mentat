@@ -29,6 +29,9 @@ members = ["tools/cli", "ffi"]
 [build-dependencies]
 rustc_version = "~0.2"
 
+[dev-dependencies]
+assert_approx_eq = "~1.1"
+
 [dev-dependencies.cargo-husky]
 version = "1"
 default-features = false # Disable features which are enabled by default

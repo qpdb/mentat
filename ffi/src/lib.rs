@@ -70,6 +70,7 @@
 //! (for `Result<(), T>`). Callers are responsible for freeing the `message` field of `ExternError`.
 
 #![allow(unused_doc_comments)]
+#![allow(clippy::missing_safety_doc)]
 
 extern crate core;
 extern crate libc;
@@ -176,8 +177,12 @@ pub unsafe extern "C" fn store_open(uri: *const c_char, error: *mut ExternError)
 }
 
 /// Variant of store_open that opens an encrypted database.
+///
 /// # Safety
-/// Be afraid... TODO
+///
+/// Callers are responsible for managing the memory for the return value.
+/// A destructor `store_destroy` is provided for releasing the memory for this
+/// pointer type.
 #[cfg(feature = "sqlcipher")]
 #[no_mangle]
 pub unsafe extern "C" fn store_open_encrypted(
@@ -249,6 +254,10 @@ pub unsafe extern "C" fn in_progress_transact<'m>(
 /// in progress transaction.
 ///
 /// # Safety
+/// Callers are responsible for managing the memory for the return value.
+/// A destructor `tx_report_destroy` is provided for releasing the memory for this
+/// pointer type.
+///
 /// TODO: Document the errors that can result from transact
 #[no_mangle]
 pub unsafe extern "C" fn in_progress_commit<'m>(
@@ -264,6 +273,11 @@ pub unsafe extern "C" fn in_progress_commit<'m>(
 /// in progress transaction.
 ///
 /// # Safety
+///
+/// Callers are responsible for managing the memory for the return value.
+/// A destructor `tx_report_destroy` is provided for releasing the memory for this
+/// pointer type.
+///
 /// TODO: Document the errors that can result from rollback
 #[no_mangle]
 pub unsafe extern "C" fn in_progress_rollback<'m>(
@@ -1360,7 +1374,7 @@ pub unsafe extern "C" fn tx_report_entity_for_temp_id(
     let tx_report = &*tx_report;
     let key = c_char_to_string(tempid);
     if let Some(entid) = tx_report.tempids.get(key) {
-        Box::into_raw(Box::new(entid.clone() as c_longlong))
+        Box::into_raw(Box::new(*entid as c_longlong))
     } else {
         std::ptr::null_mut()
     }
@@ -2145,7 +2159,7 @@ pub unsafe extern "C" fn store_register_observer(
             .map(|(tx_id, changes)| {
                 (
                     *tx_id,
-                    changes.into_iter().map(|eid| *eid as c_longlong).collect(),
+                    changes.iter().map(|eid| *eid as c_longlong).collect(),
                 )
             })
             .collect();

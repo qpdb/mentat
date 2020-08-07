@@ -136,7 +136,7 @@ pub fn run() -> i32 {
         .filter_map(|arg| match last_arg {
             Some("-d") => {
                 last_arg = None;
-                if let &Some(ref k) = &key {
+                if let Some(ref k) = key {
                     Some(command_parser::Command::OpenEncrypted(
                         arg.clone(),
                         k.clone(),

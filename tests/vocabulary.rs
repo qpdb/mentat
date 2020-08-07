@@ -799,9 +799,7 @@ fn test_upgrade_with_functions() {
             return Ok(());
         }
 
-        ip.transact_builder(builder)
-            .and(Ok(()))
-            .map_err(|e| e.into())
+        ip.transact_builder(builder).and(Ok(())).map_err(|e| e)
     }
 
     /// This is the function we write to dedupe. This logic is very suitable for sharing:
@@ -821,50 +819,47 @@ fn test_upgrade_with_functions() {
             .into_iter()
         {
             let mut row = row.into_iter();
-            match (row.next(), row.next()) {
-                (
-                    Some(Binding::Scalar(TypedValue::Ref(left))),
-                    Some(Binding::Scalar(TypedValue::Ref(right))),
-                ) => {
-                    let keep = KnownEntid(left);
-                    let replace = KnownEntid(right);
+            if let (
+                Some(Binding::Scalar(TypedValue::Ref(left))),
+                Some(Binding::Scalar(TypedValue::Ref(right))),
+            ) = (row.next(), row.next())
+            {
+                let keep = KnownEntid(left);
+                let replace = KnownEntid(right);
 
-                    // For each use of the second entity, retract it and re-assert with the first.
-                    // We should offer some support for doing this, 'cos this is long-winded and has
-                    // the unexpected side-effect of also trying to retract metadata about the entity…
-                    println!("Replacing uses of {} to {}.", replace.0, keep.0);
-                    for (a, v) in ip
-                        .q_once(
-                            "[:find ?a ?v
+                // For each use of the second entity, retract it and re-assert with the first.
+                // We should offer some support for doing this, 'cos this is long-winded and has
+                // the unexpected side-effect of also trying to retract metadata about the entity…
+                println!("Replacing uses of {} to {}.", replace.0, keep.0);
+                for (a, v) in ip
+                    .q_once(
+                        "[:find ?a ?v
                                               :in ?old
                                               :where [?old ?a ?v]]",
-                            QueryInputs::with_value_sequence(vec![(var!(?old), replace.into())]),
-                        )
-                        .into_rel_result()?
-                        .into_iter()
-                        .map(av)
-                    {
-                        builder.retract(replace, a, v.clone())?;
-                        builder.add(keep, a, v)?;
-                    }
-                    for (e, a) in ip
-                        .q_once(
-                            "[:find ?e ?a
+                        QueryInputs::with_value_sequence(vec![(var!(?old), replace.into())]),
+                    )
+                    .into_rel_result()?
+                    .into_iter()
+                    .map(av)
+                {
+                    builder.retract(replace, a, v.clone())?;
+                    builder.add(keep, a, v)?;
+                }
+                for (e, a) in ip
+                    .q_once(
+                        "[:find ?e ?a
                                               :in ?old
                                               :where [?e ?a ?old]]",
-                            QueryInputs::with_value_sequence(vec![(var!(?old), replace.into())]),
-                        )
-                        .into_rel_result()?
-                        .into_iter()
-                        .map(ea)
-                    {
-                        builder.retract(e, a, replace)?;
-                        builder.add(e, a, keep)?;
-                    }
-
-                    // TODO: `retractEntity` on `replace` (when we support that).
+                        QueryInputs::with_value_sequence(vec![(var!(?old), replace.into())]),
+                    )
+                    .into_rel_result()?
+                    .into_iter()
+                    .map(ea)
+                {
+                    builder.retract(e, a, replace)?;
+                    builder.add(e, a, keep)?;
                 }
-                _ => {}
+                // TODO: `retractEntity` on `replace` (when we support that).
             }
         }
 
@@ -872,9 +867,7 @@ fn test_upgrade_with_functions() {
             return Ok(());
         }
 
-        ip.transact_builder(builder)
-            .and(Ok(()))
-            .map_err(|e| e.into())
+        ip.transact_builder(builder).and(Ok(())).map_err(|e| e)
     }
 
     // This migration is bad: it can't impose the uniqueness constraint because we end up with
@@ -1150,9 +1143,7 @@ fn test_upgrade_with_functions() {
                 db_doc,
                 TypedValue::typed_string("Deprecated. Use :movie/likes or :food/likes instead."),
             )?;
-            ip.transact_builder(builder)
-                .and(Ok(()))
-                .map_err(|e| e.into())
+            ip.transact_builder(builder).and(Ok(())).map_err(|e| e)
         }
     };
 

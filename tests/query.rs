@@ -35,6 +35,8 @@ use mentat::conn::Conn;
 
 use public_traits::errors::MentatError;
 
+use assert_approx_eq::assert_approx_eq;
+
 #[test]
 fn test_rel() {
     let mut c = new_connection("").expect("Couldn't open conn.");
@@ -468,7 +470,7 @@ fn test_fulltext() {
                 ) => {
                     assert_eq!(x, v);
                     assert_eq!(text.as_str(), "hello darkness my old friend");
-                    assert_eq!(score, 0.0f64);
+                    assert_approx_eq!(score, 0.0f64.into());
                 }
                 _ => panic!("Unexpected results."),
             }
@@ -854,7 +856,7 @@ fn test_type_reqs() {
     let eid_query = r#"[:find ?eid :where [?eid :test/string "foo"]]"#;
 
     let res = conn
-        .q_once(&mut c, eid_query, None)
+        .q_once(&c, eid_query, None)
         .into_rel_result()
         .expect("results");
 

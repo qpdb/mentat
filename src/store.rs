@@ -117,7 +117,7 @@ impl Store {
     }
 
     #[cfg(test)]
-    pub fn is_registered_as_observer(&self, key: &String) -> bool {
+    pub fn is_registered_as_observer(&self, key: &str) -> bool {
         self.conn
             .tx_observer_service
             .lock()
@@ -309,13 +309,11 @@ mod tests {
                         [?neighborhood :neighborhood/district ?d]
                         [?d :district/name ?district]]"#;
         let hood = "Beacon Hill";
-        let inputs = QueryInputs::with_value_sequence(vec![(
-            var!(?hood),
-            TypedValue::typed_string(hood).into(),
-        )]);
+        let inputs =
+            QueryInputs::with_value_sequence(vec![(var!(?hood), TypedValue::typed_string(hood))]);
         let mut prepared = in_progress.q_prepare(query, inputs).expect("prepared");
-        match &prepared {
-            &PreparedQuery::Constant {
+        match prepared {
+            PreparedQuery::Constant {
                 select: ref _select,
             } => {}
             _ => panic!(),
@@ -703,8 +701,8 @@ mod tests {
             .expect("entid to exist for completion_date")
             .into();
         let mut registered_attrs = BTreeSet::new();
-        registered_attrs.insert(name_entid.clone());
-        registered_attrs.insert(date_entid.clone());
+        registered_attrs.insert(name_entid);
+        registered_attrs.insert(date_entid);
 
         let key = "Test Observing".to_string();
 
@@ -749,27 +747,27 @@ mod tests {
             let mut in_progress = conn.begin_transaction().expect("expected transaction");
             for i in 0..3 {
                 let mut changeset = BTreeSet::new();
-                changeset.insert(db_tx_instant_entid.clone());
+                changeset.insert(db_tx_instant_entid);
                 let name = format!("todo{}", i);
                 let uuid = Uuid::new_v4();
                 let mut builder = in_progress.builder().describe_tempid(&name);
                 builder
                     .add(kw!(:todo/uuid), TypedValue::Uuid(uuid))
                     .expect("Expected added uuid");
-                changeset.insert(uuid_entid.clone());
+                changeset.insert(uuid_entid);
                 builder
                     .add(kw!(:todo/name), TypedValue::typed_string(name))
                     .expect("Expected added name");
-                changeset.insert(name_entid.clone());
+                changeset.insert(name_entid);
                 if i % 2 == 0 {
                     builder
                         .add(kw!(:todo/completion_date), TypedValue::current_instant())
                         .expect("Expected added date");
-                    changeset.insert(date_entid.clone());
+                    changeset.insert(date_entid);
                 }
                 let (ip, r) = builder.transact();
                 let report = r.expect("expected a report");
-                tx_ids.push(report.tx_id.clone());
+                tx_ids.push(report.tx_id);
                 changesets.push(changeset);
                 in_progress = ip;
             }
@@ -788,7 +786,7 @@ mod tests {
 
         let out = Arc::try_unwrap(output).expect("unwrapped");
         let o = out.into_inner().expect("Expected an Output");
-        assert_eq!(o.called_key, Some(key.clone()));
+        assert_eq!(o.called_key, Some(key));
         assert_eq!(o.txids, tx_ids);
         assert_eq!(o.changes, changesets);
     }
@@ -811,8 +809,8 @@ mod tests {
             .expect("entid to exist for completion_date")
             .into();
         let mut registered_attrs = BTreeSet::new();
-        registered_attrs.insert(name_entid.clone());
-        registered_attrs.insert(date_entid.clone());
+        registered_attrs.insert(name_entid);
+        registered_attrs.insert(date_entid);
 
         let key = "Test Observing".to_string();
 

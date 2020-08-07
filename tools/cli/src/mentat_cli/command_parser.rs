@@ -105,26 +105,26 @@ impl Command {
 
     pub fn output(&self) -> String {
         match self {
-            &Command::Cache(ref attr, ref direction) => {
+            Command::Cache(ref attr, ref direction) => {
                 format!(".{} {} {:?}", COMMAND_CACHE, attr, direction)
             }
-            &Command::Close => format!(".{}", COMMAND_CLOSE),
-            &Command::Exit => format!(".{}", COMMAND_EXIT_LONG),
-            &Command::Help(ref args) => format!(".{} {:?}", COMMAND_HELP, args),
-            &Command::Import(ref args) => format!(".{} {}", COMMAND_IMPORT_LONG, args),
-            &Command::Open(ref args) => format!(".{} {}", COMMAND_OPEN, args),
-            &Command::OpenEncrypted(ref db, ref key) => {
+            Command::Close => format!(".{}", COMMAND_CLOSE),
+            Command::Exit => format!(".{}", COMMAND_EXIT_LONG),
+            Command::Help(ref args) => format!(".{} {:?}", COMMAND_HELP, args),
+            Command::Import(ref args) => format!(".{} {}", COMMAND_IMPORT_LONG, args),
+            Command::Open(ref args) => format!(".{} {}", COMMAND_OPEN, args),
+            Command::OpenEncrypted(ref db, ref key) => {
                 format!(".{} {} {}", COMMAND_OPEN_ENCRYPTED, db, key)
             }
-            &Command::Query(ref args) => format!(".{} {}", COMMAND_QUERY_LONG, args),
-            &Command::QueryExplain(ref args) => format!(".{} {}", COMMAND_QUERY_EXPLAIN_LONG, args),
-            &Command::QueryPrepared(ref args) => {
+            Command::Query(ref args) => format!(".{} {}", COMMAND_QUERY_LONG, args),
+            Command::QueryExplain(ref args) => format!(".{} {}", COMMAND_QUERY_EXPLAIN_LONG, args),
+            Command::QueryPrepared(ref args) => {
                 format!(".{} {}", COMMAND_QUERY_PREPARED_LONG, args)
             }
-            &Command::Schema => format!(".{}", COMMAND_SCHEMA),
-            &Command::Sync(ref args) => format!(".{} {:?}", COMMAND_SYNC, args),
-            &Command::Timer(on) => format!(".{} {}", COMMAND_TIMER_LONG, on),
-            &Command::Transact(ref args) => format!(".{} {}", COMMAND_TRANSACT_LONG, args),
+            Command::Schema => format!(".{}", COMMAND_SCHEMA),
+            Command::Sync(ref args) => format!(".{} {:?}", COMMAND_SYNC, args),
+            Command::Timer(on) => format!(".{} {}", COMMAND_TIMER_LONG, on),
+            Command::Transact(ref args) => format!(".{} {}", COMMAND_TRANSACT_LONG, args),
         }
     }
 }
@@ -219,7 +219,7 @@ pub fn command(s: &str) -> Result<Command, Error> {
     let help_parser = string(COMMAND_HELP)
         .with(spaces())
         .with(arguments())
-        .map(|args| Ok(Command::Help(args.clone())));
+        .map(|args| Ok(Command::Help(args)));
 
     let import_parser = attempt(string(COMMAND_IMPORT_LONG))
         .or(attempt(string(COMMAND_IMPORT_SHORT)))
@@ -257,7 +257,7 @@ pub fn command(s: &str) -> Result<Command, Error> {
         .with(spaces())
         .with(arguments())
         .map(|args| {
-            if args.len() < 1 {
+            if args.is_empty() {
                 bail!(CliError::CommandParse(
                     "Missing required argument".to_string()
                 ));
@@ -268,7 +268,7 @@ pub fn command(s: &str) -> Result<Command, Error> {
                     args[2]
                 )));
             }
-            Ok(Command::Sync(args.clone()))
+            Ok(Command::Sync(args))
         });
 
     let timer_parser = string(COMMAND_TIMER_LONG)
@@ -320,7 +320,7 @@ mod tests {
             Command::Help(args) => {
                 assert_eq!(args, vec!["command1", "command2"]);
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -332,7 +332,7 @@ mod tests {
             Command::Help(args) => {
                 assert_eq!(args, vec![".command1"]);
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -345,7 +345,7 @@ mod tests {
                 let empty: Vec<String> = vec![];
                 assert_eq!(args, empty);
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -358,7 +358,7 @@ mod tests {
                 let empty: Vec<String> = vec![];
                 assert_eq!(args, empty);
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -377,7 +377,7 @@ mod tests {
             Command::Open(arg) => {
                 assert_eq!(arg, "database1".to_string());
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -389,7 +389,7 @@ mod tests {
             Command::Open(arg) => {
                 assert_eq!(arg, "/path/to/my.db".to_string());
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -402,7 +402,7 @@ mod tests {
                 assert_eq!(path, "/path/to/my.db".to_string());
                 assert_eq!(key, "hunter2".to_string());
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -422,7 +422,7 @@ mod tests {
                 assert_eq!(args[0], "https://example.com/api/".to_string());
                 assert_eq!(args[1], "316ea470-ce35-4adf-9c61-e0de6e289c59".to_string());
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -434,7 +434,7 @@ mod tests {
             Command::Open(arg) => {
                 assert_eq!(arg, "my.db".to_string());
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -463,9 +463,8 @@ mod tests {
     fn test_close_parser_no_args() {
         let input = ".close";
         let cmd = command(&input).expect("Expected close command");
-        match cmd {
-            Command::Close => assert!(true),
-            _ => assert!(false),
+        if cmd != Command::Close {
+            panic!()
         }
     }
 
@@ -473,9 +472,8 @@ mod tests {
     fn test_close_parser_no_args_trailing_whitespace() {
         let input = ".close ";
         let cmd = command(&input).expect("Expected close command");
-        match cmd {
-            Command::Close => assert!(true),
-            _ => assert!(false),
+        if cmd != Command::Close {
+            panic!()
         }
     }
 
@@ -490,9 +488,8 @@ mod tests {
     fn test_exit_parser_no_args() {
         let input = ".exit";
         let cmd = command(&input).expect("Expected exit command");
-        match cmd {
-            Command::Exit => assert!(true),
-            _ => assert!(false),
+        if cmd != Command::Exit {
+            panic!()
         }
     }
 
@@ -500,9 +497,8 @@ mod tests {
     fn test_exit_parser_no_args_trailing_whitespace() {
         let input = ".exit ";
         let cmd = command(&input).expect("Expected exit command");
-        match cmd {
-            Command::Exit => assert!(true),
-            _ => assert!(false),
+        if cmd != Command::Exit {
+            panic!()
         }
     }
 
@@ -510,9 +506,8 @@ mod tests {
     fn test_exit_parser_short_command() {
         let input = ".e";
         let cmd = command(&input).expect("Expected exit command");
-        match cmd {
-            Command::Exit => assert!(true),
-            _ => assert!(false),
+        if cmd != Command::Exit {
+            panic!()
         }
     }
 
@@ -527,9 +522,8 @@ mod tests {
     fn test_schema_parser_no_args() {
         let input = ".schema";
         let cmd = command(&input).expect("Expected schema command");
-        match cmd {
-            Command::Schema => assert!(true),
-            _ => assert!(false),
+        if cmd != Command::Schema {
+            panic!()
         }
     }
 
@@ -537,9 +531,8 @@ mod tests {
     fn test_schema_parser_no_args_trailing_whitespace() {
         let input = ".schema ";
         let cmd = command(&input).expect("Expected schema command");
-        match cmd {
-            Command::Schema => assert!(true),
-            _ => assert!(false),
+        if cmd != Command::Schema {
+            panic!()
         }
     }
 
@@ -549,7 +542,7 @@ mod tests {
         let cmd = command(&input).expect("Expected query command");
         match cmd {
             Command::Query(edn) => assert_eq!(edn, "[:find ?x :where [?x foo/bar ?y]]"),
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -559,7 +552,7 @@ mod tests {
         let cmd = command(&input).expect("Expected query command");
         match cmd {
             Command::Query(edn) => assert_eq!(edn, "[:find ?x :where [?x foo/bar ?y]]"),
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -569,7 +562,7 @@ mod tests {
         let cmd = command(&input).expect("Expected query command");
         match cmd {
             Command::Query(edn) => assert_eq!(edn, "[:find ?x\r\n"),
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -579,7 +572,7 @@ mod tests {
         let cmd = command(&input).expect("Expected query command");
         match cmd {
             Command::Query(edn) => assert_eq!(edn, "{}"),
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -616,7 +609,7 @@ mod tests {
                 edn,
                 "[[:db/add \"s\" :db/ident :foo/uuid] [:db/add \"r\" :db/ident :bar/uuid]]"
             ),
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -630,7 +623,7 @@ mod tests {
                 edn,
                 "[[:db/add \"s\" :db/ident :foo/uuid] [:db/add \"r\" :db/ident :bar/uuid]]"
             ),
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -640,7 +633,7 @@ mod tests {
         let cmd = command(&input).expect("Expected transact command");
         match cmd {
             Command::Transact(edn) => assert_eq!(edn, "{\r\n"),
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -650,7 +643,7 @@ mod tests {
         let cmd = command(&input).expect("Expected transact command");
         match cmd {
             Command::Transact(edn) => assert_eq!(edn, "{}"),
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -672,9 +665,8 @@ mod tests {
     fn test_parser_preceeding_trailing_whitespace() {
         let input = " .close ";
         let cmd = command(&input).expect("Expected close command");
-        match cmd {
-            Command::Close => assert!(true),
-            _ => assert!(false),
+        if cmd != Command::Close {
+            panic!()
         }
     }
 

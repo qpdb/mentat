@@ -130,13 +130,11 @@ impl InputReader {
         // Therefore, we add the newly read in line to the existing command args.
         // If there is no in process command, we parse the read in line as a new command.
         let cmd = match &self.in_process_cmd {
-            &Some(Command::QueryPrepared(ref args)) => {
+            Some(Command::QueryPrepared(ref args)) => {
                 Ok(Command::QueryPrepared(args.clone() + "\n" + &line))
             }
-            &Some(Command::Query(ref args)) => Ok(Command::Query(args.clone() + "\n" + &line)),
-            &Some(Command::Transact(ref args)) => {
-                Ok(Command::Transact(args.clone() + "\n" + &line))
-            }
+            Some(Command::Query(ref args)) => Ok(Command::Query(args.clone() + "\n" + &line)),
+            Some(Command::Transact(ref args)) => Ok(Command::Transact(args.clone() + "\n" + &line)),
             _ => command(&self.buffer),
         };
 
@@ -202,7 +200,7 @@ impl InputReader {
         match stdin().read_line(&mut s) {
             Ok(0) | Err(_) => UserAction::Quit,
             Ok(_) => {
-                if s.ends_with("\n") {
+                if s.ends_with('\n') {
                     let len = s.len() - 1;
                     s.truncate(len);
                 }

@@ -77,7 +77,7 @@ mod tolstoy_tests {
         where
             T: Iterator<Item = TxPart>,
         {
-            let datoms = self.txes.entry(tx_id).or_insert_with(|| vec![]);
+            let datoms = self.txes.entry(tx_id).or_default();
             datoms.extend(d);
             Ok(())
         }
