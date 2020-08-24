@@ -48,7 +48,7 @@ log = "~0.4"
 uuid = { version = "~0.8", features = ["v4", "serde"] }
 
 [dependencies.rusqlite]
-version = "~0.23"
+version = "~0.24"
 features = ["limits", "bundled"]
 
 [dependencies.edn]
