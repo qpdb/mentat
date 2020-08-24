@@ -721,7 +721,7 @@ mod tests {
                     o.txids.push(*tx_id);
                     o.changes.push(changes.clone());
                 }
-                o.txids.sort();
+                o.txids.sort_unstable();
             }
             thread_tx.lock().unwrap().send(()).unwrap();
         }));
@@ -827,7 +827,7 @@ mod tests {
                     o.txids.push(*tx_id);
                     o.changes.push(changes.clone());
                 }
-                o.txids.sort();
+                o.txids.sort_unstable();
             }
             thread_tx.lock().unwrap().send(()).unwrap();
         }));
