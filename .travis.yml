@@ -1,5 +1,36 @@
 language: rust
-cache: cargo # cache cargo-audit once installed
+env:
+  - CARGO_INCREMENTAL=0
+# https://bheisler.github.io/post/efficient-use-of-travis-ci-cache-for-rust/
+before_cache:
+  # Delete loose files in the debug directory
+  - find ./target/debug -maxdepth 1 -type f -delete
+  # Delete the test and benchmark executables. Finding these all might take some
+  # experimentation.
+  - rm -rf ./target/debug/deps/criterion*
+  - rm -rf ./target/debug/deps/bench*
+  # Delete the associated metadata files for those executables
+  - rm -rf ./target/debug/.fingerprint/criterion*
+  - rm -rf ./target/debug/.fingerprint/bench*
+  # Note that all of the above need to be repeated for `release/` instead of
+  # `debug/` if your build script builds artifacts in release mode.
+  # This is just more metadata
+  - rm -f  ./target/.rustc_info.json
+  # Also delete the saved benchmark data from the test benchmarks. If you
+  # have Criterion.rs benchmarks, you'll probably want to do this as well, or set
+  # the CRITERION_HOME environment variable to move that data out of the
+  # `target/` directory.
+  - rm -rf ./target/criterion
+  # Also delete cargo's registry index. This is updated on every build, but it's
+  # way cheaper to re-download than the whole cache is.
+  - rm -rf "$TRAVIS_HOME/.cargo/registry/index/"
+  - rm -rf "$TRAVIS_HOME/.cargo/registry/src"
+cache:
+  directories:
+    - ./target
+    - $TRAVIS_HOME/.cache/sccache
+    - $TRAVIS_HOME/.cargo/
+    - $TRAVIS_HOME/.rustup/
 before_script:
   - cargo install --force cargo-audit
   - cargo generate-lockfile
