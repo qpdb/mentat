@@ -43,4 +43,3 @@ script:
     for crate in "" "db" "db-traits" "ffi" "public-traits" "query-projector" "query-projector-traits" "query-pull" "sql" "tolstoy" "tolstoy-traits" "transaction" "tools/cli"; do
       cargo test --manifest-path ./$crate/Cargo.toml --verbose --no-default-features --features sqlcipher
     done
-cache: cargo
