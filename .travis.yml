@@ -1,9 +1,9 @@
 language: rust
 cache: cargo # cache cargo-audit once installed
 before_script:
-  - cargo install --force clippy
   - cargo install --force cargo-audit
   - cargo generate-lockfile
+  - rustup component add clippy-preview
 script:
   - cargo audit
 # We use OSX so that we can get a reasonably up to date version of SQLCipher.
@@ -20,7 +20,6 @@ rust:
   - nightly
 matrix:
   allow_failures:
-    - rust: stable
     - rust: nightly
   fast_finish: true
 jobs:
@@ -44,3 +43,4 @@ script:
     for crate in "" "db" "db-traits" "ffi" "public-traits" "query-projector" "query-projector-traits" "query-pull" "sql" "tolstoy" "tolstoy-traits" "transaction" "tools/cli"; do
       cargo test --manifest-path ./$crate/Cargo.toml --verbose --no-default-features --features sqlcipher
     done
+cache: cargo
