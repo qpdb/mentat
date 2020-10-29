@@ -3,7 +3,7 @@
 *.jar
 *jar
 *~
-*.rs.bk
+**/*.rs.bk
 .s*
 .*.sw*
 *.rs.bak
@@ -22,7 +22,7 @@ Cargo.lock
 /classes/
 /node_modules/
 /out/
-target/
+/target
 pom.xml
 pom.xml.asc
 /.cljs_node_repl/
@@ -92,4 +92,3 @@ build.xcarchive
 docs/_site
 docs/.sass-cache
 docs/.jekyll-metadata
-
