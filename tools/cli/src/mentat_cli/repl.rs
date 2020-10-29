@@ -576,7 +576,7 @@ impl Repl {
         let vals: Vec<String> = value.iter().map(|v| self.binding_as_string(v)).collect();
 
         out.push_str(vals.join(", ").as_str());
-        out.push_str("]");
+        out.push(']');
         out
     }
 
@@ -589,10 +589,10 @@ impl Repl {
                 first = true;
             }
             out.push_str(&k.to_string());
-            out.push_str(" ");
+            out.push(' ');
             out.push_str(self.binding_as_string(v).as_str());
         }
-        out.push_str("}");
+        out.push('}');
         out
     }
 
