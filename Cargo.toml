@@ -27,7 +27,7 @@ syncable = ["mentat_tolstoy", "tolstoy_traits", "mentat_db/syncable"]
 members = ["tools/cli", "ffi"]
 
 [build-dependencies]
-rustc_version = "~0.3"
+rustc_version = "~0.4"
 
 [dev-dependencies]
 assert_approx_eq = "~1.1"
